@@ -55,6 +55,10 @@ const sounds = {
 
 // ========== AUTHENTICATION ==========
 
+// Check for room invite in URL first (before auth check)
+const urlParams = new URLSearchParams(window.location.search);
+const inviteRoomId = urlParams.get('room');
+
 // Check if user is already logged in
 window.addEventListener('load', () => {
   const savedUser = localStorage.getItem('keroschat_user');
@@ -62,16 +66,39 @@ window.addEventListener('load', () => {
     currentUser = JSON.parse(savedUser);
     userAvatar = localStorage.getItem(`keroschat_avatar_${currentUser.username}`);
     
-    // Check for room invite in URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const inviteRoom = urlParams.get('room');
-    
-    if (inviteRoom) {
-      // Store invite and show lobby first (for auth)
-      sessionStorage.setItem('pendingRoomInvite', inviteRoom);
+    if (inviteRoomId) {
+      // Store invite for auto-join after lobby loads
+      sessionStorage.setItem('pendingRoomInvite', inviteRoomId);
       showLobby();
-      // Auto-join after brief delay
-      setTimeout(() => joinRoomById(inviteRoom), 500);
+      
+      // Wait for server rooms to load, then auto-join
+      setTimeout(() => {
+        const pendingRoom = sessionStorage.getItem('pendingRoomInvite');
+        if (pendingRoom) {
+          sessionStorage.removeItem('pendingRoomInvite');
+          
+          // Check if room exists in server rooms or locally
+          const localRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+          const localRoom = localRooms.find(r => r.id === pendingRoom);
+          
+          if (localRoom) {
+            // Room exists locally, join it
+            joinRoomById(pendingRoom);
+          } else {
+            // Try to get room info from server first
+            socket.emit('get-room-info', pendingRoom, (roomInfo) => {
+              if (roomInfo) {
+                // Room exists on server, join it
+                currentRoomName = roomInfo.name;
+                joinRoomById(pendingRoom);
+              } else {
+                // Room doesn't exist, ask user
+                alert(`Комната ${pendingRoom} не найдена. Она может быть удалена или еще не создана.`);
+              }
+            });
+          }
+        }
+      }, 800);
     } else {
       showLobby();
     }
@@ -176,6 +203,9 @@ function showLobby() {
 let serverRooms = [];
 
 function loadServerRooms() {
+  const list = document.getElementById('roomsList');
+  list.innerHTML = '<p style="color: #72767d; padding: 16px; text-align: center;">⏳ Загрузка комнат...</p>';
+  
   // Get rooms from server
   socket.emit('get-available-rooms', (rooms) => {
     serverRooms = rooms || [];
@@ -188,6 +218,14 @@ function loadServerRooms() {
     localRooms.forEach(r => mergedMap.set(r.id, r));
     
     allRooms = Array.from(mergedMap.values());
+    
+    // Sort: rooms with active users first, then by creation date
+    allRooms.sort((a, b) => {
+      if (a.active && !b.active) return -1;
+      if (!a.active && b.active) return 1;
+      return (b.created || 0) - (a.created || 0);
+    });
+    
     renderRoomsList(allRooms);
   });
 }
@@ -197,13 +235,25 @@ function renderRoomsList(roomsToRender) {
   list.innerHTML = '';
   
   if (roomsToRender.length === 0) {
-    list.innerHTML = '<p style="color: #72767d; padding: 16px; text-align: center;">Нет комнат. Создайте первую!</p>';
+    list.innerHTML = `
+      <div style="text-align: center; padding: 20px; color: #72767d;">
+        <p style="margin-bottom: 12px;">😕 Пока нет ни одной комнаты</p>
+        <p style="font-size: 13px;">Создайте первую комнату или дождитесь, пока кто-то поделится ссылкой!</p>
+      </div>
+    `;
     return;
   }
   
+  // Add header for available rooms
+  const activeCount = roomsToRender.filter(r => r.active).length;
+  const headerInfo = document.createElement('div');
+  headerInfo.style.cssText = 'padding: 8px 12px; color: #96989d; font-size: 12px; border-bottom: 1px solid #202225; margin-bottom: 8px;';
+  headerInfo.innerHTML = `📋 Всего комнат: ${roomsToRender.length} | 🔴 Активных: ${activeCount}`;
+  list.appendChild(headerInfo);
+  
   roomsToRender.forEach(room => {
     const item = document.createElement('div');
-    item.className = 'room-item';
+    item.className = 'room-item' + (room.active ? ' active-room' : '');
     item.onclick = (e) => {
       if (e.target.closest('.room-actions')) return;
       joinRoomById(room.id);
@@ -221,11 +271,15 @@ function renderRoomsList(roomsToRender) {
       `<img src="${room.avatar}" alt="${room.name}">` : 
       '#';
     
+    const statusHtml = room.active ? 
+      `<span style="color: #3ba55d; font-size: 11px;">🔴 ${room.userCount || '?'} в комнате</span>` : 
+      `<span style="color: #72767d; font-size: 11px;">⚪ Нет участников</span>`;
+    
     item.innerHTML = `
       <div class="icon">${iconHtml}</div>
       <div class="info">
-        <div class="name">${room.name}</div>
-        <div class="count">ID: ${room.id} ${isCreator ? '(Вы создатель)' : `Создатель: ${room.creator || 'Неизвестен'}`}</div>
+        <div class="name">${room.name} ${room.active ? '🔥' : ''}</div>
+        <div class="count">${statusHtml} • ID: ${room.id} ${isCreator ? '• (Вы создатель)' : `• ${room.creator || ''}`}</div>
       </div>
       ${actionsHtml}
     `;

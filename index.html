@@ -187,6 +187,13 @@
     }
     .room-item:hover { background: #40444b; }
     .room-item.active { background: #5865f2; }
+    .room-item.active-room {
+      border-left: 3px solid #3ba55d;
+      background: rgba(59, 165, 93, 0.1);
+    }
+    .room-item.active-room:hover {
+      background: rgba(59, 165, 93, 0.2);
+    }
     .room-item .icon {
       width: 40px;
       height: 40px;
@@ -775,58 +782,54 @@
       object-fit: cover;
     }
     
-    /* Footer Branding */
-    .app-footer {
+    /* Header Branding */
+    .app-header-brand {
       position: fixed;
-      bottom: 62px;
+      top: 0;
       left: 0;
       right: 0;
-      height: 32px;
-      background: linear-gradient(90deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #16213e 75%, #1a1a2e 100%);
+      height: 50px;
+      background: linear-gradient(90deg, #5865f2 0%, #7289da 25%, #5865f2 50%, #7289da 75%, #5865f2 100%);
       background-size: 200% 100%;
       animation: shimmer 3s ease-in-out infinite;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
-      z-index: 999;
-      border-top: 1px solid #5865f2;
+      gap: 12px;
+      z-index: 1001;
+      border-bottom: 3px solid #4752c4;
+      box-shadow: 0 2px 10px rgba(88, 101, 242, 0.5);
     }
     @keyframes shimmer {
       0% { background-position: -200% 0; }
       100% { background-position: 200% 0; }
     }
-    .app-footer .camera-icon {
-      font-size: 18px;
+    .app-header-brand .camera-icon {
+      font-size: 28px;
       animation: pulse 2s ease-in-out infinite;
+      filter: drop-shadow(0 0 4px rgba(255,255,255,0.5));
     }
     @keyframes pulse {
       0%, 100% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.1); opacity: 0.8; }
+      50% { transform: scale(1.15); opacity: 0.9; }
     }
-    .app-footer .brand-text {
+    .app-header-brand .brand-text {
+      font-size: 18px;
+      font-weight: 800;
+      color: #fff;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+      letter-spacing: 1px;
+    }
+    .app-header-brand .version {
       font-size: 12px;
-      font-weight: 700;
-      background: linear-gradient(90deg, #fff, #5865f2, #fff);
-      background-size: 200% 100%;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      animation: textShimmer 3s ease-in-out infinite;
-    }
-    @keyframes textShimmer {
-      0% { background-position: -200% 0; }
-      100% { background-position: 200% 0; }
-    }
-    .app-footer .version {
-      font-size: 10px;
-      color: #72767d;
-      margin-left: 2px;
+      color: rgba(255,255,255,0.9);
+      margin-left: 4px;
+      font-weight: 600;
     }
     
-    /* Adjust body padding for footer + bottom bar */
+    /* Adjust body padding for header */
     body {
-      padding-bottom: 100px;
+      padding-top: 50px;
     }
   </style>
 </head>
@@ -885,7 +888,16 @@
       <div class="lobby-main">
         <div class="welcome-section">
           <h3>Добро пожаловать в Keros VideoChat! 👋</h3>
-          <p>Выберите комнату слева или создайте свою. Приглашайте друзей по ссылке!</p>
+          <p style="margin-bottom: 16px;">🔥 <b>Комнаты с огоньком</b> — активные, там уже есть люди!<br>⚪ <b>Без огонька</b> — пока пустые, но вы можете быть первыми!</p>
+          <div style="background: #2f3136; padding: 16px; border-radius: 8px; margin-top: 16px;">
+            <p style="color: #b9bbbe; font-size: 13px; margin-bottom: 8px;"><b>💡 Как присоединиться:</b></p>
+            <ul style="color: #96989d; font-size: 13px; text-align: left; padding-left: 20px;">
+              <li>Нажмите на любую комнату слева 🔴</li>
+              <li>Или введите ID комнаты в поиске 🔍</li>
+              <li>Или перейдите по ссылке-приглашению 📎</li>
+              <li>Создайте свою комнату кнопкой ➕</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
@@ -1008,14 +1020,14 @@
     </div>
   </div>
   
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="app.js"></script>
-  
-  <!-- Footer Branding -->
-  <div class="app-footer">
+  <!-- Header Branding -->
+  <div class="app-header-brand">
     <span class="camera-icon">📹</span>
     <span class="brand-text">KEROS VIDEOCHAT</span>
     <span class="version">v1.0.0.0</span>
   </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

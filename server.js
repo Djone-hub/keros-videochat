@@ -64,13 +64,38 @@ io.on('connection', (socket) => {
   });
   
   socket.on('get-available-rooms', (callback) => {
-    const availableRooms = Array.from(roomStore.values()).map(r => ({
-      id: r.id,
-      name: r.name,
-      avatar: r.avatar,
-      creator: r.creator
-    }));
+    const availableRooms = Array.from(roomStore.values()).map(r => {
+      // Check if room has active users
+      const activeRoom = rooms.get(r.id);
+      const activeUsersCount = activeRoom ? activeRoom.users.size : 0;
+      return {
+        id: r.id,
+        name: r.name,
+        avatar: r.avatar,
+        creator: r.creator,
+        active: activeUsersCount > 0,
+        userCount: activeUsersCount
+      };
+    });
     callback(availableRooms);
+  });
+  
+  socket.on('get-room-info', (roomId, callback) => {
+    const storedRoom = roomStore.get(roomId);
+    if (storedRoom) {
+      const activeRoom = rooms.get(roomId);
+      const activeUsersCount = activeRoom ? activeRoom.users.size : 0;
+      callback({
+        id: storedRoom.id,
+        name: storedRoom.name,
+        avatar: storedRoom.avatar,
+        creator: storedRoom.creator,
+        active: activeUsersCount > 0,
+        userCount: activeUsersCount
+      });
+    } else {
+      callback(null);
+    }
   });
   
   socket.on('search-rooms', (query, callback) => {
