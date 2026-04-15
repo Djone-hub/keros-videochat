@@ -14,6 +14,7 @@ const io = new Server(server, {
 });
 
 app.use(express.static(path.join(__dirname)));
+app.use(express.json());
 
 const rooms = new Map();
 
@@ -47,8 +48,26 @@ function saveRoomsToFile() {
 
 const roomStore = loadRoomsFromFile();
 
+// REST API endpoint for rooms (fallback for socket issues)
+app.get('/api/rooms', (req, res) => {
+  const availableRooms = Array.from(roomStore.values()).map(r => {
+    const activeRoom = rooms.get(r.id);
+    const activeUsersCount = activeRoom ? activeRoom.users.size : 0;
+    return {
+      id: r.id,
+      name: r.name,
+      avatar: r.avatar,
+      creator: r.creator,
+      active: activeUsersCount > 0,
+      userCount: activeUsersCount
+    };
+  });
+  res.json(availableRooms);
+});
+
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
+  console.log('Current rooms in store:', roomStore.size);
 
   socket.on('join-room', (roomId, userName, userAvatar, roomName, roomAvatar) => {
     socket.join(roomId);

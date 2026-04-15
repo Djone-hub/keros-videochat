@@ -219,32 +219,39 @@ function showLobby() {
 // Store server rooms
 let serverRooms = [];
 
-function loadServerRooms() {
+async function loadServerRooms() {
   const list = document.getElementById('roomsList');
   list.innerHTML = '<p style="color: #72767d; padding: 16px; text-align: center;">⏳ Загрузка комнат...</p>';
   
-  // Get rooms from server
-  socket.emit('get-available-rooms', (rooms) => {
-    serverRooms = rooms || [];
-    // Merge with local rooms
-    const localRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
-    
-    // Merge server rooms with local rooms (local takes precedence for same ID)
-    const mergedMap = new Map();
-    serverRooms.forEach(r => mergedMap.set(r.id, r));
-    localRooms.forEach(r => mergedMap.set(r.id, r));
-    
-    allRooms = Array.from(mergedMap.values());
-    
-    // Sort: rooms with active users first, then by creation date
-    allRooms.sort((a, b) => {
-      if (a.active && !b.active) return -1;
-      if (!a.active && b.active) return 1;
-      return (b.created || 0) - (a.created || 0);
-    });
-    
-    renderRoomsList(allRooms);
+  try {
+    // Use REST API instead of socket (more reliable on Render)
+    const response = await fetch('/api/rooms');
+    if (!response.ok) throw new Error('Failed to fetch rooms');
+    serverRooms = await response.json();
+    console.log('Loaded rooms from server:', serverRooms.length);
+  } catch (err) {
+    console.error('Error loading rooms:', err);
+    serverRooms = [];
+  }
+  
+  // Merge with local rooms
+  const localRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+  
+  // Merge server rooms with local rooms (local takes precedence for same ID)
+  const mergedMap = new Map();
+  serverRooms.forEach(r => mergedMap.set(r.id, r));
+  localRooms.forEach(r => mergedMap.set(r.id, r));
+  
+  allRooms = Array.from(mergedMap.values());
+  
+  // Sort: rooms with active users first, then by creation date
+  allRooms.sort((a, b) => {
+    if (a.active && !b.active) return -1;
+    if (!a.active && b.active) return 1;
+    return (b.created || 0) - (a.created || 0);
   });
+  
+  renderRoomsList(allRooms);
 }
 
 function renderRoomsList(roomsToRender) {
@@ -318,21 +325,20 @@ function loadRoomsList(filter = '') {
   renderRoomsList(rooms);
 }
 
-function searchRooms(query) {
+async function searchRooms(query) {
   if (!query) {
     loadRoomsList();
     return;
   }
   
-  // Search on server
-  socket.emit('search-rooms', query, (results) => {
-    if (results && results.length > 0) {
-      renderRoomsList(results);
-    } else {
-      // Fall back to local search
-      loadRoomsList(query);
-    }
-  });
+  // Search locally first
+  const filtered = allRooms.filter(r => 
+    r.name.toLowerCase().includes(query.toLowerCase()) ||
+    r.id.toLowerCase().includes(query.toLowerCase()) ||
+    (r.creator && r.creator.toLowerCase().includes(query.toLowerCase()))
+  );
+  
+  renderRoomsList(filtered);
 }
 
 function editRoom(roomId, currentName, currentAvatar) {
