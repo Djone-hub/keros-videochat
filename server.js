@@ -48,20 +48,42 @@ function saveRoomsToFile() {
 
 const roomStore = loadRoomsFromFile();
 
-// REST API endpoint for rooms (fallback for socket issues)
+// REST API endpoint for rooms - returns ALL rooms (stored + active)
 app.get('/api/rooms', (req, res) => {
-  const availableRooms = Array.from(roomStore.values()).map(r => {
-    const activeRoom = rooms.get(r.id);
+  const allRoomsMap = new Map();
+  
+  // First add all stored rooms
+  roomStore.forEach((r, id) => {
+    const activeRoom = rooms.get(id);
     const activeUsersCount = activeRoom ? activeRoom.users.size : 0;
-    return {
-      id: r.id,
+    allRoomsMap.set(id, {
+      id: id,
       name: r.name,
       avatar: r.avatar,
       creator: r.creator,
       active: activeUsersCount > 0,
-      userCount: activeUsersCount
-    };
+      userCount: activeUsersCount,
+      created: r.created
+    });
   });
+  
+  // Then add any active rooms not in store (orphaned/active only rooms)
+  rooms.forEach((activeRoom, id) => {
+    if (!allRoomsMap.has(id)) {
+      allRoomsMap.set(id, {
+        id: id,
+        name: activeRoom.name || id,
+        avatar: null,
+        creator: activeRoom.creator || null,
+        active: true,
+        userCount: activeRoom.users.size,
+        created: Date.now()
+      });
+    }
+  });
+  
+  const availableRooms = Array.from(allRoomsMap.values());
+  console.log(`[API] Returning ${availableRooms.length} rooms (${roomStore.size} stored, ${rooms.size} active)`);
   res.json(availableRooms);
 });
 

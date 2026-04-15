@@ -77,12 +77,16 @@ const urlParams = new URLSearchParams(window.location.search);
 const inviteRoomId = urlParams.get('room');
 
 // Check if user is already logged in
+// Clear any pending invites from previous session - user should stay in lobby
+sessionStorage.removeItem('pendingRoomInvite');
+
 window.addEventListener('load', () => {
   const savedUser = localStorage.getItem('keroschat_user');
   if (savedUser) {
     currentUser = JSON.parse(savedUser);
     userAvatar = localStorage.getItem(`keroschat_avatar_${currentUser.username}`);
     
+    // Only auto-join if explicit invite in URL (not from sessionStorage)
     if (inviteRoomId) {
       // Store invite for auto-join after lobby loads
       sessionStorage.setItem('pendingRoomInvite', inviteRoomId);
@@ -248,10 +252,30 @@ async function loadServerRooms() {
   let localRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
   const serverRoomIds = new Set(serverRooms.map(r => r.id));
   
-  // Keep only local rooms that exist on server OR were created by current user
-  const cleanedLocalRooms = localRooms.filter(r => 
-    serverRoomIds.has(r.id) || r.creator === currentUser?.username
-  );
+  // Filter out "ghost" rooms - rooms where name looks like an ID (uppercase letters+numbers, 8 chars)
+  // These are auto-generated rooms that shouldn't exist
+  const isGhostRoom = (room) => {
+    // If name is same as ID and looks like random ID (8 uppercase chars/numbers)
+    if (room.name === room.id && /^[A-Z0-9]{8}$/.test(room.id)) {
+      return true;
+    }
+    // If name is empty or just the ID
+    if (!room.name || room.name === room.id) {
+      return true;
+    }
+    return false;
+  };
+  
+  // Keep only local rooms that:
+  // 1. Exist on server, OR
+  // 2. Were created by current user AND are not ghost rooms
+  const cleanedLocalRooms = localRooms.filter(r => {
+    if (isGhostRoom(r)) {
+      console.log('[GHOST] Filtering out ghost room:', r.id);
+      return false;
+    }
+    return serverRoomIds.has(r.id) || r.creator === currentUser?.username;
+  });
   
   // Save cleaned list back
   if (cleanedLocalRooms.length !== localRooms.length) {
@@ -353,12 +377,28 @@ async function searchRooms(query) {
     return;
   }
   
-  // Search locally first
+  // Search in all rooms
   const filtered = allRooms.filter(r => 
     r.name.toLowerCase().includes(query.toLowerCase()) ||
     r.id.toLowerCase().includes(query.toLowerCase()) ||
     (r.creator && r.creator.toLowerCase().includes(query.toLowerCase()))
   );
+  
+  // If nothing found, show "no results" message
+  if (filtered.length === 0) {
+    const list = document.getElementById('roomsList');
+    list.innerHTML = `
+      <div style="text-align: center; padding: 20px; color: #72767d;">
+        <p style="margin-bottom: 8px;">🔍 Ничего не найдено</p>
+        <p style="font-size: 13px;">По запросу "${query}" нет комнат</p>
+        <button onclick="document.getElementById('roomSearch').value=''; loadRoomsList()" 
+                style="margin-top: 12px; padding: 6px 12px; background: #5865f2; color: #fff; border: none; border-radius: 4px; cursor: pointer;">
+          🔄 Показать все комнаты
+        </button>
+      </div>
+    `;
+    return;
+  }
   
   renderRoomsList(filtered);
 }
@@ -541,6 +581,9 @@ async function joinRoomById(roomId) {
   
   // Join socket room with avatar, room name and room avatar
   socket.emit('join-room', roomId, currentUser.username, userAvatar, currentRoomName, roomAvatar);
+  
+  // Play sound for local user entering room
+  sounds.userJoin();
   
   // Show room UI
   showRoomUI();
