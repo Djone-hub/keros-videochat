@@ -76,6 +76,29 @@ const sounds = {
 const urlParams = new URLSearchParams(window.location.search);
 const inviteRoomId = urlParams.get('room');
 
+// AGGRESSIVE CLEANUP: Remove all ghost rooms from localStorage immediately
+(function cleanupGhostRooms() {
+  const localRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+  const ghostRooms = [];
+  const isGhostRoom = (room) => {
+    // Ghost room: name equals ID, or name is empty, or ID looks like random (8 uppercase chars)
+    if (!room.name || room.name === room.id) return true;
+    if (/^[A-Z0-9]{8}$/.test(room.id) && room.name === room.id) return true;
+    return false;
+  };
+  const cleanedRooms = localRooms.filter(r => {
+    if (isGhostRoom(r)) {
+      ghostRooms.push(r.id);
+      return false;
+    }
+    return true;
+  });
+  if (cleanedRooms.length !== localRooms.length) {
+    localStorage.setItem('keroschat_rooms', JSON.stringify(cleanedRooms));
+    console.log('[STARTUP] Removed', localRooms.length - cleanedRooms.length, 'ghost rooms:', ghostRooms);
+  }
+})();
+
 // Check if user is already logged in
 // Clear any pending invites from previous session - user should stay in lobby
 sessionStorage.removeItem('pendingRoomInvite');
@@ -349,7 +372,7 @@ function renderRoomsList(roomsToRender) {
       <div class="icon">${iconHtml}</div>
       <div class="info">
         <div class="name">${room.name} ${room.active ? '🔥' : ''}</div>
-        <div class="count">${statusHtml} • ID: ${room.id} ${isCreator ? '• (Вы создатель)' : `• ${room.creator || ''}`}</div>
+        <div class="count">${statusHtml} ${isCreator ? '• Вы создатель' : (room.creator ? `• ${room.creator}` : '')}</div>
       </div>
       ${actionsHtml}
     `;
@@ -925,6 +948,11 @@ socket.on('users-in-room', async (users) => {
   console.log('Users in room:', users.length, users);
   addLogEntry('Отладка', `Получен список пользователей: ${users.length}`);
   for (const user of users) {
+    // Skip if already connected to this user
+    if (activeUsers.has(user.id) || peers.has(user.id)) {
+      console.log('Already connected to user:', user.id, 'skipping...');
+      continue;
+    }
     console.log('Creating peer connection for user:', user.id);
     activeUsers.set(user.id, user);
     const pc = await createPeerConnection(user.id);
@@ -965,6 +993,11 @@ socket.on('room-error', (error) => {
 });
 
 socket.on('user-joined', async (user) => {
+  // Skip if already connected to this user (prevent duplicates)
+  if (activeUsers.has(user.id) || peers.has(user.id)) {
+    console.log('User already connected:', user.id);
+    return;
+  }
   sounds.userJoin();
   activeUsers.set(user.id, user);
   addChatMessage('Система', `${user.name} присоединился`, true);
