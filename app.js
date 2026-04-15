@@ -7,6 +7,7 @@ let userName = '';
 let isMicOn = true;
 let isCamOn = true;
 let isScreenSharing = false;
+let activeUsers = new Map();
 
 const iceServers = {
   iceServers: [
@@ -14,6 +15,24 @@ const iceServers = {
     { urls: 'stun:stun1.l.google.com:19302' }
   ]
 };
+
+// Sound effects
+const sounds = {
+  micOn: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZURE'),
+  micOff: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZURE'),
+  screenOn: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZURE'),
+  screenOff: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZURE'),
+  join: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZURE'),
+  leave: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZURE')
+};
+
+function playSound(soundName) {
+  const sound = sounds[soundName];
+  if (sound) {
+    sound.currentTime = 0;
+    sound.play().catch(e => console.log('Sound play failed:', e));
+  }
+}
 
 function generateRoomId() {
   return Math.random().toString(36).substring(2, 10).toUpperCase();
@@ -29,6 +48,7 @@ function joinRoom() {
       socket.emit('join-room', roomId, userName);
       showRoom();
       addVideoStream('local', stream, userName, true, false);
+      updateActiveUsers();
     })
     .catch(err => {
       alert('Ошибка доступа к камере/микрофону: ' + err.message);
@@ -37,7 +57,8 @@ function joinRoom() {
 
 function showRoom() {
   document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('roomScreen').style.display = 'block';
+  document.getElementById('roomScreen').style.display = 'flex';
+  document.getElementById('roomScreen').style.flexDirection = 'column';
   document.getElementById('displayRoomId').textContent = roomId;
   
   const shareUrl = `${window.location.origin}?room=${roomId}`;
@@ -57,6 +78,7 @@ function copyLink() {
 }
 
 function leaveRoom() {
+  playSound('leave');
   if (localStream) {
     localStream.getTracks().forEach(t => t.stop());
   }
@@ -81,21 +103,22 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     video.autoplay = true;
     video.playsInline = true;
     video.muted = isLocal;
-    // Only mirror camera, not screen share
     if (isLocal && !isScreenShare) video.style.transform = 'scaleX(-1)';
     
     const label = document.createElement('div');
     label.className = 'video-label';
     label.textContent = isLocal ? `${name} (Вы)` : name;
     
-    // Add fullscreen button
-    const fullscreenBtn = document.createElement('button');
-    fullscreenBtn.innerHTML = '⛶';
-    fullscreenBtn.style.cssText = 'position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.7);color:#fff;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:14px;z-index:10;';
-    fullscreenBtn.onclick = () => toggleFullscreen(video);
-    container.appendChild(fullscreenBtn);
+    // Fullscreen/Modal button for screen share
+    if (isScreenShare) {
+      const modalBtn = document.createElement('button');
+      modalBtn.innerHTML = '🔍';
+      modalBtn.className = 'fullscreen-btn';
+      modalBtn.onclick = () => openScreenModal(id, stream, name);
+      container.appendChild(modalBtn);
+    }
     
-    // Add volume control for remote participants
+    // Volume control for remote
     if (!isLocal) {
       const volumeControl = document.createElement('div');
       volumeControl.className = 'remote-volume';
@@ -117,16 +140,55 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
   updateUserCount();
 }
 
-function toggleFullscreen(video) {
-  if (video.requestFullscreen) {
-    video.requestFullscreen();
-  } else if (video.webkitRequestFullscreen) {
-    video.webkitRequestFullscreen();
-  } else if (video.mozRequestFullScreen) {
-    video.mozRequestFullScreen();
-  } else if (video.msRequestFullscreen) {
-    video.msRequestFullscreen();
+function openScreenModal(id, stream, name) {
+  const modal = document.getElementById('screenShareModal');
+  const backdrop = document.getElementById('screenBackdrop');
+  const container = document.getElementById('modalVideoContainer');
+  
+  container.innerHTML = '';
+  const video = document.createElement('video');
+  video.srcObject = stream;
+  video.autoplay = true;
+  video.playsInline = true;
+  video.style.width = '100%';
+  video.style.height = '100%';
+  container.appendChild(video);
+  
+  modal.classList.add('active');
+  backdrop.classList.add('active');
+}
+
+function closeScreenModal() {
+  document.getElementById('screenShareModal').classList.remove('active');
+  document.getElementById('screenBackdrop').classList.remove('active');
+}
+
+function sendModalMessage() {
+  const input = document.getElementById('modalChatInput');
+  const text = input.value.trim();
+  if (text) {
+    socket.emit('chat-message', text);
+    addModalChatMessage(userName, text);
+    input.value = '';
   }
+}
+
+function addModalChatMessage(sender, text) {
+  const messages = document.getElementById('modalChatMessages');
+  const msgDiv = document.createElement('div');
+  msgDiv.className = 'chat-message';
+  msgDiv.innerHTML = `
+    <div class="chat-avatar" style="width: 32px; height: 32px; font-size: 12px;">${sender.charAt(0)}</div>
+    <div class="chat-content">
+      <div class="chat-header-info">
+        <span class="chat-sender" style="font-size: 13px;">${sender}</span>
+        <span class="chat-time" style="font-size: 11px;">${new Date().toLocaleTimeString()}</span>
+      </div>
+      <div class="chat-text" style="font-size: 13px;">${escapeHtml(text)}</div>
+    </div>
+  `;
+  messages.appendChild(msgDiv);
+  messages.scrollTop = messages.scrollHeight;
 }
 
 function removeVideoStream(id) {
@@ -138,6 +200,34 @@ function removeVideoStream(id) {
 function updateUserCount() {
   const count = document.querySelectorAll('.video-container').length;
   document.getElementById('userCount').textContent = count;
+}
+
+function updateActiveUsers() {
+  const list = document.getElementById('activeUsers');
+  list.innerHTML = '';
+  
+  // Add local user
+  const localItem = document.createElement('div');
+  localItem.className = 'user-item';
+  localItem.innerHTML = `
+    <div class="user-avatar">${userName.charAt(0).toUpperCase()}</div>
+    <span class="user-name">${userName} (Вы)</span>
+    <div class="user-status"></div>
+  `;
+  list.appendChild(localItem);
+  
+  // Add remote users
+  peers.forEach((pc, id) => {
+    const user = activeUsers.get(id);
+    const item = document.createElement('div');
+    item.className = 'user-item';
+    item.innerHTML = `
+      <div class="user-avatar">${user ? user.name.charAt(0).toUpperCase() : '?'}</div>
+      <span class="user-name">${user ? user.name : 'Участник'}</span>
+      <div class="user-status"></div>
+    `;
+    list.appendChild(item);
+  });
 }
 
 async function createPeerConnection(userId) {
@@ -164,6 +254,7 @@ async function createPeerConnection(userId) {
     if (pc.connectionState === 'disconnected') {
       removeVideoStream(userId);
       peers.delete(userId);
+      updateActiveUsers();
     }
   };
   
@@ -172,28 +263,34 @@ async function createPeerConnection(userId) {
 }
 
 socket.on('users-in-room', async (users) => {
+  playSound('join');
   for (const user of users) {
+    activeUsers.set(user.id, user);
     const pc = await createPeerConnection(user.id);
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     socket.emit('offer', user.id, offer);
   }
-  updateUserList();
+  updateActiveUsers();
 });
 
 socket.on('user-joined', async (user) => {
+  playSound('join');
+  activeUsers.set(user.id, user);
   addChatMessage('Система', `${user.name} присоединился`, true);
-  updateUserList();
+  updateActiveUsers();
 });
 
 socket.on('user-left', (userId) => {
+  playSound('leave');
   removeVideoStream(userId);
   if (peers.has(userId)) {
     peers.get(userId).close();
     peers.delete(userId);
   }
+  activeUsers.delete(userId);
   addChatMessage('Система', 'Участник вышел', true);
-  updateUserList();
+  updateActiveUsers();
 });
 
 socket.on('offer', async (userId, offer) => {
@@ -218,6 +315,7 @@ socket.on('ice-candidate', async (userId, candidate) => {
 
 socket.on('chat-message', (msg) => {
   addChatMessage(msg.sender, msg.text, false, msg.time);
+  addModalChatMessage(msg.sender, msg.text);
 });
 
 socket.on('screen-share-started', (userId) => {
@@ -236,8 +334,17 @@ function toggleMic() {
     if (audioTrack) {
       audioTrack.enabled = !audioTrack.enabled;
       isMicOn = audioTrack.enabled;
-      document.getElementById('micBtn').textContent = isMicOn ? '🎤 Микрофон (вкл)' : '🎤 Микрофон (выкл)';
-      document.getElementById('micBtn').classList.toggle('active', !isMicOn);
+      
+      const btn = document.getElementById('micBtn');
+      if (isMicOn) {
+        btn.classList.remove('danger');
+        btn.querySelector('.label').textContent = 'Мик';
+        playSound('micOn');
+      } else {
+        btn.classList.add('danger');
+        btn.querySelector('.label').textContent = 'Мик выкл';
+        playSound('micOff');
+      }
     }
   }
 }
@@ -248,14 +355,22 @@ function toggleCam() {
     if (videoTrack) {
       videoTrack.enabled = !videoTrack.enabled;
       isCamOn = videoTrack.enabled;
-      document.getElementById('camBtn').textContent = isCamOn ? '📹 Камера (вкл)' : '📹 Камера (выкл)';
-      document.getElementById('camBtn').classList.toggle('active', !isCamOn);
+      
+      const btn = document.getElementById('camBtn');
+      if (isCamOn) {
+        btn.classList.remove('danger');
+        btn.querySelector('.label').textContent = 'Камера';
+      } else {
+        btn.classList.add('danger');
+        btn.querySelector('.label').textContent = 'Камера выкл';
+      }
     }
   }
 }
 
 async function toggleScreen() {
   if (isScreenSharing) {
+    playSound('screenOff');
     if (screenStream) {
       screenStream.getTracks().forEach(t => t.stop());
     }
@@ -268,7 +383,6 @@ async function toggleScreen() {
       }
     });
     
-    // Recreate local video with camera (not screen share)
     const localContainer = document.getElementById('video-local');
     if (localContainer) {
       localContainer.remove();
@@ -277,11 +391,14 @@ async function toggleScreen() {
     
     isScreenSharing = false;
     socket.emit('screen-share-stopped');
-    document.getElementById('screenBtn').textContent = '🖥️ Демонстрация экрана';
-    document.getElementById('screenBtn').classList.remove('active');
+    
+    const btn = document.getElementById('screenBtn');
+    btn.classList.remove('active');
+    btn.querySelector('.label').textContent = 'Экран';
   } else {
     try {
       screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      playSound('screenOn');
       
       const screenTrack = screenStream.getVideoTracks()[0];
       screenTrack.onended = () => toggleScreen();
@@ -293,7 +410,6 @@ async function toggleScreen() {
         }
       });
       
-      // Update local video with screen share - recreate to apply correct CSS
       const localContainer = document.getElementById('video-local');
       if (localContainer) {
         localContainer.remove();
@@ -302,8 +418,10 @@ async function toggleScreen() {
       
       isScreenSharing = true;
       socket.emit('screen-share-started');
-      document.getElementById('screenBtn').textContent = '🖥️ Остановить демонстрацию';
-      document.getElementById('screenBtn').classList.add('active');
+      
+      const btn = document.getElementById('screenBtn');
+      btn.classList.add('active');
+      btn.querySelector('.label').textContent = 'Экран вкл';
     } catch (err) {
       console.error('Screen share error:', err);
     }
@@ -314,12 +432,19 @@ function addChatMessage(sender, text, isSystem = false, time = null) {
   const messages = document.getElementById('chatMessages');
   const msgDiv = document.createElement('div');
   msgDiv.className = 'chat-message';
-  if (isSystem) msgDiv.style.opacity = '0.7';
+  
+  const isMe = sender === userName;
+  const initial = sender.charAt(0).toUpperCase();
   
   msgDiv.innerHTML = `
-    <div class="sender">${sender}</div>
-    <div class="text">${escapeHtml(text)}</div>
-    ${time ? `<div class="time">${time}</div>` : ''}
+    <div class="chat-avatar" style="background: ${isMe ? '#5865f2' : '#3ba55d'}">${initial}</div>
+    <div class="chat-content">
+      <div class="chat-header-info">
+        <span class="chat-sender">${isMe ? 'Вы' : sender}</span>
+        <span class="chat-time">${time || new Date().toLocaleTimeString()}</span>
+      </div>
+      <div class="chat-text">${escapeHtml(text)}</div>
+    </div>
   `;
   
   messages.appendChild(msgDiv);
@@ -342,31 +467,15 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-function updateUserList() {
-  const list = document.getElementById('userList');
-  list.innerHTML = `<div class="user-item">${userName} (Вы)</div>`;
-  peers.forEach((pc, id) => {
-    list.innerHTML += `<div class="user-item">Участник ${id.substr(0, 6)}</div>`;
-  });
+function setRemoteVolume(userId, value) {
+  const container = document.getElementById(`video-${userId}`);
+  if (container) {
+    const video = container.querySelector('video');
+    if (video) {
+      video.volume = value / 100;
+    }
+  }
 }
-
-window.addEventListener('beforeunload', () => {
-  if (localStream) {
-    localStream.getTracks().forEach(t => t.stop());
-  }
-  if (screenStream) {
-    screenStream.getTracks().forEach(t => t.stop());
-  }
-});
-
-window.addEventListener('load', () => {
-  const urlParams = new URLSearchParams(window.location.search);
-  const room = urlParams.get('room');
-  if (room) {
-    document.getElementById('roomId').value = room;
-  }
-  loadRoomList();
-});
 
 // Microphone test variables
 let micTestStream = null;
@@ -374,7 +483,6 @@ let micTestInterval = null;
 let audioContext = null;
 let analyser = null;
 
-// Test microphone with visualization
 async function testMicrophone() {
   try {
     micTestStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -384,8 +492,6 @@ async function testMicrophone() {
     analyser = audioContext.createAnalyser();
     analyser.fftSize = 32;
     source.connect(analyser);
-    
-    document.getElementById('micVolumeControl').style.display = 'flex';
     
     const dataArray = new Uint8Array(analyser.frequencyBinCount);
     const bars = document.querySelectorAll('.mic-bar');
@@ -398,13 +504,12 @@ async function testMicrophone() {
         const height = Math.max(4, (value / 255) * 40);
         bar.style.height = `${height}px`;
         
-        // Color based on volume
         if (value > 200) {
-          bar.style.background = '#ff4444';
+          bar.style.background = '#ed4245';
         } else if (value > 100) {
-          bar.style.background = '#e94560';
+          bar.style.background = '#5865f2';
         } else {
-          bar.style.background = '#4ade80';
+          bar.style.background = '#3ba55d';
         }
       });
     }, 50);
@@ -428,62 +533,37 @@ function stopMicTest() {
     audioContext = null;
   }
   
-  document.getElementById('micVolumeControl').style.display = 'none';
-  
   const bars = document.querySelectorAll('.mic-bar');
   bars.forEach(bar => {
     bar.style.height = '4px';
-    bar.style.background = '#e94560';
+    bar.style.background = '#5865f2';
   });
 }
 
-function setMicVolume(value) {
-  // Store mic volume preference
-  localStorage.setItem('micVolume', value);
-}
-
-function setLocalMicVolume(value) {
-  if (localStream) {
-    const audioTrack = localStream.getAudioTracks()[0];
-    if (audioTrack) {
-      const constraints = { volume: value / 100 };
-      audioTrack.applyConstraints(constraints).catch(err => {
-        console.log('Volume control not supported:', err);
-      });
-    }
-  }
-}
-
-// Create new room with random ID
 function createNewRoom() {
   const newRoomId = generateRoomId();
   document.getElementById('roomId').value = newRoomId;
   
-  // Visual feedback
   const btn = document.querySelector('.create-room-btn');
   btn.textContent = '✅ Комната создана!';
   setTimeout(() => {
-    btn.textContent = '➕ Создать новую комнату';
+    btn.textContent = '➕ Создать комнату';
   }, 2000);
 }
 
-// Load and display room list
-function loadRoomList() {
-  // This would typically fetch from server
-  // For now, we'll just show a placeholder
-  const roomList = document.getElementById('roomList');
-  if (roomList) {
-    roomList.style.display = 'block';
+window.addEventListener('beforeunload', () => {
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
   }
-}
+  if (screenStream) {
+    screenStream.getTracks().forEach(t => t.stop());
+  }
+});
 
-// Set volume for remote participant
-function setRemoteVolume(userId, value) {
-  const container = document.getElementById(`video-${userId}`);
-  if (container) {
-    const video = container.querySelector('video');
-    if (video) {
-      video.volume = value / 100;
-    }
+window.addEventListener('load', () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const room = urlParams.get('room');
+  if (room) {
+    document.getElementById('roomId').value = room;
   }
-}
+});
