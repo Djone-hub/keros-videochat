@@ -4,6 +4,7 @@ const socket = io();
 // State
 let currentUser = null;
 let currentRoom = null;
+let currentRoomName = '';
 let localStream = null;
 let screenStream = null;
 let peers = new Map();
@@ -103,8 +104,10 @@ function handleLogin(e) {
     currentUser = user;
     localStorage.setItem('keroschat_user', JSON.stringify(user));
     userAvatar = localStorage.getItem(`keroschat_avatar_${username}`);
+    addLogEntry('Авторизация', `Пользователь ${username} вошел в систему`);
     showLobby();
   } else {
+    addLogEntry('Ошибка', `Неудачная попытка входа для ${username}`);
     alert('Неверный никнейм или пароль!');
   }
 }
@@ -135,11 +138,15 @@ function handleRegister(e) {
   // Auto login
   currentUser = newUser;
   localStorage.setItem('keroschat_user', JSON.stringify(newUser));
+  addLogEntry('Авторизация', `Новый пользователь ${username} зарегистрирован`);
   showLobby();
   alert('Регистрация успешна!');
-}
+};
 
 function logout() {
+  if (currentUser) {
+    addLogEntry('Авторизация', `Пользователь ${currentUser.username} вышел из системы`);
+  }
   localStorage.removeItem('keroschat_user');
   currentUser = null;
   location.reload();
@@ -188,16 +195,60 @@ function loadRoomsList(filter = '') {
   rooms.forEach(room => {
     const item = document.createElement('div');
     item.className = 'room-item';
-    item.onclick = () => joinRoomById(room.id);
+    item.onclick = (e) => {
+      // Don't join if clicked on action buttons
+      if (e.target.closest('.room-actions')) return;
+      joinRoomById(room.id);
+    };
+    
+    const isCreator = room.creator === currentUser?.username;
+    const actionsHtml = isCreator ? `
+      <div class="room-actions" onclick="event.stopPropagation()">
+        <button onclick="editRoom('${room.id}', '${room.name}')" title="Редактировать">✏️</button>
+        <button onclick="deleteRoom('${room.id}')" title="Удалить">🗑️</button>
+      </div>
+    ` : '';
+    
     item.innerHTML = `
       <div class="icon">#</div>
       <div class="info">
         <div class="name">${room.name}</div>
-        <div class="count">ID: ${room.id}</div>
+        <div class="count">ID: ${room.id} ${isCreator ? '(Вы создатель)' : ''}</div>
       </div>
+      ${actionsHtml}
     `;
     list.appendChild(item);
   });
+}
+
+function editRoom(roomId, currentName) {
+  const newName = prompt('Введите новое название комнаты:', currentName);
+  if (!newName || newName.trim() === '' || newName === currentName) return;
+  
+  const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+  const roomIndex = rooms.findIndex(r => r.id === roomId);
+  
+  if (roomIndex !== -1) {
+    rooms[roomIndex].name = newName.trim();
+    localStorage.setItem('keroschat_rooms', JSON.stringify(rooms));
+    loadRoomsList();
+    addLogEntry('Комната', `Название комнаты ${roomId} изменено на "${newName.trim()}"`);
+    alert('Название комнаты обновлено!');
+  }
+}
+
+function deleteRoom(roomId) {
+  if (!confirm('Удалить эту комнату? Все участники будут отключены.')) return;
+  
+  const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+  const filteredRooms = rooms.filter(r => r.id !== roomId);
+  
+  if (filteredRooms.length !== rooms.length) {
+    localStorage.setItem('keroschat_rooms', JSON.stringify(filteredRooms));
+    loadRoomsList();
+    addLogEntry('Комната', `Комната ${roomId} удалена`);
+    alert('Комната удалена!');
+  }
 }
 
 function searchRooms(query) {
@@ -240,6 +291,13 @@ function generateRoomId() {
 async function joinRoomById(roomId) {
   currentRoom = roomId;
   
+  // Find room name from stored rooms
+  const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+  const room = rooms.find(r => r.id === roomId);
+  currentRoomName = room ? room.name : roomId;
+  
+  addLogEntry('Комната', `Подключение к комнате: ${currentRoomName} (${roomId})`);
+  
   // Request media
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -266,7 +324,7 @@ function showRoomUI() {
   document.getElementById('lobbyScreen').style.display = 'none';
   document.getElementById('roomScreen').style.display = 'flex';
   document.getElementById('roomScreen').style.flexDirection = 'column';
-  document.getElementById('displayRoomId').textContent = currentRoom;
+  document.getElementById('displayRoomId').textContent = currentRoomName || currentRoom;
 }
 
 function leaveRoom() {
@@ -556,11 +614,13 @@ socket.on('user-joined', async (user) => {
   sounds.userJoin();
   activeUsers.set(user.id, user);
   addChatMessage('Система', `${user.name} присоединился`, true);
+  addLogEntry('Пользователи', `${user.name} присоединился к комнате`);
   updateActiveUsers();
 });
 
 socket.on('user-left', (userId) => {
   sounds.userLeave();
+  const user = activeUsers.get(userId);
   removeVideoStream(userId);
   if (peers.has(userId)) {
     peers.get(userId).close();
@@ -568,6 +628,7 @@ socket.on('user-left', (userId) => {
   }
   activeUsers.delete(userId);
   addChatMessage('Система', 'Участник вышел', true);
+  addLogEntry('Пользователи', `${user ? user.name : 'Участник'} покинул комнату`);
   updateActiveUsers();
 });
 
@@ -852,11 +913,16 @@ function updateRemoteVolumeControls() {
     const user = activeUsers.get(id);
     const name = user ? user.name : 'Участник';
     
+    // Get current volume from video element
+    const videoContainer = document.getElementById(`video-${id}`);
+    const video = videoContainer ? videoContainer.querySelector('video') : null;
+    const currentVolume = video ? Math.round(video.volume * 100) : 100;
+    
     const div = document.createElement('div');
     div.className = 'remote-volume-item';
     div.innerHTML = `
       <span>${name}</span>
-      <input type="range" min="0" max="100" value="100" 
+      <input type="range" min="0" max="100" value="${currentVolume}" data-userid="${id}"
              onchange="setRemoteVolume('${id}', this.value)">
     `;
     container.appendChild(div);
@@ -869,7 +935,14 @@ function setRemoteVolume(userId, value) {
     const video = container.querySelector('video');
     if (video) {
       video.volume = value / 100;
+      console.log(`Volume for ${userId} set to ${value}%`);
     }
+  }
+  
+  // Also update volume in settings panel if it exists
+  const settingsVolume = document.querySelector(`#remoteVolumeControls input[data-userid="${userId}"]`);
+  if (settingsVolume) {
+    settingsVolume.value = value;
   }
 }
 
@@ -922,6 +995,40 @@ function uploadAvatar(input) {
 }
 
 // ========== CLEANUP ==========
+
+// ========== LOGGING SYSTEM ==========
+const logs = [];
+
+function addLogEntry(category, message) {
+  const timestamp = new Date().toLocaleTimeString();
+  const entry = { timestamp, category, message };
+  logs.push(entry);
+  
+  // Keep only last 100 entries
+  if (logs.length > 100) {
+    logs.shift();
+  }
+  
+  // Update log display if settings panel is open
+  const logContainer = document.getElementById('logContainer');
+  if (logContainer) {
+    const logEntry = document.createElement('div');
+    logEntry.style.cssText = 'font-size: 12px; color: #b9bbbe; margin-bottom: 4px; font-family: monospace;';
+    logEntry.innerHTML = `<span style="color: #72767d;">[${timestamp}]</span> <span style="color: #5865f2;">${category}:</span> ${message}`;
+    logContainer.appendChild(logEntry);
+    logContainer.scrollTop = logContainer.scrollHeight;
+  }
+  
+  console.log(`[${category}] ${message}`);
+}
+
+function clearLogs() {
+  logs.length = 0;
+  const logContainer = document.getElementById('logContainer');
+  if (logContainer) {
+    logContainer.innerHTML = '';
+  }
+}
 
 window.addEventListener('beforeunload', () => {
   if (localStream) {

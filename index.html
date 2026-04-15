@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Keros VideoChat</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎥</text></svg>">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -207,6 +208,23 @@
     .room-item .count {
       font-size: 12px;
       color: #96989d;
+    }
+    .room-actions {
+      display: flex;
+      gap: 4px;
+      margin-left: auto;
+    }
+    .room-actions button {
+      padding: 4px 8px;
+      border: none;
+      border-radius: 4px;
+      background: #72767d;
+      color: #fff;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .room-actions button:hover {
+      background: #5865f2;
     }
     
     /* Main Lobby Area */
@@ -720,15 +738,15 @@
       </div>
       
       <form class="auth-form active" id="loginForm" onsubmit="handleLogin(event)">
-        <input type="text" id="loginUsername" placeholder="Никнейм" required maxlength="20">
-        <input type="password" id="loginPassword" placeholder="Пароль" required>
+        <input type="text" id="loginUsername" placeholder="Никнейм" required maxlength="20" autocomplete="username">
+        <input type="password" id="loginPassword" placeholder="Пароль" required autocomplete="current-password">
         <button type="submit">🔐 Войти</button>
       </form>
       
       <form class="auth-form" id="registerForm" onsubmit="handleRegister(event)">
-        <input type="text" id="regUsername" placeholder="Никнейм" required maxlength="20">
-        <input type="password" id="regPassword" placeholder="Пароль" required minlength="4">
-        <input type="password" id="regPasswordConfirm" placeholder="Повторите пароль" required>
+        <input type="text" id="regUsername" placeholder="Никнейм" required maxlength="20" autocomplete="username">
+        <input type="password" id="regPassword" placeholder="Пароль" required minlength="4" autocomplete="new-password">
+        <input type="password" id="regPasswordConfirm" placeholder="Повторите пароль" required autocomplete="new-password">
         <button type="submit">📝 Зарегистрироваться</button>
       </form>
     </div>
@@ -862,6 +880,15 @@
         <input type="file" id="avatarUpload" accept="image/*" onchange="uploadAvatar(this)" style="display: none;">
         <button onclick="document.getElementById('avatarUpload').click()">📤 Загрузить аватар</button>
         <div id="avatarPreview" style="margin-top: 10px;"></div>
+      </div>
+      <div class="setting-item">
+        <label style="display: flex; justify-content: space-between; align-items: center;">
+          <span>📋 Логи событий</span>
+          <button onclick="clearLogs()" style="padding: 4px 8px; font-size: 11px; background: #72767d;">Очистить</button>
+        </label>
+        <div id="logContainer" style="background: #202225; border-radius: 4px; padding: 8px; max-height: 200px; overflow-y: auto; font-family: monospace;">
+          <p style="color: #72767d; font-size: 12px;">Логи будут отображаться здесь...</p>
+        </div>
       </div>
     </div>
   </div>
