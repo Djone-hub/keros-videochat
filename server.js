@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -15,7 +16,36 @@ const io = new Server(server, {
 app.use(express.static(path.join(__dirname)));
 
 const rooms = new Map();
-const roomStore = new Map(); // Persistent room storage with metadata
+
+// File-based persistence for rooms
+const ROOMS_FILE = path.join(__dirname, 'rooms.json');
+
+function loadRoomsFromFile() {
+  try {
+    if (fs.existsSync(ROOMS_FILE)) {
+      const data = fs.readFileSync(ROOMS_FILE, 'utf8');
+      const roomsArray = JSON.parse(data);
+      const map = new Map();
+      roomsArray.forEach(r => map.set(r.id, r));
+      console.log(`Loaded ${roomsArray.length} rooms from file`);
+      return map;
+    }
+  } catch (err) {
+    console.error('Error loading rooms file:', err);
+  }
+  return new Map();
+}
+
+function saveRoomsToFile() {
+  try {
+    const roomsArray = Array.from(roomStore.values());
+    fs.writeFileSync(ROOMS_FILE, JSON.stringify(roomsArray, null, 2));
+  } catch (err) {
+    console.error('Error saving rooms file:', err);
+  }
+}
+
+const roomStore = loadRoomsFromFile();
 
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
@@ -42,6 +72,7 @@ io.on('connection', (socket) => {
     room.users.add({ id: socket.id, name: userName, avatar: userAvatar });
     
     // Store room metadata if this is a new room with a proper name
+    let isNewRoom = false;
     if (roomName && !storedRoom) {
       roomStore.set(roomId, {
         id: roomId,
@@ -50,6 +81,10 @@ io.on('connection', (socket) => {
         creator: userName,
         created: Date.now()
       });
+      saveRoomsToFile();
+      isNewRoom = true;
+      // Broadcast new room to all clients
+      io.emit('rooms-updated');
     }
 
     const users = Array.from(room.users).filter(u => u.id !== socket.id);
@@ -165,7 +200,9 @@ io.on('connection', (socket) => {
       if (rooms.has(roomId)) {
         rooms.delete(roomId);
       }
+      saveRoomsToFile();
       io.emit('room-deleted', roomId);
+      io.emit('rooms-updated');
       console.log(`Room ${roomId} deleted by ${socket.userName}`);
     }
   });

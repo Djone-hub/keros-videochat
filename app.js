@@ -1,5 +1,22 @@
 // Keros VideoChat - Full Authentication & Lobby System
 const socket = io();
+let socketConnected = false;
+
+// Socket connection event
+socket.on('connect', () => {
+  console.log('Connected to server');
+  socketConnected = true;
+  // If lobby is already visible, reload rooms
+  const lobbyScreen = document.getElementById('lobbyScreen');
+  if (lobbyScreen && lobbyScreen.style.display === 'flex') {
+    loadServerRooms();
+  }
+});
+
+socket.on('disconnect', () => {
+  console.log('Disconnected from server');
+  socketConnected = false;
+});
 
 // State
 let currentUser = null;
@@ -841,6 +858,25 @@ socket.on('users-in-room', async (users) => {
     socket.emit('offer', user.id, offer);
   }
   updateActiveUsers();
+});
+
+// Listen for room list updates from server
+socket.on('rooms-updated', () => {
+  console.log('Rooms updated, refreshing list...');
+  // Refresh room list if in lobby
+  const lobbyScreen = document.getElementById('lobbyScreen');
+  if (lobbyScreen && lobbyScreen.style.display === 'flex') {
+    loadServerRooms();
+  }
+});
+
+socket.on('room-deleted', (roomId) => {
+  addLogEntry('Комната', `Комната ${roomId} была удалена`);
+  // If currently in this room, leave it
+  if (currentRoom === roomId) {
+    leaveRoom();
+    alert('Эта комната была удалена создателем.');
+  }
 });
 
 socket.on('user-joined', async (user) => {
