@@ -234,13 +234,25 @@ async function loadServerRooms() {
     serverRooms = [];
   }
   
-  // Merge with local rooms
-  const localRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+  // Get local rooms and clean up those not on server (old/deleted)
+  let localRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+  const serverRoomIds = new Set(serverRooms.map(r => r.id));
   
-  // Merge server rooms with local rooms (local takes precedence for same ID)
+  // Keep only local rooms that exist on server OR were created by current user
+  const cleanedLocalRooms = localRooms.filter(r => 
+    serverRoomIds.has(r.id) || r.creator === currentUser?.username
+  );
+  
+  // Save cleaned list back
+  if (cleanedLocalRooms.length !== localRooms.length) {
+    localStorage.setItem('keroschat_rooms', JSON.stringify(cleanedLocalRooms));
+    console.log('Cleaned up', localRooms.length - cleanedLocalRooms.length, 'old rooms from localStorage');
+  }
+  
+  // Merge: server rooms take precedence (they have latest data like userCount)
   const mergedMap = new Map();
-  serverRooms.forEach(r => mergedMap.set(r.id, r));
-  localRooms.forEach(r => mergedMap.set(r.id, r));
+  cleanedLocalRooms.forEach(r => mergedMap.set(r.id, r));
+  serverRooms.forEach(r => mergedMap.set(r.id, r)); // Server overwrites local
   
   allRooms = Array.from(mergedMap.values());
   
@@ -856,11 +868,15 @@ socket.on('room-info', (room) => {
 });
 
 socket.on('users-in-room', async (users) => {
+  console.log('Users in room:', users.length, users);
+  addLogEntry('Отладка', `Получен список пользователей: ${users.length}`);
   for (const user of users) {
+    console.log('Creating peer connection for user:', user.id);
     activeUsers.set(user.id, user);
     const pc = await createPeerConnection(user.id);
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
+    console.log('Sending offer to:', user.id);
     socket.emit('offer', user.id, offer);
   }
   updateActiveUsers();
@@ -908,23 +924,34 @@ socket.on('user-left', (userId) => {
 });
 
 socket.on('offer', async (userId, offer) => {
+  console.log('Received offer from:', userId);
+  addLogEntry('Отладка', `Получен offer от ${userId}`);
   const pc = await createPeerConnection(userId);
   await pc.setRemoteDescription(offer);
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
+  console.log('Sending answer to:', userId);
   socket.emit('answer', userId, answer);
   updateActiveUsers();
 });
 
 socket.on('answer', async (userId, answer) => {
+  console.log('Received answer from:', userId);
+  addLogEntry('Отладка', `Получен answer от ${userId}`);
   if (peers.has(userId)) {
     await peers.get(userId).setRemoteDescription(answer);
+    console.log('Set remote description for:', userId);
+  } else {
+    console.warn('No peer connection for answer from:', userId);
   }
 });
 
 socket.on('ice-candidate', async (userId, candidate) => {
+  console.log('Received ICE candidate from:', userId);
   if (peers.has(userId)) {
     await peers.get(userId).addIceCandidate(new RTCIceCandidate(candidate));
+  } else {
+    console.warn('No peer connection for ICE from:', userId);
   }
 });
 
@@ -1302,6 +1329,15 @@ function clearLogs() {
   const logContainer = document.getElementById('logContainer');
   if (logContainer) {
     logContainer.innerHTML = '';
+  }
+}
+
+function clearAllCache() {
+  if (confirm('Удалить все локальные комнаты? Это не удалит их с сервера, только почистит ваш кэш.')) {
+    localStorage.removeItem('keroschat_rooms');
+    console.log('Local rooms cache cleared');
+    alert('Кэш очищен! Страница перезагрузится.');
+    location.reload();
   }
 }
 

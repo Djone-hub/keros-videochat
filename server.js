@@ -199,9 +199,12 @@ io.on('connection', (socket) => {
     socket.leave(roomId);
     if (rooms.has(roomId)) {
       const room = rooms.get(roomId);
-      room.users.forEach(user => {
-        if (user.id === socket.id) room.users.delete(user);
-      });
+      // Find and remove user from Set
+      const userToRemove = Array.from(room.users).find(u => u.id === socket.id);
+      if (userToRemove) {
+        room.users.delete(userToRemove);
+        console.log(`User ${socket.userName} removed from room ${roomId}`);
+      }
       if (room.users.size === 0) {
         rooms.delete(roomId);
         // Don't delete from roomStore so room persists for rejoining
@@ -243,9 +246,12 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     if (socket.roomId && rooms.has(socket.roomId)) {
       const room = rooms.get(socket.roomId);
-      room.users.forEach(user => {
-        if (user.id === socket.id) room.users.delete(user);
-      });
+      // Find and remove user from Set
+      const userToRemove = Array.from(room.users).find(u => u.id === socket.id);
+      if (userToRemove) {
+        room.users.delete(userToRemove);
+        console.log(`User ${socket.userName} removed from room ${socket.roomId} on disconnect`);
+      }
       if (room.users.size === 0) {
         rooms.delete(socket.roomId);
       }
