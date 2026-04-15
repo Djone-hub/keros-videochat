@@ -1,0 +1,65 @@
+/* Анимации для сайта KEROS MODS */
+
+/* Анимация для бриллианта в меню VIP */
+@keyframes diamond-shine {
+    0%, 100% {
+        transform: scale(1) rotate(-5deg);
+        text-shadow: 0 0 4px #ffd700, 0 0 8px #ffd700, 0 0 12px #ffc107;
+    }
+    50% {
+        transform: scale(1.15) rotate(5deg);
+        text-shadow: 0 0 8px #fff, 0 0 16px #ffd700, 0 0 24px #ffc107;
+    }
+}
+
+/* Анимация для переливающегося текста VIP */
+@keyframes vip-text-shine-animation {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+.vip-text-shine {
+    background: linear-gradient(90deg, #4fc3f7, #ffd700, #9c27b0, #4fc3f7);
+    background-size: 200% 200%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: vip-text-shine-animation 4s ease infinite;
+}
+
+/* Анимация для кнопки владельца */
+@keyframes ownerButtonShimmer {
+    0% { background-position: 0% 50%; }
+    25% { background-position: 100% 50%; }
+    50% { background-position: 100% 100%; }
+    75% { background-position: 0% 100%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* Анимация для хакерского фона */
+@keyframes matrixShift {
+    0% { background-position: 0% 0%; }
+    25% { background-position: 100% 100%; }
+    50% { background-position: 100% 0%; }
+    75% { background-position: 0% 100%; }
+    100% { background-position: 0% 0%; }
+}
+
+/* Анимация для красного градиента */
+@keyframes redGoldGradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* Анимация для переливающегося красного текста в футере */
+@keyframes footerTextShimmer {
+    0%, 100% {
+        background-position: 0% 50%;
+        text-shadow: 0 0 5px rgba(255, 255, 255, 0.2);
+    }
+    50% {
+        background-position: 100% 50%;
+        text-shadow: 0 0 15px rgba(255, 215, 0, 0.5), 0 0 25px rgba(76, 175, 80, 0.4);
+    }
+}

@@ -1,0 +1,665 @@
+/* ГЛОБАЛЬНАЯ ПЕРЕРАБОТКА ВСЕХ НАВИГАЦИОННЫХ КОНТЕЙНЕРОВ */
+/* УНИВЕРСАЛЬНЫЕ АДАПТИВНЫЕ СТИЛИ ДЛЯ ПК И МОБИЛЬНЫХ УСТРОЙСТВ */
+
+/* ========== БАЗОВЫЕ КОНСТАНТЫ И ПЕРЕМЕННЫЕ ========== */
+:root {
+    /* Размеры контейнеров */
+    --nav-desktop-width: 1200px;
+    --nav-tablet-width: 768px;
+    --nav-mobile-width: 480px;
+    
+    /* Размеры навигационных контейнеров */
+    --admin-nav-desktop-width: 220px;
+    --admin-nav-tablet-width: 180px;
+    --admin-nav-mobile-height: 120px;
+    
+    /* Размеры боковой панели */
+    --sidebar-desktop-width: 280px;
+    --sidebar-tablet-width: 240px;
+    --sidebar-mobile-width: 100%;
+    
+    /* Отступы и зазоры */
+    --nav-padding-desktop: 5px 0;
+    --nav-padding-tablet: 8px 0;
+    --nav-padding-mobile: 10px 0;
+    
+    /* Цветовая схема */
+    --nav-bg-primary: #0a192f;
+    --nav-bg-secondary: rgba(0, 0, 0, 0.4);
+    --nav-border-color: rgba(79, 195, 247, 0.2);
+    --nav-accent-color: #ff8c00;
+    --nav-text-primary: #ccd6f6;
+    --nav-text-accent: #ffd700;
+}
+
+/* ========== УНИВЕРСАЛЬНЫЕ МИКСИНЫ ========== */
+
+/* Адаптивный контейнер */
+.universal-nav-container {
+    width: 100%;
+    max-width: var(--nav-desktop-width);
+    margin: 0 auto;
+    padding: 0 20px;
+    box-sizing: border-box;
+    transition: all 0.3s ease;
+}
+
+/* Гибкая навигационная панель */
+.flex-nav-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-height: 35px;
+    transition: all 0.3s ease;
+}
+
+/* Адаптивные кнопки навигации */
+.responsive-nav-btn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    text-decoration: none;
+    box-sizing: border-box;
+}
+
+/* ========== ОСНОВНАЯ НАВИГАЦИОННАЯ ПАНЕЛЬ САЙТА ========== */
+.navigation-bar {
+    background: var(--nav-bg-primary);
+    border-bottom: 1px solid var(--nav-border-color);
+    padding: var(--nav-padding-desktop);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    width: 100%;
+    margin: 0 auto;
+    min-height: 35px;
+    height: 35px;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    transition: all 0.3s ease;
+}
+
+.navigation-bar .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    max-width: var(--nav-desktop-width);
+    margin: 0 auto;
+    padding: 0;
+}
+
+/* Левая часть навигации */
+.nav-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+
+/* Правая часть навигации */
+.nav-right {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+}
+
+/* Основные ссылки навигации */
+.main-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.main-nav a {
+    color: var(--nav-text-primary);
+    text-decoration: none;
+    padding: 3px 6px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    border-radius: 3px;
+    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    white-space: nowrap;
+}
+
+.main-nav a:hover {
+    color: #4fc3f7;
+    background-color: rgba(79, 195, 247, 0.1);
+}
+
+.main-nav a.active {
+    color: var(--nav-text-accent) !important;
+    background-color: rgba(255, 215, 0, 0.2) !important;
+    border-left: 3px solid var(--nav-text-accent) !important;
+    font-weight: bold !important;
+}
+
+/* ========== НАВИГАЦИЯ АДМИН ПАНЕЛИ ========== */
+.admin-nav {
+    background: var(--nav-bg-secondary);
+    border-right: 2px solid var(--nav-accent-color);
+    padding: 12px 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: var(--admin-nav-desktop-width);
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+}
+
+.admin-nav h3 {
+    color: var(--nav-text-accent);
+    margin: 0;
+    font-size: 13px;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 0 12px;
+    margin-bottom: 8px;
+}
+
+/* ========== КНОПКИ АДМИН ПАНЕЛИ С ЦВЕТОВЫМИ СХЕМАМИ ========== */
+.admin-nav-btn {
+    background: linear-gradient(270deg, #4fc3f7, #2196f3);
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+    margin: 0 12px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(79, 195, 247, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    width: calc(100% - 24px);
+    box-sizing: border-box;
+}
+
+.admin-nav-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(79, 195, 247, 0.4);
+}
+
+/* Цветовые схемы для разных кнопок */
+.admin-nav-btn:nth-child(2) {
+    background: linear-gradient(270deg, #f44336, #d32f2f);
+    box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
+}
+
+.admin-nav-btn:nth-child(2):hover {
+    box-shadow: 0 6px 16px rgba(244, 67, 54, 0.4);
+}
+
+.admin-nav-btn:nth-child(3) {
+    background: linear-gradient(270deg, #4CAF50, #66BB6A);
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
+.admin-nav-btn:nth-child(3):hover {
+    box-shadow: 0 6px 16px rgba(26, 35, 126, 0.4);
+}
+
+.admin-nav-btn:nth-child(4) {
+    background: linear-gradient(270deg, #2196F3, #1976D2);
+    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+}
+
+.admin-nav-btn:nth-child(4):hover {
+    box-shadow: 0 6px 16px rgba(33, 150, 243, 0.4);
+}
+
+.admin-nav-btn:nth-child(5) {
+    background: linear-gradient(270deg, #ff9800, #e68900);
+    box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
+}
+
+.admin-nav-btn:nth-child(5):hover {
+    box-shadow: 0 6px 16px rgba(255, 152, 0, 0.4);
+}
+
+.admin-nav-btn:nth-child(6) {
+    background: linear-gradient(270deg, #9c27b0, #7b1fa2);
+    box-shadow: 0 4px 12px rgba(156, 39, 176, 0.3);
+}
+
+.admin-nav-btn:nth-child(6):hover {
+    box-shadow: 0 6px 16px rgba(156, 39, 176, 0.4);
+}
+
+/* ========== БОКОВАЯ ПАНЕЛЬ С КАТЕГОРИЯМИ ========== */
+.right-sidebar {
+    width: var(--sidebar-desktop-width);
+    background: rgba(10, 25, 47, 0.8);
+    border: 1px solid var(--nav-border-color);
+    border-radius: 10px;
+    padding: 20px;
+    height: fit-content;
+    position: sticky;
+    top: 20px;
+    transition: all 0.3s ease;
+}
+
+/* ========== КНОПКИ ВЫБОРА ИГР ========== */
+.game-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.game-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: left;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.game-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.game-btn.active {
+    box-shadow: 0 0 15px rgba(79, 195, 247, 0.5) !important;
+}
+
+/* ========== АДАПТИВНОСТЬ ДЛЯ ПЛАНШЕТОВ (768px-1200px) ========== */
+@media (max-width: 1200px) {
+    :root {
+        --admin-nav-desktop-width: 200px;
+        --sidebar-desktop-width: 260px;
+    }
+    
+    .navigation-bar .container {
+        padding: 0 15px;
+    }
+    
+    .main-nav a {
+        font-size: 13px;
+        padding: 2px 5px;
+    }
+    
+    .admin-nav {
+        width: var(--admin-nav-desktop-width);
+        padding: 10px 0;
+    }
+    
+    .admin-nav-btn {
+        padding: 8px 14px;
+        font-size: 11px;
+        margin: 0 10px;
+    }
+    
+    .right-sidebar {
+        width: var(--sidebar-desktop-width);
+        padding: 15px;
+    }
+    
+    .game-btn {
+        padding: 10px 14px;
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 768px) {
+    :root {
+        --admin-nav-desktop-width: var(--admin-nav-tablet-width);
+        --sidebar-desktop-width: var(--sidebar-tablet-width);
+    }
+    
+    .navigation-bar {
+        padding: var(--nav-padding-tablet);
+        min-height: 40px;
+        height: 40px;
+    }
+    
+    .navigation-bar .container {
+        padding: 0 10px;
+        gap: 6px;
+    }
+    
+    .main-nav {
+        gap: 2px;
+    }
+    
+    .main-nav a {
+        font-size: 12px;
+        padding: 2px 4px;
+        height: 22px;
+    }
+    
+    .nav-right {
+        gap: 3px;
+    }
+    
+    .admin-nav {
+        width: var(--admin-nav-tablet-width);
+        padding: 8px 0;
+    }
+    
+    .admin-nav h3 {
+        font-size: 11px;
+        padding: 0 8px;
+        margin-bottom: 6px;
+    }
+    
+    .admin-nav-btn {
+        padding: 8px 12px;
+        font-size: 10px;
+        margin: 0 8px;
+    }
+    
+    .right-sidebar {
+        width: var(--sidebar-tablet-width);
+        padding: 12px;
+    }
+    
+    .game-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+}
+
+/* ========== АДАПТИВНОСТЬ ДЛЯ МОБИЛЬНЫХ УСТРОЙСТВ (менее 768px) ========== */
+@media (max-width: 600px) {
+    .navigation-bar {
+        padding: var(--nav-padding-mobile);
+        min-height: 45px;
+        height: 45px;
+    }
+    
+    .navigation-bar .container {
+        flex-direction: column;
+        gap: 4px;
+        padding: 0 8px;
+    }
+    
+    .nav-left {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .nav-right {
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    .main-nav {
+        justify-content: center;
+        gap: 3px;
+    }
+    
+    .main-nav a {
+        font-size: 11px;
+        padding: 2px 3px;
+        height: 20px;
+    }
+}
+
+/* ========== АДАПТИВНОСТЬ ДЛЯ МОБИЛЬНЫХ УСТРОЙСТВ (менее 480px) ========== */
+@media (max-width: 480px) {
+    :root {
+        --admin-nav-desktop-width: 100%;
+        --sidebar-desktop-width: 100%;
+    }
+    
+    .navigation-bar {
+        min-height: 50px;
+        height: auto;
+        padding: 8px 0;
+    }
+    
+    .navigation-bar .container {
+        padding: 0 5px;
+        gap: 3px;
+    }
+    
+    .main-nav a {
+        font-size: 10px;
+        padding: 1px 2px;
+        height: 18px;
+    }
+    
+    .nav-search input {
+        padding: 6px 10px;
+        font-size: 14px;
+        border-radius: 6px;
+    }
+    
+    /* Админ панель - горизонтальная навигация */
+    .admin-nav {
+        width: 100% !important;
+        height: var(--admin-nav-mobile-height) !important;
+        border-right: none !important;
+        border-bottom: 2px solid var(--nav-accent-color) !important;
+        padding: 6px !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        flex-shrink: 0 !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 4px !important;
+    }
+    
+    .admin-nav > div {
+        display: flex !important;
+        flex-direction: row !important;
+        gap: 4px !important;
+        align-items: center !important;
+        flex-wrap: nowrap !important;
+    }
+    
+    .admin-nav h3 {
+        display: none !important;
+    }
+    
+    .admin-nav-btn {
+        padding: 6px 10px !important;
+        font-size: 10px !important;
+        margin: 0 2px !important;
+        display: inline-block !important;
+        white-space: nowrap !important;
+        min-width: auto !important;
+        width: auto !important;
+        flex-shrink: 0 !important;
+    }
+    
+    /* Боковая панель - становится горизонтальной */
+    .right-sidebar {
+        width: 100% !important;
+        position: relative !important;
+        top: auto !important;
+        margin-bottom: 15px;
+        padding: 10px;
+    }
+    
+    .game-buttons {
+        flex-direction: row;
+        overflow-x: auto;
+        gap: 6px;
+        padding: 5px 0;
+    }
+    
+    .game-btn {
+        min-width: 120px;
+        flex-shrink: 0;
+        padding: 8px 12px;
+        font-size: 11px;
+    }
+    
+    .game-categories {
+        margin-top: 10px;
+    }
+    
+    .game-categories h4 {
+        font-size: 12px;
+        margin: 10px 0 6px;
+    }
+    
+    .category-btn {
+        font-size: 11px;
+        padding: 4px 8px;
+        margin: 1px 0;
+    }
+}
+
+/* ========== МИНИМАЛЬНЫЕ РАЗМЕРЫ (менее 360px) ========== */
+@media (max-width: 360px) {
+    .navigation-bar .container {
+        padding: 0 3px;
+    }
+    
+    .main-nav a {
+        font-size: 9px;
+        padding: 1px 2px;
+        height: 16px;
+    }
+    
+    .admin-nav-btn {
+        padding: 4px 6px !important;
+        font-size: 9px !important;
+        margin: 0 1px !important;
+    }
+    
+    .game-btn {
+        min-width: 100px;
+        padding: 6px 8px;
+        font-size: 10px;
+    }
+}
+
+/* ========== УЛУЧШЕННЫЕ СКРОЛЛБАРЫ ДЛЯ НАВИГАЦИИ ========== */
+.admin-nav::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.admin-nav::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.admin-nav::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, rgba(255, 140, 0, 0.7), rgba(255, 69, 0, 0.5));
+    border-radius: 4px;
+    border: 1px solid rgba(255, 140, 0, 0.4);
+}
+
+.admin-nav::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, rgba(255, 140, 0, 0.9), rgba(255, 69, 0, 0.7));
+}
+
+.right-sidebar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.right-sidebar::-webkit-scrollbar-track {
+    background: rgba(10, 25, 47, 0.2);
+    border-radius: 3px;
+}
+
+.right-sidebar::-webkit-scrollbar-thumb {
+    background: rgba(79, 195, 247, 0.5);
+    border-radius: 3px;
+}
+
+.right-sidebar::-webkit-scrollbar-thumb:hover {
+    background: rgba(79, 195, 247, 0.8);
+}
+
+/* ========== АНИМАЦИИ И ПЕРЕХОДЫ ========== */
+@keyframes navSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes navPulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.02);
+    }
+}
+
+.navigation-bar {
+    animation: navSlideIn 0.5s ease-out;
+}
+
+.admin-nav-btn:hover,
+.game-btn:hover,
+.main-nav a:hover {
+    animation: navPulse 0.3s ease-in-out;
+}
+
+/* ========== СПЕЦИАЛЬНЫЕ КЛАССЫ ДЛЯ УЛУЧШЕНИЯ ========== */
+.nav-compact {
+    --admin-nav-desktop-width: 180px;
+    --sidebar-desktop-width: 240px;
+}
+
+.nav-spacious {
+    --admin-nav-desktop-width: 260px;
+    --sidebar-desktop-width: 320px;
+}
+
+.nav-mobile-optimized {
+    --admin-nav-mobile-height: 100px;
+}
+
+/* ========== ФОКУС И ДОСТУПНОСТЬ ========== */
+.admin-nav-btn:focus,
+.game-btn:focus,
+.main-nav a:focus {
+    outline: 2px solid var(--nav-accent-color);
+    outline-offset: 2px;
+}
+
+/* Темная тема для навигации */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --nav-bg-primary: #0a192f;
+        --nav-bg-secondary: rgba(0, 0, 0, 0.6);
+        --nav-border-color: rgba(79, 195, 247, 0.3);
+    }
+}

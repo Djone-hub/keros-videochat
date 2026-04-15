@@ -1,0 +1,296 @@
+/* Файл стилей темы сайта - расширенные настройки внешнего вида */
+
+/* Базовые переменные темы */
+:root {
+    --primary-color: #ffd700;
+    --secondary-color: #4fc3f7;
+    --bg-color: #0a192f;
+    --text-color: #ccd6f6;
+    --main-font: 'Segoe UI', sans-serif;
+    --font-size: 16px;
+    --animation-speed: 0.3s;
+    --effect-intensity: 0.5;
+    --card-color: #1a2f5e;
+    --border-radius: 5px;
+    --shadow-intensity: 0.3;
+}
+
+/* Применение базовых стилей темы */
+body {
+    background-color: var(--bg-color) !important;
+    color: var(--text-color) !important;
+    font-family: var(--main-font) !important;
+    font-size: var(--font-size) !important;
+    transition: all var(--animation-speed) ease !important;
+}
+
+/* Стили заголовков */
+h1, h2, h3, h4, h5, h6 {
+    color: var(--primary-color) !important;
+    transition: all var(--animation-speed) ease !important;
+}
+
+/* Логотип сайта */
+.logo-main {
+    color: var(--primary-color) !important;
+    transition: all var(--animation-speed) ease !important;
+}
+
+.logo-subtitle {
+    color: var(--secondary-color) !important;
+    transition: all var(--animation-speed) ease !important;
+}
+
+/* Навигационная панель */
+.navigation-bar {
+    background: var(--bg-color) !important;
+    border-bottom: 1px solid rgba(79, 195, 247, var(--effect-intensity)) !important;
+    transition: all var(--animation-speed) ease !important;
+}
+
+/* Навигационные ссылки */
+.main-nav a {
+    color: var(--text-color) !important;
+    transition: all var(--animation-speed) ease !important;
+    font-family: var(--main-font) !important;
+}
+
+.main-nav a:hover,
+.main-nav a.active {
+    color: var(--primary-color) !important;
+    background-color: rgba(79, 195, 247, var(--effect-intensity)) !important;
+}
+
+/* Кнопки сайта */
+.btn, button {
+    background: transparent !important;
+    color: var(--text-color) !important;
+    border: 1px solid var(--secondary-color) !important;
+    border-radius: var(--border-radius) !important;
+    font-family: var(--main-font) !important;
+    transition: all var(--animation-speed) ease !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, var(--shadow-intensity)) !important;
+}
+
+.btn:hover, button:hover {
+    background-color: var(--secondary-color) !important;
+    box-shadow: 0 0 20px rgba(79, 195, 247, var(--effect-intensity)) !important;
+}
+
+/* Карточки модов */
+.mod-card {
+    background: var(--card-color) !important;
+    border: 1px solid rgba(79, 195, 247, var(--effect-intensity)) !important;
+    border-radius: 8px !important;
+    transition: all var(--animation-speed) ease !important;
+    font-family: var(--main-font) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, var(--shadow-intensity)) !important;
+}
+
+.mod-card:hover {
+    border-color: var(--primary-color) !important;
+    box-shadow: 0 0 25px rgba(255, 215, 0, var(--effect-intensity)) !important;
+    transform: translateY(-2px) !important;
+}
+
+/* Категории */
+.category-btn {
+    background: transparent !important;
+    color: var(--text-color) !important;
+    border: 1px solid rgba(79, 195, 247, var(--effect-intensity)) !important;
+    border-radius: var(--border-radius) !important;
+    font-family: var(--main-font) !important;
+    transition: all var(--animation-speed) ease !important;
+}
+
+.category-btn:hover {
+    background-color: var(--secondary-color) !important;
+    border-color: var(--primary-color) !important;
+}
+
+.category-btn.active {
+    background-color: var(--primary-color) !important;
+    color: var(--bg-color) !important;
+    box-shadow: 0 0 15px rgba(255, 215, 0, var(--effect-intensity)) !important;
+}
+
+/* Поля ввода */
+input, select, textarea {
+    background: rgba(10, 25, 47, 0.8) !important;
+    color: var(--text-color) !important;
+    border: 1px solid rgba(79, 195, 247, var(--effect-intensity)) !important;
+    border-radius: var(--border-radius) !important;
+    font-family: var(--main-font) !important;
+    transition: all var(--animation-speed) ease !important;
+}
+
+input:focus, select:focus, textarea:focus {
+    border-color: var(--primary-color) !important;
+    box-shadow: 0 0 10px rgba(255, 215, 0, var(--effect-intensity)) !important;
+    outline: none !important;
+}
+
+/* Боковая панель */
+.right-sidebar {
+    background: rgba(26, 47, 94, 0.3) !important;
+    border-left: 1px solid rgba(79, 195, 247, var(--effect-intensity)) !important;
+}
+
+/* Футер */
+footer {
+    background: rgba(26, 47, 94, 0.5) !important;
+    border-top: 1px solid rgba(79, 195, 247, var(--effect-intensity)) !important;
+    color: var(--text-color) !important;
+}
+
+/* Модальные окна */
+.auth-modal {
+    background: rgba(0, 0, 0, 0.8) !important;
+}
+
+.auth-content {
+    background: linear-gradient(135deg, var(--bg-color), rgba(26, 47, 94, 0.8)) !important;
+    border: 1px solid rgba(79, 195, 247, var(--effect-intensity)) !important;
+    color: var(--text-color) !important;
+}
+
+/* Поиск */
+.nav-search input {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(79, 195, 247, var(--effect-intensity)) !important;
+    color: var(--text-color) !important;
+    font-family: var(--main-font) !important;
+}
+
+/* Анимации для различных элементов */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+    from { opacity: 0; transform: translateX(100px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideOutRight {
+    from { opacity: 1; transform: translateX(0); }
+    to { opacity: 0; transform: translateX(100px); }
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+@keyframes wave {
+    0% {
+        background-position: -200% 0;
+        box-shadow: 0 0 5px rgba(255, 215, 0, 0.3);
+    }
+    50% {
+        background-position: 200% 0;
+        box-shadow: 0 0 20px rgba(255, 165, 0, 0.6);
+    }
+    100% {
+        background-position: -200% 0;
+        box-shadow: 0 0 5px rgba(255, 215, 0, 0.3);
+    }
+}
+
+/* Уведомления */
+.notification {
+    animation: slideInRight 0.3s ease !important;
+}
+
+/* Контент анимации */
+.admin-section,
+.setting-item,
+.mod-card,
+.category-btn {
+    animation: fadeIn 0.5s ease !important;
+}
+
+/* Эффекты свечения для активных элементов */
+.logo-main,
+.category-btn.active,
+.btn:hover {
+    text-shadow: 0 0 10px currentColor !important;
+}
+
+/* Специальные эффекты для различных состояний */
+.btn-primary {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color)) !important;
+    border-color: var(--primary-color) !important;
+}
+
+.btn-secondary {
+    background: rgba(79, 195, 247, 0.1) !important;
+    border-color: var(--secondary-color) !important;
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, #f44336, #d32f2f) !important;
+    border-color: #f44336 !important;
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #4CAF50, #66BB6A) !important;
+    border-color: #4CAF50 !important;
+}
+
+.btn-warning {
+    background: linear-gradient(135deg, #ff9800, #f57c00) !important;
+    border-color: #ff9800 !important;
+}
+
+.btn-info {
+    background: linear-gradient(135deg, #2196f3, #1976d2) !important;
+    border-color: #2196f3 !important;
+}
+
+/* VIP-статус анимации */
+.vip-label-annual {
+    /* ИСПРАВЛЕНИЕ: Возвращаем правильную анимацию для переливающегося фона */
+    background: linear-gradient(135deg, #ffd700, #ff8c00, #e91e63, #9c27b0, #ffd700) !important;
+    background-size: 300% 300% !important;
+    animation: vipPermanentWave 4s ease-in-out infinite !important;
+    border: 1px solid rgba(255, 215, 0, 0.5) !important;
+}
+
+.vip-label-annual .vip-indicator {
+    color: #1a1a1a !important; /* Темный, почти черный текст для контраста */
+    font-size: 1.1rem !important; /* Увеличиваем размер шрифта */
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.7) !important; /* Яркая тень для "свечения" */
+}
+
+/* Применяем стиль и к оставшемуся времени */
+.vip-label-annual span[style*="color"] {
+    color: #1a1a1a !important;
+    font-size: 0.9rem !important;
+    text-shadow: 0 0 3px rgba(255, 255, 255, 0.5) !important;
+}
+
+/* ⭐️ НОВОЕ: Определение анимации для переливающегося фона */
+@keyframes vipPermanentWave {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* ⭐️ НОВОЕ: Стиль для бессрочного VIP (администрация) */
+.vip-label-permanent {
+    /* ИСПРАВЛЕНИЕ: Используем более насыщенный градиент и правильную анимацию */
+    background: linear-gradient(135deg, #ffd700, #ff8c00, #f44336, #ff8c00, #ffd700) !important;
+    background-size: 250% 250% !important;
+    animation: vipPermanentWave 3s ease-in-out infinite !important; /* Применяем правильную анимацию */
+    border: 1px solid rgba(255, 215, 0, 0.5) !important;
+    box-shadow: 0 0 15px rgba(255, 193, 7, 0.4), inset 0 0 10px rgba(255, 193, 7, 0.2) !important;
+}
+
+.vip-label-permanent .vip-indicator,
+.vip-label-permanent span[style*="color"] {
+    color: #1a1a1a !important; /* Темный, почти черный текст для контраста */
+    font-size: 1.1rem !important; /* Увеличиваем размер шрифта */
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.7) !important; /* Яркая тень для "свечения" */
+}

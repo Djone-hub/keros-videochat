@@ -1,0 +1,139 @@
+/* АДМИН ПАНЕЛЬ - УЛЬТИМАТИВНЫЕ СКРОЛЛБАРЫ */
+/* Максимальный приоритет через !important и специфичность */
+
+/* Скроллбары для основной контентной области админ панели */
+div#admin-panel.admin-content-area::-webkit-scrollbar,
+#admin-panel .admin-content-area::-webkit-scrollbar,
+.admin-content-area::-webkit-scrollbar {
+    width: 16px !important;
+    height: 16px !important;
+}
+
+div#admin-panel.admin-content-area::-webkit-scrollbar-track,
+#admin-panel .admin-content-area::-webkit-scrollbar-track,
+.admin-content-area::-webkit-scrollbar-track {
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.9), rgba(10, 25, 47, 0.7)) !important;
+    border-radius: 8px !important;
+    border: 2px solid rgba(255, 140, 0, 0.4) !important;
+}
+
+div#admin-panel.admin-content-area::-webkit-scrollbar-thumb,
+#admin-panel .admin-content-area::-webkit-scrollbar-thumb,
+.admin-content-area::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, rgba(255, 140, 0, 1), rgba(255, 193, 7, 0.8)) !important;
+    border-radius: 8px !important;
+    border: 3px solid rgba(255, 140, 0, 0.6) !important;
+    transition: all 0.3s ease !important;
+}
+
+div#admin-panel.admin-content-area::-webkit-scrollbar-thumb:hover,
+#admin-panel .admin-content-area::-webkit-scrollbar-thumb:hover,
+.admin-content-area::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, rgba(255, 69, 0, 1), rgba(255, 140, 0, 0.9)) !important;
+    border-color: rgba(255, 69, 0, 0.8) !important;
+    transform: scale(1.1) !important;
+}
+
+/* Скроллбары для навигации админ панели */
+div#admin-panel.admin-nav::-webkit-scrollbar,
+#admin-panel .admin-nav::-webkit-scrollbar,
+.admin-nav::-webkit-scrollbar {
+    width: 12px !important;
+    height: 12px !important;
+}
+
+div#admin-panel.admin-nav::-webkit-scrollbar-track,
+#admin-panel .admin-nav::-webkit-scrollbar-track,
+.admin-nav::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.6) !important;
+    border-radius: 6px !important;
+}
+
+div#admin-panel.admin-nav::-webkit-scrollbar-thumb,
+#admin-panel .admin-nav::-webkit-scrollbar-thumb,
+.admin-nav::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, rgba(255, 140, 0, 0.8), rgba(255, 69, 0, 0.6)) !important;
+    border-radius: 6px !important;
+    border: 2px solid rgba(255, 140, 0, 0.5) !important;
+}
+
+div#admin-panel.admin-nav::-webkit-scrollbar-thumb:hover,
+#admin-panel .admin-nav::-webkit-scrollbar-thumb:hover,
+.admin-nav::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, rgba(255, 69, 0, 1), rgba(255, 140, 0, 0.8)) !important;
+    transform: scale(1.05) !important;
+}
+
+/* Скроллбары для ВСЕХ элементов внутри админ панели */
+#admin-panel *::-webkit-scrollbar {
+    width: 12px !important;
+    height: 12px !important;
+}
+
+#admin-panel *::-webkit-scrollbar-track {
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.7), rgba(10, 25, 47, 0.5)) !important;
+    border-radius: 6px !important;
+    border: 1px solid rgba(255, 140, 0, 0.3) !important;
+}
+
+#admin-panel *::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, rgba(255, 140, 0, 0.9), rgba(255, 193, 7, 0.7)) !important;
+    border-radius: 6px !important;
+    border: 2px solid rgba(255, 140, 0, 0.5) !important;
+    transition: all 0.3s ease !important;
+}
+
+#admin-panel *::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, rgba(255, 69, 0, 1), rgba(255, 140, 0, 0.8)) !important;
+    border-color: rgba(255, 69, 0, 0.7) !important;
+    transform: scale(1.05) !important;
+}
+
+/* Firefox скроллбары для админ панели */
+#admin-panel .admin-content-area {
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(255, 140, 0, 0.9) rgba(0, 0, 0, 0.7) !important;
+}
+
+#admin-panel .admin-nav {
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(255, 140, 0, 0.7) rgba(0, 0, 0, 0.5) !important;
+}
+
+#admin-panel * {
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(255, 140, 0, 0.8) rgba(0, 0, 0, 0.6) !important;
+}
+
+/* Дополнительные стили для контейнеров с прокруткой внутри админ панели */
+#admin-panel div[style*="overflow-y: auto"]::-webkit-scrollbar,
+#admin-panel div[style*="overflow: auto"]::-webkit-scrollbar,
+#admin-panel .scrollable::-webkit-scrollbar {
+    width: 12px !important;
+    height: 12px !important;
+}
+
+#admin-panel div[style*="overflow-y: auto"]::-webkit-scrollbar-track,
+#admin-panel div[style*="overflow: auto"]::-webkit-scrollbar-track,
+#admin-panel .scrollable::-webkit-scrollbar-track {
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.6), rgba(10, 25, 47, 0.4)) !important;
+    border-radius: 6px !important;
+    border: 1px solid rgba(255, 140, 0, 0.3) !important;
+}
+
+#admin-panel div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb,
+#admin-panel div[style*="overflow: auto"]::-webkit-scrollbar-thumb,
+#admin-panel .scrollable::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, rgba(255, 140, 0, 0.8), rgba(255, 193, 7, 0.6)) !important;
+    border-radius: 6px !important;
+    border: 2px solid rgba(255, 140, 0, 0.4) !important;
+    transition: all 0.3s ease !important;
+}
+
+#admin-panel div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb:hover,
+#admin-panel div[style*="overflow: auto"]::-webkit-scrollbar-thumb:hover,
+#admin-panel .scrollable::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, rgba(255, 69, 0, 1), rgba(255, 140, 0, 0.8)) !important;
+    border-color: rgba(255, 69, 0, 0.6) !important;
+    transform: scale(1.05) !important;
+}

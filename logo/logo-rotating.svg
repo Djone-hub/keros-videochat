@@ -1,0 +1,282 @@
+<svg width="300" height="300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- ЗОЛОТИСТЫЙ ПЕРЕЛИВАЮЩИЙСЯ ГРАДИЕНТ ДЛЯ ФОНА -->
+    <radialGradient id="bgGradient">
+      <stop offset="0%" style="stop-color:#ffd700;stop-opacity:1">
+        <animate attributeName="stop-color" values="#ffd700;#ff8c00;#ffa500;#ffd700" dur="4s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="50%" style="stop-color:#ff8c00;stop-opacity:1">
+        <animate attributeName="stop-color" values="#ff8c00;#ffa500;#ffd700;#ff8c00" dur="4s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="100%" style="stop-color:#ffa500;stop-opacity:1">
+        <animate attributeName="stop-color" values="#ffa500;#ffd700;#ff8c00;#ffa500" dur="4s" repeatCount="indefinite"/>
+      </stop>
+    </radialGradient>
+    
+    <!-- Градиент для текста -->
+    <linearGradient id="textGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffd700;stop-opacity:1" />
+      <stop offset="30%" style="stop-color:#ff8c00;stop-opacity:1" />
+      <stop offset="70%" style="stop-color:#4fc3f7;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00bcd4;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- КРАСНО-ЗОЛОТИСТЫЙ МЕДЛЕННЫЙ ПЕРЕЛИВ ДЛЯ ТЕКСТА -->
+    <linearGradient id="waveGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ff0000;stop-opacity:1">
+        <animate attributeName="stop-color" values="#ff0000;#ff3300;#ff6600;#ffd700;#ffcc00;#ffd700;#ff6600;#ff3300;#ff0000" dur="10s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="25%" style="stop-color:#ff3300;stop-opacity:1">
+        <animate attributeName="stop-color" values="#ff3300;#ff6600;#ffd700;#ffcc00;#ffd700;#ff6600;#ff3300;#ff0000;#ff3300" dur="10s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="50%" style="stop-color:#ff6600;stop-opacity:1">
+        <animate attributeName="stop-color" values="#ff6600;#ffd700;#ffcc00;#ffd700;#ff6600;#ff3300;#ff0000;#ff6600;#ffd700" dur="10s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="75%" style="stop-color:#ffd700;stop-opacity:1">
+        <animate attributeName="stop-color" values="#ffd700;#ffcc00;#ffd700;#ff6600;#ff3300;#ff0000;#ff3300;#ff6600;#ffd700" dur="10s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="100%" style="stop-color:#ffcc00;stop-opacity:1">
+        <animate attributeName="stop-color" values="#ffcc00;#ffd700;#ff6600;#ff3300;#ff0000;#ff3300;#ff6600;#ffd700;#ffcc00" dur="10s" repeatCount="indefinite"/>
+      </stop>
+      <animateTransform
+        attributeName="gradientTransform"
+        type="translate"
+        from="-100 0"
+        to="100 0"
+        dur="15s"
+        repeatCount="indefinite"/>
+    </linearGradient>
+    
+    <!-- Маска для круга с увеличенным радиусом -->
+    <clipPath id="circleMask">
+      <circle cx="150" cy="150" r="143"/>
+    </clipPath>
+    
+    <!-- Фильтр свечения -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Внешний круг с увеличенным радиусом -->
+  <circle cx="150" cy="150" r="148" fill="url(#bgGradient)" stroke="url(#textGradient)" stroke-width="5"/>
+  
+  <!-- Внутренний контент с маской -->
+  <g clip-path="url(#circleMask)">
+    <!-- Вращающиеся орбиты -->
+    <g transform="translate(150,150)">
+      <!-- Внешняя орбита -->
+      <circle cx="0" cy="-120" r="4" fill="#ffd700" opacity="0.8">
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          from="0 0 0"
+          to="360 0 0"
+          dur="30s"
+          repeatCount="indefinite"/>
+      </circle>
+      
+      <circle cx="120" cy="0" r="3" fill="#ff8c00" opacity="0.7">
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          from="0 0 0"
+          to="360 0 0"
+          dur="25s"
+          repeatCount="indefinite"/>
+      </circle>
+      
+      <circle cx="0" cy="120" r="4" fill="#4fc3f7" opacity="0.8">
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          from="0 0 0"
+          to="360 0 0"
+          dur="20s"
+          repeatCount="indefinite"/>
+      </circle>
+      
+      <circle cx="-120" cy="0" r="3" fill="#00bcd4" opacity="0.7">
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          from="0 0 0"
+          to="360 0 0"
+          dur="35s"
+          repeatCount="indefinite"/>
+      </circle>
+      
+      <!-- Вращающийся круговой элемент - ПРОТИВ ЧАСОВОЙ -->
+      <circle cx="60" cy="20" r="3" fill="#ffd700" opacity="0.8">
+        <animateTransform
+          attributeName="transform"
+          attributeType="XML"
+          type="rotate"
+          from="0 60 60"
+          to="-360 60 60"
+          dur="20s"
+          repeatCount="indefinite"/>
+      </circle>
+      
+      <circle cx="100" cy="60" r="3" fill="#ff8c00" opacity="0.8">
+        <animateTransform
+          attributeName="transform"
+          attributeType="XML"
+          type="rotate"
+          from="0 60 60"
+          to="-360 60 60"
+          dur="20s"
+          begin="5s"
+          repeatCount="indefinite"/>
+      </circle>
+      
+      <circle cx="60" cy="100" r="3" fill="#4fc3f7" opacity="0.8">
+        <animateTransform
+          attributeName="transform"
+          attributeType="XML"
+          type="rotate"
+          from="0 60 60"
+          to="-360 60 60"
+          dur="20s"
+          begin="10s"
+          repeatCount="indefinite"/>
+      </circle>
+      
+      <circle cx="20" cy="60" r="3" fill="#ffd700" opacity="0.8">
+        <animateTransform
+          attributeName="transform"
+          attributeType="XML"
+          type="rotate"
+          from="0 60 60"
+          to="-360 60 60"
+          dur="20s"
+          begin="15s"
+          repeatCount="indefinite"/>
+      </circle>
+      
+      <!-- Внутренняя орбита -->
+      <circle cx="0" cy="-80" r="2" fill="#ffd700" opacity="0.6">
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          from="0 0 0"
+          to="-360 0 0"
+          dur="15s"
+          repeatCount="indefinite"/>
+      </circle>
+      
+      <circle cx="80" cy="0" r="2" fill="#ff8c00" opacity="0.6">
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          from="0 0 0"
+          to="-360 0 0"
+          dur="12s"
+          repeatCount="indefinite"/>
+      </circle>
+      
+      <circle cx="0" cy="80" r="2" fill="#4fc3f7" opacity="0.6">
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          from="0 0 0"
+          to="-360 0 0"
+          dur="18s"
+          repeatCount="indefinite"/>
+      </circle>
+      
+      <circle cx="-80" cy="0" r="2" fill="#00bcd4" opacity="0.6">
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          from="0 0 0"
+          to="-360 0 0"
+          dur="22s"
+          repeatCount="indefinite"/>
+      </circle>
+    </g>
+    
+    <!-- Основной текст KEROS - ВЫШЕ ПО ЦЕНТРУ -->
+    <text x="150" y="135" font-family="Arial Black, sans-serif" font-size="48" font-weight="bold" 
+          fill="url(#waveGradient)" text-anchor="middle" filter="url(#glow)">
+      KEROS
+      <animate attributeName="opacity" values="0.8;1;0.8" dur="4s" repeatCount="indefinite"/>
+      <animateTransform
+        attributeName="transform"
+        attributeType="XML"
+        type="rotate"
+        from="0 150 150"
+        to="360 150 150"
+        dur="60s"
+        repeatCount="indefinite"/>
+    </text>
+    
+    <!-- Подпись MODS - ВЫШЕ ПО ЦЕНТРУ -->
+    <text x="150" y="165" font-family="Arial Black, sans-serif" font-size="16" 
+          fill="url(#waveGradient)" text-anchor="middle" opacity="0.9">
+      MODS
+      <animate attributeName="opacity" values="0.6;0.9;0.6" dur="3s" repeatCount="indefinite"/>
+      <animateTransform
+        attributeName="transform"
+        attributeType="XML"
+        type="rotate"
+        from="0 150 150"
+        to="360 150 150"
+        dur="60s"
+        repeatCount="indefinite"/>
+    </text>
+    
+    <!-- Декоративные линии - ПО ЧАСОВОЙ СТРЕЛКЕ С ТЕКСТОМ -->
+    <g transform="translate(150,150)">
+      <line x1="-100" y1="0" x2="-60" y2="0" stroke="#ffd700" stroke-width="2" opacity="0.6">
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          from="0 0 0"
+          to="360 0 0"
+          dur="60s"
+          repeatCount="indefinite"/>
+      </line>
+      
+      <line x1="60" y1="0" x2="100" y2="0" stroke="#4fc3f7" stroke-width="2" opacity="0.6">
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          from="0 0 0"
+          to="360 0 0"
+          dur="60s"
+          repeatCount="indefinite"/>
+      </line>
+    </g>
+  </g>
+  
+  <!-- Внешнее вращающееся кольцо с увеличенным радиусом -->
+  <circle cx="150" cy="150" r="151" fill="none" stroke="#ffd700" stroke-width="1" opacity="0.4"
+          stroke-dasharray="10,5">
+    <animateTransform
+      attributeName="transform"
+      attributeType="XML"
+      type="rotate"
+      from="0 150 150"
+      to="360 150 150"
+      dur="60s"
+      repeatCount="indefinite"/>
+  </circle>
+  
+  <!-- Внутреннее вращающееся кольцо с увеличенным радиусом -->
+  <circle cx="150" cy="150" r="133" fill="none" stroke="#4fc3f7" stroke-width="1" opacity="0.3"
+          stroke-dasharray="5,10">
+    <animateTransform
+      attributeName="transform"
+      attributeType="XML"
+      type="rotate"
+      from="360 150 150"
+      to="0 150 150"
+      dur="45s"
+      repeatCount="indefinite"/>
+  </circle>
+</svg>

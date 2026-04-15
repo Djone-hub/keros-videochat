@@ -1,0 +1,3024 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KEROSMODS.RU v1.165.0 - Моды для Farming Simulator</title>
+    <!-- Удален несуществующий favicon.svg -->
+    <link rel="alternate icon" href="favicon.ico">
+    <!-- Подключаем наш файл стилей -->
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Подключаем стили для категорий -->
+    <link rel="stylesheet" href="css/categories-fixed.css">
+    <!-- Подключаем стили для логотипа -->
+    <!-- Удален несуществующий logo-rotating.css -->
+    <link rel="stylesheet" href="css/animations.css">
+    <!-- Подключаем файл стилей темы -->
+    <link rel="stylesheet" href="css/theme.css">
+    <!-- Подключаем стили для скроллинга админ-панели -->
+    <link rel="stylesheet" href="css/admin-scrollbars.css">
+    
+    <!-- Контейнер для глобальных стилей темы, управляемых из админ-панели -->
+    <style id="global-theme-styles"></style>
+
+    <!-- Стили для навигационной панели -->
+    <style>
+        .navigation-bar {
+            background: #0a192f;
+            border-bottom: 1px solid rgba(79, 195, 247, 0.2);
+            padding: 5px 0;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            width: 100%;
+            margin: 0 auto;
+            min-height: 35px;
+            height: 35px;
+        }
+
+        /* Анимация для бегущей строки */
+        @keyframes scroll-left {
+            0% {
+                transform: translateX(100%);
+            }
+            100% {
+                transform: translateX(-100%);
+            }
+        }
+
+        #notification-ticker {
+            font-size: 14px;
+            font-weight: 500;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            background: rgba(20, 20, 20, 0.8);
+            backdrop-filter: blur(10px);
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        #notification-ticker.warning {
+            background: rgba(30, 20, 10, 0.8);
+            border-bottom: 1px solid rgba(255, 150, 0, 0.2);
+            color: rgba(255, 200, 150, 0.9);
+        }
+
+        /* Специальное выделение для текста предупреждений */
+        #notification-ticker.warning .warning-text,
+        #notification-ticker.warning .warning-highlight {
+            color: #FFD700 !important;
+            font-weight: bold !important;
+            text-shadow: 0 0 4px rgba(255, 215, 0, 0.5) !important;
+        }
+
+        #notification-ticker.warning .warning-accent {
+            color: #FFA500 !important;
+            font-weight: bold !important;
+        }
+
+        #notification-ticker.info {
+            background: rgba(10, 20, 30, 0.8);
+            border-bottom: 1px solid rgba(33, 150, 243, 0.2);
+            color: rgba(150, 200, 255, 0.9);
+        }
+
+        #notification-ticker.success {
+            background: rgba(10, 30, 20, 0.8);
+            border-bottom: 1px solid rgba(76, 175, 80, 0.2);
+            color: rgba(150, 255, 200, 0.9);
+        }
+
+        .navigation-bar .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 2px;
+            flex-wrap: wrap;
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex-shrink: 0;
+        }
+
+        .main-nav a {
+            color: #ccd6f6;
+            text-decoration: none;
+            padding: 3px 6px;
+            font-weight: 500;
+            transition: color 0.3s, background-color 0.3s;
+            border-radius: 3px;
+            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            height: 24px;
+        }
+
+        .main-nav a:hover {
+            color: #4fc3f7;
+            background-color: rgba(79, 195, 247, 0.1);
+        }
+
+        .main-nav a.active {
+            color: #ffd700 !important;
+            background-color: rgba(255, 215, 0, 0.2) !important;
+            border-left: 3px solid #ffd700 !important;
+            font-weight: bold !important;
+        }
+
+        .nav-search {
+            margin-left: 10px;
+        }
+
+        .nav-search input {
+            background: linear-gradient(135deg, rgba(255,255,255,0.2), rgba(79, 195, 247, 0.1));
+            border: 2px solid rgba(79, 195, 247, 0.5);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+        }
+        
+        .nav-search input:focus {
+            background: linear-gradient(135deg, rgba(79, 195, 247, 0.3), rgba(33, 150, 243, 0.2));
+            border-color: #4fc3f7;
+            outline: none;
+            box-shadow: 0 0 20px rgba(79, 195, 247, 0.6), 0 4px 15px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.2);
+            transform: translateY(-1px);
+        }
+        
+        .nav-search input::placeholder {
+            color: rgba(255,255,255,0.8);
+            font-style: normal;
+            opacity: 0.9;
+        }
+
+        /* Стили для глобальной поисковой панели */
+        .global-search-bar {
+            background: linear-gradient(135deg, #0a192f, #1a2f5e, #0f2847);
+            border-bottom: 3px solid rgba(79, 195, 247, 0.4);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .global-search-bar::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(79, 195, 247, 0.2), transparent);
+            animation: searchShimmer 3s infinite;
+        }
+
+        @keyframes searchShimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+
+        /* Кастомный скроллбар для контейнера настроек */
+        .setting-item > div[style*="overflow-y: auto"]::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .setting-item > div[style*="overflow-y: auto"]::-webkit-scrollbar-track {
+            background: rgba(10, 25, 47, 0.2);
+            border-radius: 4px;
+        }
+
+        .setting-item > div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb {
+            background: rgba(79, 195, 247, 0.5);
+            border-radius: 4px;
+            transition: background 0.3s ease;
+        }
+
+        .setting-item > div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb:hover {
+            background: rgba(79, 195, 247, 0.8);
+        }
+
+        /* Кнопка прокрутки вниз */
+        .scroll-to-bottom-btn {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: linear-gradient(135deg, #4fc3f7, #2196f3);
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(79, 195, 247, 0.3);
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+
+        .scroll-to-bottom-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(79, 195, 247, 0.5);
+            background: linear-gradient(135deg, #2196f3, #1976d2);
+        }
+
+        /* ✅ ИСПРАВЛЕНИЕ: Скрываем VIP-элементы по умолчанию, чтобы избежать "мелькания" при загрузке */
+        .requires-vip {
+            display: none;
+        }
+    </style>
+    
+    <!-- Подключаем официальный клиент Supabase с CDN (без defer для синхронной загрузки) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- Подключаем модули в правильном порядке -->
+    <!-- 1. Клиент Supabase (синхронно, сразу после CDN) -->
+    <script src="js/supabaseClient.js"></script>
+    
+    <!-- 2. Утилиты хранилища (базовые утилиты) -->
+    <script src="js/storage-utils.js" defer></script>
+
+    <script src="js/image-utils.js" defer></script>
+    <script src="js/auth-system.js" defer></script>
+    <script src="js/ui-modals.js" defer></script>
+    <script src="js/background-music.js" defer></script>
+    <script src="js/mods.js" defer></script>
+    <script src="js/mods-system.js" defer></script>
+    <script src="js/shop-system.js" defer></script>
+    <script src="js/vip-order-blocker-fixed.js" defer></script>
+    <script src="js/user-management.js" defer></script>
+    <script src="js/user-delete-manager.js" defer></script> 
+    <script src="js/security.js" defer></script>
+    <script src="script.js" defer></script>
+    <script src="js/secure-download.js" defer></script>
+    <script src="js/beautiful-scrollbar.js" defer></script>
+    <!-- Простая админ-панель временно отключена -->
+<!-- <script src="js/emergency-fix.js" defer></script>
+    <script src="js/admin-panel-final.js" defer></script> -->
+    <!-- Временно отключен admin-panel-fixed.js из-за синтаксических ошибок -->
+    <!-- <script src="js/admin-panel-fixed.js" defer></script> -->
+    <!-- ОТКЛЮЧЕНО: admin-panel-simple-fixed.js - удаляет окно загрузки VIP модов -->
+    <!-- <script src="js/admin-panel-simple-fixed.js" defer></script> -->
+    <script src="js/admin-panel-security.js" defer></script>
+    <!-- ✅ ВОССТАНОВЛЕНО: Оригинальная админ-панель с загрузкой модов и блокировками -->
+    <script src="js/admin-panel-fixed.js" defer></script>
+    <script src="js/retry_supabase_requests.js" defer></script>
+    <script src="js/password-eyes.js"></script>
+    <script src="js/loadOrders-minimal.js" defer></script>
+    <script src="js/modal-notifications.js" defer></script>
+    <script src="js/order-management.js" defer></script>
+    <!-- ОТКЛЮЧЕНЫ ПРОБЛЕМНЫЕ ФАЙЛЫ С VIP_STATUS -->
+    <!-- <script src="js/vip-status-fix.js" defer></script> -->
+    <!-- <script src="js/shop-system-fix.js" defer></script> -->
+    <!-- <script src="js/shop-system-fix-v2.js" defer></script> -->
+    <!-- <script src="test-orders.js" defer></script> -->
+    <!-- <script src="emergency-fix.js" defer></script> -->
+    <!-- <script src="simple-orders-fix.js" defer></script> -->
+    <!-- <script src="final-orders-fix.js" defer></script> -->
+    <!-- <script src="direct-orders-fix.js" defer></script> -->
+    <script src="js/init.js" defer></script>
+    
+    <script>
+        // Стили для новой навигационной панели
+        const navBarStyles = `
+            .navigation-bar {
+                background: #0a192f;
+                border-bottom: 1px solid rgba(79, 195, 247, 0.2);
+                padding: 5px 0;
+                box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+                width: 100%;
+                margin: 0 auto;
+                min-height: 35px;
+                height: 35px;
+            }
+
+            /* Стили для кнопки владельца с переливающимся эффектом */
+            .owner-auth-button {
+                background: linear-gradient(45deg, #ffd700, #ffed4e, #ffd700, #ff8c00, #ffd700, #ff6b35, #ffd700) !important;
+                background-size: 400% 400% !important;
+                animation: ownerButtonShimmer 1.5s ease-in-out infinite !important;
+                font-weight: bold !important;
+                text-shadow: 0 0 15px rgba(255, 215, 0, 1), 0 0 25px rgba(255, 215, 0, 0.8), 0 0 35px rgba(255, 140, 0, 0.6) !important;
+                box-shadow: 0 0 20px rgba(255, 215, 0, 0.7), 0 0 40px rgba(255, 215, 0, 0.4), inset 0 0 20px rgba(255, 215, 0, 0.3) !important;
+                border: 2px solid rgba(255, 215, 0, 0.8) !important;
+                transition: all 0.3s ease !important;
+                color: #8b4513 !important;
+                padding: 6px 12px !important;
+                border-radius: 8px !important;
+                cursor: pointer !important;
+                font-size: 13px !important;
+                margin: 0 2px !important;
+                display: inline-block !important;
+                min-width: 100px !important;
+                text-align: center !important;
+                position: relative !important;
+                overflow: hidden !important;
+            }
+
+            .owner-auth-button::before {
+                content: '' !important;
+                position: absolute !important;
+                top: -2px !important;
+                left: -2px !important;
+                right: -2px !important;
+                bottom: -2px !important;
+                background: linear-gradient(45deg, #ffd700, #ffed4e, #ffd700, #ff8c00, #ffd700, #ff6b35, #ffd700) !important;
+                background-size: 400% 400% !important;
+                animation: ownerButtonShimmer 1.5s ease-in-out infinite !important;
+                border-radius: 10px !important;
+                z-index: -1 !important;
+            }
+
+            .btn-logout {
+                background: #f44336;
+                color: white;
+                border: none;
+                padding: 6px 12px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 13px;
+                margin: 0 2px;
+                transition: all 0.3s ease;
+            }
+
+            .btn-logout:hover {
+                background: #c62828;
+                transform: scale(1.05);
+            }
+
+            .owner-auth-button:hover {
+                background-size: 150% 150%;
+                box-shadow: 0 0 25px rgba(255, 215, 0, 0.8), 0 0 35px rgba(255, 140, 0, 0.6);
+                transform: scale(1.05);
+                text-shadow: 0 0 15px rgba(255, 215, 0, 1), 0 0 25px rgba(255, 215, 0, 0.8);
+            }
+
+            /* Разные цвета для разных ролей */
+            .owner-auth-button[data-role="owner"] {
+                background: linear-gradient(45deg, #ffd700, #ffed4e, #ffd700, #ff8c00, #ffd700) !important;
+                background-size: 200% 200% !important;
+                color: #8b4513 !important;
+                animation: ownerButtonShimmer 2s ease-in-out infinite !important;
+                box-shadow: 0 0 15px rgba(255, 215, 0, 0.5) !important;
+                border: 1px solid rgba(255, 215, 0, 0.3) !important;
+            }
+            /* ✅ ИСПРАВЛЕНИЕ: Гарантируем, что у кнопки всегда есть фон, даже если градиент не сработал */
+            .owner-auth-button[data-role="owner"] {
+                background-color: #ffd700 !important; /* Резервный цвет */
+                background-image: linear-gradient(45deg, #ffd700, #ffed4e, #ffd700, #ff8c00, #ffd700) !important;
+                background-size: 200% 200% !important;
+                color: #8b4513 !important;
+                animation: ownerButtonShimmer 2s ease-in-out infinite !important;
+            }
+
+            .owner-auth-button[data-role="admin_senior"] {
+                background: linear-gradient(45deg, #ff0080, #ff66b2, #ff0080, #ff4080, #ff0080);
+                background-size: 200% 200%;
+                color: #4a004a;
+            }
+
+            .owner-auth-button[data-role="admin"] {
+                background: linear-gradient(45deg, #ff4444, #ff6666, #ff4444, #ff8888, #ff4444);
+                background-size: 200% 200%;
+                color: #8b0000;
+            }
+
+            .owner-auth-button[data-role="moderator_senior"] {
+                background: linear-gradient(45deg, #ff8800, #ffaa44, #ff8800, #ff6600, #ff8800);
+                background-size: 200% 200%;
+                color: #8b2f00;
+            }
+
+            .owner-auth-button[data-role="moderator"] {
+                background: linear-gradient(45deg, #4fc3f7, #81d4fa, #4fc3f7, #29b6f6, #4fc3f7);
+                background-size: 200% 200%;
+                color: #01579b;
+            }
+
+            .owner-auth-button[data-role="user"] {
+                background: linear-gradient(45deg, #888888, #aaaaaa, #888888, #666666, #888888);
+                background-size: 200% 200%;
+                color: #222222;
+            }
+
+            .navigation-bar .container {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 2px;
+                flex-wrap: nowrap;
+            }
+
+
+            .nav-right {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                flex-shrink: 0;
+            }
+
+            /* Стили для layout в header */
+            .header-layout {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                position: relative;
+            }
+
+            .header-image-container {
+                position: relative;
+                width: 60px;
+                height: 60px;
+                border-radius: 50%;
+                overflow: hidden;
+                border: 2px solid rgba(79, 195, 247, 0.3);
+                background: rgba(79, 195, 247, 0.1);
+                cursor: pointer;
+                transition: all 0.3s ease;
+            }
+
+            .header-image-container:hover {
+                border-color: rgba(79, 195, 247, 0.6);
+                background: rgba(79, 195, 247, 0.2);
+                transform: scale(1.05);
+            }
+
+            .header-image-container img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                display: block;
+            }
+
+            .header-image-container::before {
+                /* УБРАЛИ - мешает логотипу */
+                display: none;
+            }
+
+            /* Эффекты для картинки в шапке */
+            .header-image-container.glow {
+                animation: headerImageGlow 2s ease-in-out infinite alternate;
+                box-shadow: 0 0 20px rgba(79, 195, 247, 0.5);
+            }
+
+            .header-image-container.rotate {
+                animation: headerImageRotate 8s linear infinite;
+            }
+
+            @keyframes headerImageGlow {
+                0% {
+                    box-shadow: 0 0 10px rgba(79, 195, 247, 0.3);
+                    border-color: rgba(79, 195, 247, 0.4);
+                }
+                100% {
+                    box-shadow: 0 0 30px rgba(79, 195, 247, 0.8);
+                    border-color: rgba(79, 195, 247, 0.8);
+                }
+            }
+
+            @keyframes headerImageRotate {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+
+            @keyframes redGoldGradientShift {
+                0% { background-position: 0% 50%; }
+                50% { background-position: 100% 50%; }
+                100% { background-position: 0% 50%; }
+            }
+
+            /* Минимальный отступ между логотипом и блоком аутентификации */
+            .nav-left {
+                margin-right: 1px;
+            }
+            .main-nav a {
+                color: #ccd6f6;
+                text-decoration: none;
+                padding: 2px 4px;
+                font-weight: 500;
+                transition: color 0.3s, background-color 0.3s;
+                border-radius: 3px;
+                font-size: 13px;
+                display: inline-flex;
+                align-items: center;
+                height: 24px;
+                white-space: nowrap;
+            }
+            .main-nav a:hover {
+                color: #4fc3f7;
+                background-color: rgba(79, 195, 247, 0.1);
+            }
+
+            .main-nav a.active {
+                color: #ffd700 !important;
+                background-color: rgba(255, 215, 0, 0.2) !important;
+                border-left: 3px solid #ffd700 !important;
+                font-weight: bold !important;
+            }
+            .nav-search {
+                margin-left: 10px;
+            }
+            .nav-search input {
+                background: linear-gradient(135deg, rgba(255,255,255,0.2), rgba(79, 195, 247, 0.1));
+                border: 2px solid rgba(79, 195, 247, 0.5);
+                color: white;
+                padding: 10px 15px;
+                border-radius: 8px;
+                font-size: 16px;
+                transition: all 0.3s ease;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+            }
+            
+            .nav-search input:focus {
+                background: linear-gradient(135deg, rgba(79, 195, 247, 0.3), rgba(33, 150, 243, 0.2));
+                border-color: #4fc3f7;
+                outline: none;
+                box-shadow: 0 0 20px rgba(79, 195, 247, 0.6), 0 4px 15px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.2);
+                transform: translateY(-1px);
+            }
+            
+            .nav-search input::placeholder {
+                color: rgba(255,255,255,0.8);
+                font-style: normal;
+                opacity: 0.9;
+            }
+
+            /* Стили для глобальной поисковой панели */
+            .global-search-bar {
+                background: linear-gradient(135deg, #0a192f, #1a2f5e, #0f2847);
+                border-bottom: 3px solid rgba(79, 195, 247, 0.4);
+                box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+                position: relative;
+                overflow: hidden;
+            }
+
+            .global-search-bar::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: -100%;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(90deg, transparent, rgba(79, 195, 247, 0.2), transparent);
+                animation: searchShimmer 3s infinite;
+            }
+
+            @keyframes searchShimmer {
+                0% { left: -100%; }
+                100% { left: 100%; }
+            }
+
+            /* Кастомный скроллбар для контейнера настроек */
+            .setting-item > div[style*="overflow-y: auto"]::-webkit-scrollbar {
+                width: 8px;
+            }
+
+            .setting-item > div[style*="overflow-y: auto"]::-webkit-scrollbar-track {
+                background: rgba(10, 25, 47, 0.2);
+                border-radius: 4px;
+            }
+
+            .setting-item > div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb {
+                background: rgba(79, 195, 247, 0.5);
+                border-radius: 4px;
+                transition: background 0.3s ease;
+            }
+
+            .setting-item > div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb:hover {
+                background: rgba(79, 195, 247, 0.8);
+            }
+
+            /* Кнопка прокрутки вниз */
+            .scroll-to-bottom-btn {
+                position: absolute;
+                bottom: 10px;
+                right: 10px;
+                background: linear-gradient(135deg, #4fc3f7, #2196f3);
+                color: white;
+                border: none;
+                width: 40px;
+                height: 40px;
+                border-radius: 50%;
+                cursor: pointer;
+                font-size: 18px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: 0 4px 12px rgba(79, 195, 247, 0.3);
+                transition: all 0.3s ease;
+                z-index: 10;
+            }
+
+            .scroll-to-bottom-btn:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(79, 195, 247, 0.5);
+                background: linear-gradient(135deg, #2196f3, #1976d2);
+            }
+
+            /* Стиль для VIP категории */
+            .vip-category-btn {
+                background: linear-gradient(135deg, #ff4500, #ffd700, #ff6347, #ff4500) !important;
+                background-size: 300% 300% !important;
+                animation: vipCategoryShimmer 3s ease-in-out infinite !important;
+                color: #ffffff !important;
+                font-weight: bold !important;
+                border: 1px solid rgba(255, 69, 0, 0.7) !important;
+                box-shadow: 0 0 15px rgba(255, 69, 0, 0.6), inset 0 0 10px rgba(255, 100, 0, 0.4) !important;
+                text-shadow: 0 0 5px rgba(0, 0, 0, 0.7) !important;
+            }
+
+            .vip-category-btn:hover {
+                transform: scale(1.03);
+                box-shadow: 0 0 25px rgba(255, 69, 0, 0.8), inset 0 0 15px rgba(255, 100, 0, 0.5) !important;
+            }
+
+            /* Стиль для VIP кнопки в выборе игр */
+            .game-btn.vip-btn {
+                background: linear-gradient(135deg, #ffd700, #ff8c00, #f44336, #ffd700) !important;
+                background-size: 250% 250% !important;
+                animation: vipCategoryShimmer 2.5s ease-in-out infinite !important;
+                color: white !important;
+                font-weight: bold !important;
+                border: 1px solid rgba(255, 69, 0, 0.7) !important;
+                box-shadow: 0 0 15px rgba(255, 140, 0, 0.6), inset 0 0 10px rgba(244, 67, 54, 0.4) !important;
+                text-shadow: 0 0 5px rgba(0, 0, 0, 0.7) !important;
+            }
+
+            .game-btn.vip-btn:hover {
+                box-shadow: 0 0 25px rgba(255, 69, 0, 0.8), inset 0 0 15px rgba(244, 67, 54, 0.5) !important;
+                color: black !important; /* Делаем текст черным при наведении */
+            }
+
+            /* Base category button styles (ensure smooth transitions for color changes) */
+            .category-btn {
+                transition: all 0.3s ease;
+            }
+
+            /* FS25 Categories - Green */
+            .fs25-category-color {
+                background: linear-gradient(135deg, #4CAF50, #66BB6A) !important;
+                border-color: #4CAF50 !important;
+                color: white !important;
+                box-shadow: 0 0 10px rgba(76, 175, 80, 0.4) !important;
+            }
+            .fs25-category-color:hover {
+                box-shadow: 0 0 15px rgba(76, 175, 80, 0.6) !important;
+            }
+            .fs25-category-color.active {
+                background: linear-gradient(135deg, #388E3C, #4CAF50) !important;
+                border-color: #388E3C !important;
+                box-shadow: 0 0 20px rgba(76, 175, 80, 0.8) !important;
+            }
+
+            /* FS22 Categories - Blue */
+            .fs22-category-color {
+                background: linear-gradient(135deg, #2196F3, #64B5F6) !important;
+                border-color: #2196F3 !important;
+                color: white !important;
+                box-shadow: 0 0 10px rgba(33, 150, 243, 0.4) !important;
+            }
+            .fs22-category-color:hover {
+                box-shadow: 0 0 15px rgba(33, 150, 243, 0.6) !important;
+            }
+            .fs22-category-color.active {
+                background: linear-gradient(135deg, #1976D2, #2196F3) !important;
+                border-color: #1976D2 !important;
+                box-shadow: 0 0 20px rgba(33, 150, 243, 0.8) !important;
+            }
+
+            /* FS19 Categories - Yellow */
+            .fs19-category-color {
+                background: linear-gradient(135deg, #FFC107, #FFD54F) !important;
+                border-color: #FFC107 !important;
+                color: #333 !important; /* Darker text for better contrast */
+                box-shadow: 0 0 10px rgba(255, 193, 7, 0.4) !important;
+            }
+            .fs19-category-color:hover {
+                box-shadow: 0 0 15px rgba(255, 193, 7, 0.6) !important;
+            }
+            .fs19-category-color.active {
+                background: linear-gradient(135deg, #FFA000, #FFC107) !important;
+                border-color: #FFA000 !important;
+                box-shadow: 0 0 20px rgba(255, 193, 7, 0.8) !important;
+            }
+
+            /* VIP Categories - Gold/Red */
+            .vip-category-color {
+                background: linear-gradient(135deg, #ffd700, #ff8c00, #f44336) !important;
+                background-size: 250% 250% !important;
+                animation: vipCategoryShimmer 2.5s ease-in-out infinite !important;
+                color: white !important;
+                font-weight: bold !important;
+                border: 1px solid rgba(255, 69, 0, 0.7) !important;
+                box-shadow: 0 0 15px rgba(255, 140, 0, 0.6), inset 0 0 10px rgba(244, 67, 54, 0.4) !important;
+                text-shadow: 0 0 5px rgba(0, 0, 0, 0.7) !important;
+            }
+            .vip-category-color:hover {
+                box-shadow: 0 0 25px rgba(255, 69, 0, 0.8), inset 0 0 15px rgba(244, 67, 54, 0.5) !important;
+                color: black !important;
+            }
+            .vip-category-color.active {
+                background: linear-gradient(135deg, #ff8c00, #f44336, #ffd700) !important; /* Slightly different active gradient */
+                border-color: #f44336 !important;
+                box-shadow: 0 0 25px rgba(255, 69, 0, 0.9), inset 0 0 15px rgba(244, 67, 54, 0.6) !important;
+            }
+
+        `;
+        const passwordToggleStyles = `
+            .password-wrapper {
+                position: relative;
+            }
+            .password-toggle-icon {
+                position: absolute;
+                top: 50%;
+                right: 12px;
+                transform: translateY(-50%);
+                cursor: pointer;
+                user-select: none;
+                font-size: 18px;
+                color: #8892b0;
+                transition: color 0.2s;
+            }
+            .password-toggle-icon:hover {
+                color: #4fc3f7;
+            }
+            /* Стили для блока пользователя */
+            .user-info-block {
+                display: flex;
+                align-items: center;
+                gap: 15px;
+            }
+            .user-info-block .user-identifier {
+                color: #ccd6f6;
+                font-weight: 500;
+            }
+            .user-info-block .user-identifier .role-icon {
+                color: #ffd700;
+                margin-left: 5px;
+            }
+            .user-info-block .btn-logout {
+                background: #f44336; color: white; border: none; padding: 6px 12px;
+                border-radius: 5px; cursor: pointer; font-size: 13px;
+            }
+
+            /* Стили для VIP ссылок в меню - только минимальные изменения */
+            .nav-vip-link.vip-active {
+                color: #ffd700 !important;
+            }
+
+            /* Стили для VIP рамок - простые без анимаций */
+            .vip-label-permanent {
+                background: rgba(255, 215, 0, 0.1);
+                border: 1px solid #ffd700;
+                border-radius: 4px;
+                padding: 2px 6px;
+            }
+
+            .vip-label-timed {
+                background: rgba(255, 140, 0, 0.1);
+                border: 1px solid #ff8c00;
+                border-radius: 4px;
+                padding: 2px 6px;
+            }
+
+            /* Универсальный стиль для всех VIP уровней (теперь это количество дней) */
+            .vip-level-1 .vip-indicator,
+            .vip-level-2 .vip-indicator,
+            .vip-level-3 .vip-indicator,
+            .vip-level-4 .vip-indicator,
+            .vip-level-5 .vip-indicator,
+            .vip-level-6 .vip-indicator,
+            .vip-level-7 .vip-indicator,
+            .vip-level-8 .vip-indicator,
+            .vip-level-9 .vip-indicator,
+            .vip-level-10 .vip-indicator,
+            .vip-level-11 .vip-indicator,
+            .vip-level-12 .vip-indicator,
+            .vip-level-13 .vip-indicator,
+            .vip-level-14 .vip-indicator,
+            .vip-level-15 .vip-indicator,
+            .vip-level-16 .vip-indicator,
+            .vip-level-17 .vip-indicator,
+            .vip-level-18 .vip-indicator,
+            .vip-level-19 .vip-indicator,
+            .vip-level-20 .vip-indicator,
+            .vip-level-21 .vip-indicator,
+            .vip-level-22 .vip-indicator,
+            .vip-level-23 .vip-indicator,
+            .vip-level-24 .vip-indicator,
+            .vip-level-25 .vip-indicator,
+            .vip-level-26 .vip-indicator,
+            .vip-level-27 .vip-indicator,
+            .vip-level-28 .vip-indicator,
+            .vip-level-29 .vip-indicator,
+            .vip-level-30 .vip-indicator,
+            .vip-level-31 .vip-indicator,
+            .vip-level-32 .vip-indicator,
+            .vip-level-33 .vip-indicator,
+            .vip-level-34 .vip-indicator,
+            .vip-level-35 .vip-indicator,
+            .vip-level-36 .vip-indicator,
+            .vip-level-37 .vip-indicator,
+            .vip-level-38 .vip-indicator,
+            .vip-level-39 .vip-indicator,
+            .vip-level-40 .vip-indicator,
+            .vip-level-41 .vip-indicator,
+            .vip-level-42 .vip-indicator,
+            .vip-level-43 .vip-indicator,
+            .vip-level-44 .vip-indicator,
+            .vip-level-45 .vip-indicator,
+            .vip-level-46 .vip-indicator,
+            .vip-level-47 .vip-indicator,
+            .vip-level-48 .vip-indicator,
+            .vip-level-49 .vip-indicator,
+            .vip-level-50 .vip-indicator,
+            .vip-level-51 .vip-indicator,
+            .vip-level-52 .vip-indicator,
+            .vip-level-53 .vip-indicator,
+            .vip-level-54 .vip-indicator,
+            .vip-level-55 .vip-indicator,
+            .vip-level-56 .vip-indicator,
+            .vip-level-57 .vip-indicator,
+            .vip-level-58 .vip-indicator,
+            .vip-level-59 .vip-indicator,
+            .vip-level-60 .vip-indicator,
+            .vip-level-∞ .vip-indicator {
+                color: #ffd700; /* Золотой для всех уровней */
+                font-weight: bold;
+                text-shadow: 0 0 3px #ffd700, 0 0 6px rgba(255, 215, 0, 0.5);
+            }
+
+            .vip-indicator {
+                color: #ffd700;
+                font-weight: bold;
+                font-size: 0.7rem; /* Уменьшаем размер шрифта еще больше */
+            }
+
+            .username-text {
+                color: #ffffff;
+                font-size: 0.8rem; /* Уменьшаем размер шрифта для имени пользователя */
+            }
+        `;
+        const styleSheet = document.createElement("style");
+        styleSheet.innerText = navBarStyles + passwordToggleStyles;
+        document.head.appendChild(styleSheet);
+
+        // Глобальные функции для модов (чтобы избежать ошибок загрузки)
+        window.showModDetails = async function(modId) {
+            console.log('🔍 Вызов showModDetails для мода:', modId);
+            try {
+                const { data: mod, error } = await supabase
+                    .from('mods')
+                    .select('*')
+                    .eq('id', modId)
+                    .single();
+
+                if (error) throw error;
+
+                if (!mod) {
+                    console.error('Мод не найден:', modId);
+                    showNotification('❌ Мод не найден!', 'error');
+                    return;
+                }
+
+                // Проверяем, является ли пользователь администратором для показа кнопки редактирования
+                const profile = await getUserRole();
+                const isAdmin = profile && (profile.is_owner || ['owner', 'admin_senior', 'admin'].includes(profile.role));
+                const editButtonHtml = isAdmin ? `<button onclick="editMod('${mod.id}')" style="background: #ff9800; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-right: 10px;">✏️ Редактировать</button>` : '';
+
+                // Простая реализация модального окна
+                const modal = document.createElement('div');
+                modal.style.cssText = `
+                    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                    background: rgba(10, 25, 47, 0.9); backdrop-filter: blur(5px);
+                    display: flex; justify-content: center; align-items: center; z-index: 200000;
+                `;
+
+                modal.innerHTML = `
+                    <div style="background: linear-gradient(135deg, #1a2f5e, #112240); border: 2px solid #00ccff; border-radius: 15px; padding: 2rem; width: 90%; max-width: 900px; max-height: 90vh; overflow-y: auto; box-shadow: 0 15px 30px rgba(0,0,0,0.4);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(0,204,255,0.3);">
+                            <div>
+                                <h3 style="color: #00ccff; margin: 0 0 5px 0;">${mod.name}</h3>
+                                <div style="font-size: 0.9rem; color: #4CAF50; font-weight: bold;">Статус: Одобрен</div>
+                            </div>
+                            <button onclick="this.closest('div').parentElement.remove()" style="background: #f44336; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 16px;">&times;</button>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                            <div>
+                                <p><strong style="color: #00ccff;">Рейтинг:</strong><br><span style="color: #ffd700; font-size: 1.2rem;">${mod.rating && mod.rating > 0 ? '⭐'.repeat(Math.round(mod.rating)) + '☆'.repeat(5 - Math.round(mod.rating)) : 'Нет оценок'}</span> <span style="font-size: 0.9rem; color: #8892b0;">(${mod.rating ? parseFloat(mod.rating).toFixed(2) : '0.00'} / 5.00)</span></p>
+                                <p><strong style="color: #00ccff;">Описание:</strong><br><span style="color: #ccd6f6;">${mod.description || 'Описание отсутствует'}</span></p>
+                                <p><strong style="color: #00ccff;">Категория:</strong><br><span style="color: #ffd700;">${mod.category || 'Без категории'}</span></p>
+                                <p><strong style="color: #00ccff;">Версия игры:</strong><br><span style="color: #4CAF50;">${mod.game_version}</span></p>
+                                <p><strong style="color: #00ccff;">Размер файла:</strong><br><span style="color: #ff9800;">${mod.file_size ? (mod.file_size / 1024 / 1024).toFixed(2) + ' MB' : 'Не указан'}</span></p>
+                            </div>
+                            <div>
+                                ${(mod.youtube_link || mod.vk_video_link || mod.rutube_link) ? `
+                                    <div style="margin-bottom: 1rem; padding: 15px; background: rgba(0,204,255,0.1); border-radius: 8px; border: 1px solid rgba(0,204,255,0.3);">
+                                        <strong style="color: #00ccff; font-size: 1.1rem; display: block; margin-bottom: 10px;">🎬 Видеообзоры:</strong>
+                                        ${mod.youtube_link ? `<a href="${mod.youtube_link}" target="_blank" rel="noopener noreferrer" style="color: #ff0000; text-decoration: none; font-weight: bold; display: flex; align-items: center; gap: 8px; padding: 8px; background: rgba(255,0,0,0.1); border-radius: 5px; margin-bottom: 5px; transition: all 0.3s;" onmouseover="this.style.background='rgba(255,0,0,0.2)'" onmouseout="this.style.background='rgba(255,0,0,0.1)'"><span style="font-size: 1.2rem;">▶️</span> Смотреть на YouTube</a>` : ''}
+                                        ${mod.vk_video_link ? `<a href="${mod.vk_video_link}" target="_blank" rel="noopener noreferrer" style="color: #0077ff; text-decoration: none; font-weight: bold; display: flex; align-items: center; gap: 8px; padding: 8px; background: rgba(0,119,255,0.1); border-radius: 5px; margin-bottom: 5px; transition: all 0.3s;" onmouseover="this.style.background='rgba(0,119,255,0.2)'" onmouseout="this.style.background='rgba(0,119,255,0.1)'"><span style="font-size: 1.2rem;">🖼️</span> Смотреть на VK Видео</a>` : ''}
+                                        ${mod.rutube_link ? `<a href="${mod.rutube_link}" target="_blank" rel="noopener noreferrer" style="color: #00a3ff; text-decoration: none; font-weight: bold; display: flex; align-items: center; gap: 8px; padding: 8px; background: rgba(0,163,255,0.1); border-radius: 5px; margin-bottom: 5px; transition: all 0.3s;" onmouseover="this.style.background='rgba(0,163,255,0.2)'" onmouseout="this.style.background='rgba(0,163,255,0.1)'"><span style="font-size: 1.2rem;">📺</span> Смотреть на RuTube</a>` : ''}
+                                    </div>
+                                ` : '<div style="margin-bottom: 1rem; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; color: #8892b0; text-align: center;">📹 Видеообзоры отсутствуют</div>'}
+                                <button onclick="downloadMod('${mod.id}')" style="background: linear-gradient(135deg, #1a237e, #283593); color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-right: 10px;">⬇️ Скачать мод</button>
+                                ${editButtonHtml}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+
+                // Добавляем обработчик клика по фону для закрытия
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) {
+                        modal.remove();
+                    }
+                });
+
+            } catch (error) {
+                console.error('Ошибка загрузки деталей мода:', error);
+                showNotification('❌ Ошибка загрузки деталей мода: ' + error.message, 'error');
+            }
+        };
+
+        // Функция проверки прав администратора
+        async function isAdminUser() {
+            try {
+                if (typeof window.authManager !== 'undefined' && window.authManager.getUserRole) {
+                    const profile = await window.authManager.getUserRole();
+                    const adminRoles = ['owner', 'admin_senior', 'admin', 'moderator', 'moderator_senior'];
+                    return profile && (profile.is_owner || adminRoles.includes(profile.role));
+                }
+                return false;
+            } catch (error) {
+                console.error('Ошибка проверки прав администратора:', error);
+                return false;
+            }
+        }
+
+
+        // Функция для настройки картинки в header
+        function adjustHeaderImage(img) {
+            if (img && img.src && img.src !== '') {
+                img.style.display = 'block';
+                // Скрываем иконку если она есть
+                const beforeElement = img.previousElementSibling;
+                if (beforeElement && beforeElement.tagName === 'SPAN') {
+                    beforeElement.style.display = 'none';
+                }
+
+                // Автоматически подгоняем размер картинки
+                const container = img.parentElement;
+                if (container) {
+                    const containerRect = container.getBoundingClientRect();
+                    const imgRect = img.getBoundingClientRect();
+
+                    // Если картинка слишком большая, уменьшаем её
+                    if (imgRect.width > containerRect.width || imgRect.height > containerRect.height) {
+                        const scale = Math.min(containerRect.width / imgRect.width, containerRect.height / imgRect.height);
+                        img.style.transform = `scale(${scale})`;
+                    }
+                }
+            }
+        }
+
+        // Функция загрузки картинки в header
+        function uploadHeaderImage() {
+            const fileInput = document.getElementById('headerImageUpload');
+            const headerImage = document.getElementById('headerImage');
+
+            if (fileInput.files && fileInput.files[0]) {
+                const file = fileInput.files[0];
+                const reader = new FileReader();
+
+                reader.onload = function(e) {
+                    headerImage.src = e.target.result;
+                    headerImage.style.display = 'block';
+
+                    // Сохраняем в localStorage
+                    localStorage.setItem('headerImage', e.target.result);
+
+                    // Обновляем preview в админ панели
+                    updateHeaderImagePreview(e.target.result);
+
+                    showNotification('Картинка шапки загружена!', 'success');
+                };
+
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // Функция удаления картинки из header
+        function removeHeaderImage() {
+            const headerImage = document.getElementById('headerImage');
+            const container = headerImage.parentElement;
+
+            headerImage.src = '';
+            headerImage.style.display = 'none';
+
+            // Показываем иконку обратно
+            const beforeElement = container.querySelector('::before') || container.querySelector('.header-image-icon');
+            if (beforeElement) {
+                beforeElement.style.display = 'block';
+            }
+
+            // Удаляем из localStorage
+            localStorage.removeItem('headerImage');
+
+            // Обновляем preview в админ панели
+            updateHeaderImagePreview('');
+
+            showNotification('Картинка шапки удалена!', 'warning');
+        }
+
+        // Функция обновления preview в админ панели
+        function updateHeaderImagePreview(src) {
+            const preview = document.getElementById('currentHeaderImagePreview');
+            if (src) {
+                preview.style.backgroundImage = `url(${src})`;
+                preview.style.backgroundSize = 'cover';
+                preview.style.backgroundPosition = 'center';
+                preview.innerHTML = '';
+            } else {
+                preview.style.backgroundImage = 'none';
+                preview.innerHTML = '🖼️';
+            }
+        }
+
+        // Функция изменения размера картинки
+        function adjustHeaderImageSize(size) {
+            const headerImage = document.getElementById('headerImage');
+            const container = headerImage.parentElement;
+
+            if (container) {
+                container.style.width = size + 'px';
+                container.style.height = size + 'px';
+                document.getElementById('imageSizeValue').textContent = size + 'px';
+
+                // Сохраняем настройки
+                localStorage.setItem('headerImageSize', size);
+            }
+        }
+
+        // Функция изменения формы картинки
+        function changeHeaderImageShape(shape) {
+            const container = document.querySelector('.header-image-container');
+            const value = document.getElementById('imageShapeValue');
+
+            if (container) {
+                // Убираем все классы формы
+                container.classList.remove('circle', 'square', 'rounded');
+
+                // Добавляем выбранную форму
+                container.classList.add(shape);
+
+                // Обновляем стили в зависимости от формы
+                switch(shape) {
+                    case 'circle':
+                        container.style.borderRadius = '50%';
+                        value.textContent = 'Круг';
+                        break;
+                    case 'square':
+                        container.style.borderRadius = '0';
+                        value.textContent = 'Квадрат';
+                        break;
+                    case 'rounded':
+                        container.style.borderRadius = '10px';
+                        value.textContent = 'Закругленный';
+                        break;
+                }
+
+                // Сохраняем настройки
+                localStorage.setItem('headerImageShape', shape);
+            }
+        }
+
+        // Функция переключения эффектов картинки
+        function toggleHeaderImageEffect(effect) {
+            const container = document.querySelector('.header-image-container');
+
+            if (container) {
+                // Убираем все эффекты
+                container.classList.remove('glow', 'rotate', 'none');
+
+                // Добавляем выбранный эффект
+                if (effect !== 'none') {
+                    container.classList.add(effect);
+                }
+
+                // Сохраняем настройки
+                localStorage.setItem('headerImageEffect', effect);
+            }
+        }
+
+        // Функция загрузки сохраненных настроек при старте
+        function loadHeaderImageSettings() {
+            const savedImage = localStorage.getItem('headerImage');
+            const savedSize = localStorage.getItem('headerImageSize') || '60';
+            const savedShape = localStorage.getItem('headerImageShape') || 'circle';
+            const savedEffect = localStorage.getItem('headerImageEffect') || 'none';
+
+            if (savedImage) {
+                document.getElementById('headerImage').src = savedImage;
+                updateHeaderImagePreview(savedImage);
+            }
+
+            // Применяем сохраненные настройки
+            adjustHeaderImageSize(savedSize);
+            changeHeaderImageShape(savedShape);
+            toggleHeaderImageEffect(savedEffect);
+        }
+
+        console.log('🔍 Диагностика активирована');
+
+        // Функция поиска по сайту
+        function initializeSiteSearch() {
+            const searchInput = document.getElementById('siteSearch');
+            const searchButton = document.getElementById('searchButton');
+
+            if (searchInput) {
+                // Обработчик ввода с задержкой для живого поиска
+                let searchTimeout;
+                searchInput.addEventListener('input', function(event) {
+                    clearTimeout(searchTimeout);
+                    const query = this.value.trim();
+                    
+                    if (query.length >= 2) {
+                        searchTimeout = setTimeout(() => {
+                            showSearchSuggestions(query);
+                        }, 300);
+                    } else {
+                        hideSearchSuggestions();
+                    }
+                });
+
+                // Обработчик Enter в поле поиска
+                searchInput.addEventListener('keypress', function(event) {
+                    if (event.key === 'Enter') {
+                        const query = this.value.trim();
+                        if (query) {
+                            hideSearchSuggestions();
+                            performSiteSearch(query);
+                        }
+                    }
+                });
+
+                // Обработчик фокуса для показа подсказок
+                searchInput.addEventListener('focus', function() {
+                    this.style.background = 'rgba(79, 195, 247, 0.15)';
+                    if (this.value.trim().length >= 2) {
+                        showSearchSuggestions(this.value.trim());
+                    }
+                });
+
+                searchInput.addEventListener('blur', function() {
+                    this.style.background = 'rgba(255,255,255,0.1)';
+                    // Задержка чтобы успеть кликнуть на подсказку
+                    setTimeout(() => hideSearchSuggestions(), 200);
+                });
+            }
+
+            // Обработчик кнопки поиска
+            if (searchButton) {
+                searchButton.addEventListener('click', function() {
+                    const query = searchInput ? searchInput.value.trim() : '';
+                    if (query) {
+                        hideSearchSuggestions();
+                        performSiteSearch(query);
+                    } else {
+                        showNotification('🔍 Введите название мода для поиска', 'warning');
+                    }
+                });
+
+                // Эффект наведения на кнопку
+                searchButton.addEventListener('mouseenter', function() {
+                    this.style.background = 'rgba(79, 195, 247, 0.3)';
+                });
+
+                searchButton.addEventListener('mouseleave', function() {
+                    this.style.background = 'rgba(79, 195, 247, 0.2)';
+                });
+            }
+        }
+
+        // Показать подсказки поиска
+        function showSearchSuggestions(query) {
+            hideSearchSuggestions();
+            
+            const suggestions = getSuggestions(query);
+            if (suggestions.length === 0) return;
+
+            const searchContainer = document.querySelector('.nav-search');
+            if (!searchContainer) return;
+
+            const suggestionsDiv = document.createElement('div');
+            suggestionsDiv.id = 'searchSuggestions';
+            suggestionsDiv.style.cssText = `
+                position: absolute;
+                top: 100%;
+                left: 0;
+                right: 0;
+                background: rgba(10, 25, 47, 0.95);
+                border: 1px solid rgba(79, 195, 247, 0.3);
+                border-radius: 6px;
+                margin-top: 5px;
+                max-height: 200px;
+                overflow-y: auto;
+                z-index: 1000;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            `;
+
+            suggestions.forEach(suggestion => {
+                const item = document.createElement('div');
+                item.textContent = suggestion;
+                item.style.cssText = `
+                    padding: 8px 12px;
+                    cursor: pointer;
+                    color: rgba(255,255,255,0.9);
+                    font-size: 12px;
+                    border-bottom: 1px solid rgba(79, 195, 247, 0.1);
+                    transition: all 0.2s ease;
+                `;
+                
+                item.addEventListener('mouseenter', function() {
+                    this.style.background = 'rgba(79, 195, 247, 0.2)';
+                    this.style.color = 'white';
+                });
+                
+                item.addEventListener('mouseleave', function() {
+                    this.style.background = 'transparent';
+                    this.style.color = 'rgba(255,255,255,0.9)';
+                });
+                
+                item.addEventListener('click', function() {
+                    const searchInput = document.getElementById('siteSearch');
+                    if (searchInput) {
+                        searchInput.value = suggestion;
+                        hideSearchSuggestions();
+                        performSiteSearch(suggestion);
+                    }
+                });
+
+                suggestionsDiv.appendChild(item);
+            });
+
+            searchContainer.style.position = 'relative';
+            searchContainer.appendChild(suggestionsDiv);
+        }
+
+        // Скрыть подсказки поиска
+        function hideSearchSuggestions() {
+            const suggestions = document.getElementById('searchSuggestions');
+            if (suggestions) {
+                suggestions.remove();
+            }
+        }
+
+        // Получить подсказки для поиска
+        function getSuggestions(query) {
+            const allSuggestions = [
+                'сосновка', 'мод', 'трактор', 'комбайн', 'прицеп', 'орудие',
+                'скальпер', 'плуг', 'сеялка', 'опрыскиватель', 'косилка',
+                'пресс-подборщик', 'грузовик', 'животноводство', 'склад',
+                'FS22', 'Farming Simulator 22', 'русский', 'советский'
+            ];
+
+            const lowerQuery = query.toLowerCase();
+            return allSuggestions
+                .filter(s => s.toLowerCase().includes(lowerQuery))
+                .slice(0, 5);
+        }
+
+        // Функция выполнения поиска
+        function performSiteSearch(query) {
+            console.log('🔍 Расширенный поиск модов:', query);
+            
+            if (!query || query.trim().length < 2) {
+                showNotification('⚠️ Введите минимум 2 символа для поиска', 'warning');
+                return;
+            }
+
+            // Очищаем предыдущие результаты
+            clearSearchResults();
+            
+            // Поиск в заголовках модов с улучшенным алгоритмом
+            const modCards = document.querySelectorAll('.mod-card');
+            console.log(`🔍 Найдено карточек модов на странице: ${modCards.length}`);
+            
+            if (modCards.length === 0) {
+                showNotification('⚠️ Моды еще не загружены. Загружаем...', 'warning');
+                // Пытаемся загрузить моды для текущей категории
+                if (typeof loadModsByCategory === 'function') {
+                    const activeGameBtn = document.querySelector('.game-btn.active');
+                    const gameVersion = activeGameBtn ? activeGameBtn.dataset.game : 'fs25';
+                    loadModsByCategory('Все', gameVersion);
+                    
+                    // Повторяем поиск через 2 секунды
+                    setTimeout(() => {
+                        performSiteSearch(query);
+                    }, 2000);
+                }
+                return;
+            }
+            
+            let foundResults = 0;
+            let exactMatches = 0;
+            // Нормализация запроса: замена ё на е для корректного поиска
+            const searchQuery = query.toLowerCase().trim().replace(/ё/g, 'е');
+
+            modCards.forEach(card => {
+                // Ищем название в h3, описание в p, категорию в span
+                const title = card.querySelector('h3');
+                const description = card.querySelector('p');
+                const categorySpan = card.querySelector('span'); // Первая span с категорией
+
+                if (title && description) {
+                    // Нормализация текста: замена ё на е для корректного поиска
+                    const titleText = title.textContent.toLowerCase().replace(/ё/g, 'е');
+                    const descText = description.textContent.toLowerCase().replace(/ё/g, 'е');
+                    const categoryText = categorySpan ? categorySpan.textContent.toLowerCase().replace(/ё/g, 'е') : '';
+
+                    console.log(`🔍 Проверяем мод: "${titleText.substring(0, 50)}..."`);
+
+                    // Точное совпадение в названии (высший приоритет)
+                    if (titleText === searchQuery) {
+                        card.style.display = 'flex';
+                        card.style.border = '3px solid #ff6b6b';
+                        card.style.background = 'rgba(255, 107, 107, 0.1)';
+                        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        foundResults++;
+                        exactMatches++;
+                        console.log(`✅ Точное совпадение: "${titleText}"`);
+                        return;
+                    }
+
+                    // Название начинается с запроса (высокий приоритет)
+                    if (titleText.startsWith(searchQuery)) {
+                        card.style.display = 'flex';
+                        card.style.border = '2px solid #4ecdc4';
+                        card.style.background = 'rgba(78, 205, 196, 0.1)';
+                        foundResults++;
+                        console.log(`🎯 Начинается с запроса: "${titleText}"`);
+                        return;
+                    }
+
+                    // Поиск по названию, описанию и категории
+                    if (titleText.includes(searchQuery) || 
+                        descText.includes(searchQuery) || 
+                        categoryText.includes(searchQuery)) {
+                        card.style.display = 'flex';
+                        card.style.border = '2px solid #ffd700';
+                        foundResults++;
+                        console.log(`🔍 Найдено совпадение: "${titleText}"`);
+                    } else {
+                        card.style.display = 'none';
+                    }
+                } else {
+                    console.warn('⚠️ Не найдены элементы title/description в карточке мода');
+                }
+            });
+
+            // Показать результаты поиска с детализацией
+            if (foundResults > 0) {
+                let message = `🎯 Найдено модов: ${foundResults}`;
+                if (exactMatches > 0) {
+                    message += ` (точных совпадений: ${exactMatches})`;
+                }
+                showNotification(message, 'success');
+                
+                // Добавляем кнопку очистки результатов
+                addClearSearchButton();
+            } else {
+                showNotification(`❌ Моды "${query}" не найдены. Попробуйте: сосновка, мод, трактор`, 'warning');
+                // Показать все моды обратно
+                modCards.forEach(card => {
+                    card.style.display = 'flex';
+                    card.style.border = '';
+                    card.style.background = '';
+                });
+            }
+        }
+
+        // Очистка результатов поиска
+        function clearSearchResults() {
+            const modCards = document.querySelectorAll('.mod-card');
+            modCards.forEach(card => {
+                card.style.display = 'flex';
+                card.style.border = '';
+                card.style.background = '';
+            });
+            
+            // Удаляем кнопку очистки если есть
+            const clearBtn = document.getElementById('clearSearchBtn');
+            if (clearBtn) {
+                clearBtn.remove();
+            }
+        }
+
+        // Добавить кнопку очистки поиска
+        function addClearSearchButton() {
+            // Удаляем существующую кнопку если есть
+            const existingBtn = document.getElementById('clearSearchBtn');
+            if (existingBtn) {
+                existingBtn.remove();
+            }
+
+            const searchContainer = document.querySelector('.nav-search');
+            if (searchContainer) {
+                const clearBtn = document.createElement('button');
+                clearBtn.id = 'clearSearchBtn';
+                clearBtn.innerHTML = '✖️';
+                clearBtn.title = 'Очистить поиск';
+                clearBtn.style.cssText = `
+                    margin-left: 5px;
+                    background: rgba(244, 67, 54, 0.2);
+                    border: 1px solid rgba(244, 67, 54, 0.3);
+                    color: #f44336;
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    cursor: pointer;
+                    height: 24px;
+                    font-size: 11px;
+                    transition: all 0.3s ease;
+                `;
+                
+                clearBtn.addEventListener('click', function() {
+                    clearSearchResults();
+                    const searchInput = document.getElementById('siteSearch');
+                    if (searchInput) {
+                        searchInput.value = '';
+                        searchInput.focus();
+                    }
+                    showNotification('🔍 Поиск очищен', 'info');
+                });
+
+                clearBtn.addEventListener('mouseenter', function() {
+                    this.style.background = 'rgba(244, 67, 54, 0.3)';
+                });
+
+                clearBtn.addEventListener('mouseleave', function() {
+                    this.style.background = 'rgba(244, 67, 54, 0.2)';
+                });
+
+                searchContainer.appendChild(clearBtn);
+            }
+        }
+
+        // Инициализация горячих клавиш для поиска
+        function initializeSearchShortcuts() {
+            document.addEventListener('keydown', function(event) {
+                // Ctrl+F или / для фокуса на поиске
+                if ((event.ctrlKey && event.key === 'f') || event.key === '/') {
+                    const searchInput = document.getElementById('siteSearch');
+                    if (searchInput && document.activeElement !== searchInput) {
+                        event.preventDefault();
+                        searchInput.focus();
+                        searchInput.select();
+                        showNotification('🔍 Поиск активирован', 'info');
+                    }
+                }
+                
+                // Escape для очистки поиска
+                if (event.key === 'Escape') {
+                    const searchInput = document.getElementById('siteSearch');
+                    if (searchInput && searchInput.value.trim()) {
+                        clearSearchResults();
+                        searchInput.value = '';
+                        hideSearchSuggestions();
+                        showNotification('🔍 Поиск очищен', 'info');
+                    }
+                }
+            });
+        }
+
+        // Функция показа уведомлений
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 100px;
+                right: 20px;
+                background: ${type === 'success' ? 'linear-gradient(135deg, #1a237e, #283593)' : type === 'warning' ? '#ff9800' : '#2196F3'};
+                color: white;
+                padding: 15px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                z-index: 10000;
+                font-weight: 500;
+                max-width: 300px;
+                word-wrap: break-word;
+                animation: slideInRight 0.3s ease;
+            `;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            // Автоматически скрыть через 3 секунды
+            setTimeout(() => {
+                notification.style.animation = 'slideOutRight 0.3s ease';
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 300);
+            }, 3000);
+        }
+
+
+        // ❌ УДАЛЕНО: Старая функция updateOwnerButton - теперь используется auth-system.js
+
+        // 🚨 НОВАЯ ФУНКЦИЯ: ПРОВЕРКА ИСТЕЧЕНИЯ VIP ПРИ ЗАГРУЗКЕ СТРАНИЦЫ
+        async function checkVipExpirationOnLoad() {
+            console.log('🔍 Проверяем истечение VIP при загрузке страницы...');
+            
+            if (!window.authManager) {
+                console.warn('⚠️ authManager не доступен');
+                return;
+            }
+            
+            try {
+                const profile = await window.authManager.getUserRole();
+                
+                if (!profile) {
+                    console.warn('⚠️ Профиль не найден');
+                    return;
+                }
+                
+                console.log('📋 Профиль пользователя:', {
+                    role: profile.role,
+                    is_vip: profile.is_vip,
+                    vip_expires_at: profile.vip_expires_at
+                });
+                
+                // Проверяем истечение VIP для всех VIP ролей
+                const vipRoles = ['vip', 'moderator', 'moderator_senior', 'admin', 'admin_senior', 'owner'];
+                
+                if (profile.role === 'vip' && profile.vip_expires_at) {
+                    const expirationDate = new Date(profile.vip_expires_at);
+                    const now = new Date();
+                    
+                    console.log('🔍 Проверка VIP истечения:');
+                    console.log('📅 Текущая дата:', now.toISOString());
+                    console.log('⏰ Дата истечения VIP:', profile.vip_expires_at);
+                    console.log('🔄 Истекло ли:', expirationDate < now);
+                    
+                    if (expirationDate < now) {
+                        console.log('🔄 VIP истек! Обновляем базу данных...');
+                        
+                        const { error: updateError } = await window.supabase
+                            .from('profiles')
+                            .update({ 
+                                is_vip: false,
+                                vip_expires_at: null,
+                                vip_started_at: null,
+                                role: 'user'
+                            })
+                            .eq('id', window.authManager.getCurrentUser()?.id);
+
+                        if (updateError) {
+                            console.error('❌ Ошибка обновления VIP:', updateError);
+                        } else {
+                            console.log('✅ VIP статус обновлен в базе данных');
+                            
+                            // Показываем уведомление
+                            if (typeof showNotification === 'function') {
+                                showNotification('❌ Ваш VIP статус истек! Статус обновлен в системе.', 'error');
+                            }
+                            
+                            // Обновляем UI
+                            if (window.authManager.updateUIForLoggedInUser) {
+                                window.authManager.updateUIForLoggedInUser();
+                            }
+                            
+                            // Перезагружаем страницу через 2 секунды
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 2000);
+                        }
+                    } else {
+                        console.log('✅ VIP статус еще активен');
+                    }
+                } else if (vipRoles.includes(profile.role)) {
+                    console.log('✅ Пользователь с ролью', profile.role, 'имеет постоянный VIP доступ');
+                } else {
+                    console.log('ℹ️ Пользователь не имеет VIP статуса');
+                }
+            } catch (error) {
+                console.error('❌ Ошибка при проверке VIP:', error);
+            }
+        }
+
+        // Функция показа панели управления для пользователей с правами
+        function showOwnerPanel() {
+            // Проверяем права пользователя перед показом панели
+            const currentUser = window.authManager ? window.authManager.getCurrentUser() : null;
+
+            if (!currentUser) {
+                showNotification('Необходимо войти в систему', 'warning');
+                return;
+            }
+
+            window.authManager.getUserRole().then(profile => {
+                if (!profile) {
+                    showNotification('Ошибка получения профиля пользователя', 'error');
+                    return;
+                }
+
+                // Проверяем права доступа (владелец, админ, модератор)
+                const hasAccess = profile.isOwner === true ||
+                                ['owner', 'admin_senior', 'admin', 'moderator', 'moderator_senior'].includes(profile.role);
+
+                if (!hasAccess) {
+                    showNotification('Доступ запрещен. Недостаточно прав.', 'error');
+                    return;
+                }
+
+                // Показываем админ панель с проверкой пароля
+                if (profile.isOwner || profile.role === 'owner') {
+                    // Владелец входит без пароля
+                    if (typeof showAdminPanelReliable === 'function') {
+                        showAdminPanelReliable();
+                        // Инициализируем красивые скроллинги
+                        if (window.beautifulScrollbar) {
+                            window.beautifulScrollbar.init();
+                        }
+                    } else {
+                        showNotification('Ошибка: функция админ-панели не найдена', 'error');
+                    }
+                } else if (['admin', 'admin_senior', 'moderator', 'moderator_senior'].includes(profile.role)) {
+                    // Для админов и модераторов требуем пароль
+                    if (typeof window.adminPanelSecurity?.requirePassword === 'function') {
+                        window.adminPanelSecurity.requirePassword(() => {
+                            if (typeof showAdminPanelReliable === 'function') {
+                                showAdminPanelReliable();
+                                // Инициализируем красивые скроллинги
+                                if (window.beautifulScrollbar) {
+                                    window.beautifulScrollbar.init();
+                                }
+                            }
+                        });
+                    } else {
+                        showNotification('Ошибка: система безопасности не найдена', 'error');
+                    }
+                }
+            }).catch(error => {
+                console.error('Ошибка проверки прав пользователя:', error);
+                showNotification('Ошибка проверки прав доступа', 'error');
+            });
+        }
+
+        // Функция управления активными кнопками навигации
+        function setActiveNavButton(activeHref) {
+            // Убираем активное состояние со всех кнопок навигации
+            const navButtons = document.querySelectorAll('.main-nav a');
+            navButtons.forEach(button => {
+                button.classList.remove('active');
+            });
+
+            // Добавляем активное состояние к нужной кнопке
+            if (activeHref) {
+                // Ищем кнопку по точному совпадению href
+                let activeButton = document.querySelector(`.main-nav a[href="${activeHref}"]`);
+
+                // Если не нашли по полному href, ищем по якорю
+                if (!activeButton && activeHref.startsWith('#')) {
+                    const anchor = activeHref.substring(1); // Убираем #
+                    activeButton = document.querySelector(`.main-nav a[href="#${anchor}"]`);
+                }
+
+                if (activeButton) {
+                    activeButton.classList.add('active');
+                    console.log(`✅ Кнопка "${activeHref}" активирована`);
+                } else {
+                    console.warn(`⚠️ Кнопка с href="${activeHref}" не найдена`);
+                    // Пробуем найти по тексту кнопки
+                    const buttonText = activeHref.replace('#', '').toLowerCase();
+                    navButtons.forEach(button => {
+                        if (button.textContent.toLowerCase().includes(buttonText)) {
+                            button.classList.add('active');
+                            console.log(`✅ Кнопка найдена по тексту: "${button.textContent}"`);
+                        }
+                    });
+                }
+            } else {
+                // Если activeHref не указан, активируем кнопку текущей страницы
+                const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+                let currentButton = document.querySelector(`.main-nav a[href="${currentPage}"]`);
+
+                if (currentButton) {
+                    currentButton.classList.add('active');
+                    console.log(`✅ Текущая страница "${currentPage}" активирована`);
+                } else {
+                    // Если кнопка текущей страницы не найдена, активируем "Главная"
+                    const mainButton = document.querySelector('.main-nav a[href="index.html"]');
+                    if (mainButton) {
+                        mainButton.classList.add('active');
+                        console.log('✅ Кнопка "Главная" активирована по умолчанию');
+                    }
+                }
+            }
+        }
+
+        // Функция обновления стиля VIP ссылки в меню
+        function updateVipLinkStyle() {
+            const vipLink = document.querySelector('.nav-vip-link');
+            if (!vipLink) return;
+
+            // Сбрасываем предыдущие стили
+            vipLink.classList.remove('vip-active');
+
+            // Проверяем, есть ли пользователь с VIP статусом
+            // Это простая проверка - если пользователь авторизован, проверяем VIP
+            if (window.authManager && window.authManager.getCurrentUser()) {
+                // Простая проверка - добавляем класс если пользователь авторизован
+                // Полноценная проверка будет в authManager
+                setTimeout(() => {
+                    if (window.authManager) {
+                        window.authManager.getUserRole().then(profile => {
+                            if (profile && profile.isVip) {
+                                vipLink.classList.add('vip-active');
+                            }
+                        }).catch(() => {
+                            // Игнорируем ошибки
+                        });
+                    }
+                }, 500);
+            }
+        }
+
+        // Инициализация поиска при загрузке страницы
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeSiteSearch();
+            initializeSearchShortcuts();
+            loadHeaderImageSettings();
+
+            // Обновляем стиль VIP ссылки при загрузке
+            setTimeout(updateVipLinkStyle, 2000);
+
+
+            // Устанавливаем активную кнопку при загрузке с учетом режима просмотра
+            setTimeout(() => {
+                setActiveNavButton('index.html');
+            }, 1000);
+
+            // Добавляем обработчики кликов для кнопок навигации
+            const navButtons = document.querySelectorAll('.main-nav a');
+            navButtons.forEach(button => {
+                button.addEventListener('click', function(e) {
+                    const href = this.getAttribute('href');
+
+                    // Обновляем активную кнопку при клике
+                    setActiveNavButton(href);
+                    console.log(`🖱️ Клик по кнопке навигации: ${href}`);
+
+                    // Проверяем режим просмотра пользователя для ограничений
+                    const isUserViewMode = sessionStorage.getItem('isUserViewMode') === 'true';
+                    const isImpersonating = sessionStorage.getItem('impersonatedUser');
+
+                    if (isUserViewMode || isImpersonating) {
+                        console.log('👀 Режим просмотра пользователя активен - проверяем ограничения');
+
+                        // В режиме просмотра как пользователь - ограничиваем доступ только к главной странице
+                        if (href && href !== 'index.html') {
+                            e.preventDefault(); // Предотвращаем переход для неразрешенных страниц
+                            console.warn(`⚠️ Переход по адресу "${href}" заблокирован в режиме просмотра пользователя`);
+                            showNotification('В режиме просмотра как пользователь доступ ограничен только главной страницей', 'warning');
+                            return;
+                        }
+                    }
+
+                    // Предотвращаем стандартный переход для якорных ссылок
+                    // ✅ ИСПРАВЛЕНИЕ: Блокируем переход только для "пустых" якорей (#) или если нет onclick.
+                    // Это позволит ссылкам с onclick (например, #shop) работать корректно.
+                    if (href && href.startsWith('#') && !this.hasAttribute('onclick')) {
+                        e.preventDefault();
+                        console.log(`🔗 Якорная ссылка "${href}" обработана локально`);
+                    } else if (href && href.startsWith('#') && this.hasAttribute('onclick')) {
+                        console.log(`🖱️ Клик по ссылке с onclick "${href}" обработан. Стандартное действие разрешено.`);
+                    }
+                });
+            });
+
+            // Обновляем активные кнопки при изменении режима просмотра
+            const originalSetActiveNavButton = setActiveNavButton;
+            setActiveNavButton = function(activeHref) {
+                originalSetActiveNavButton(activeHref);
+
+                // Логируем для отладки
+                console.log(`🔄 setActiveNavButton вызвана с href: ${activeHref || 'не указан'}`);
+                console.log(`👀 Режим просмотра пользователя: ${sessionStorage.getItem('isUserViewMode')}`);
+                console.log(`🎭 Имперсонация активна: ${sessionStorage.getItem('impersonatedUser') ? 'да' : 'нет'}`);
+            };
+
+            // Инициализируем кнопку владельца/пользователя в блоке аутентификации
+            // Ждем полной инициализации authManager после DOMContentLoaded
+            document.addEventListener('DOMContentLoaded', () => {
+                setTimeout(() => {
+                    if (window.authManager && typeof window.authManager.onAuthStateChange === 'function') {
+                        console.log('✅ Настраиваем onAuthStateChange...');
+                        // Обновляем кнопку при изменении состояния аутентификации.
+                        // Это основной и единственный триггер для обновления UI шапки.
+                        try {
+                            window.authManager.onAuthStateChange((event, session) => {
+                                console.log(`🔄 Событие AuthStateChange: ${event}`);
+                                // Обновляем кнопку при входе, выходе или восстановлении сессии
+                                if (['SIGNED_IN', 'SIGNED_OUT', 'INITIAL_SESSION'].includes(event)) {                            
+                                    // ✅ ИСПРАВЛЕНО: Вызываем правильную функцию из auth-system.js
+                                    setTimeout(() => {
+                                        if (window.authManager && window.authManager.updateUIForLoggedInUser) {
+                                            window.authManager.updateUIForLoggedInUser();
+                                        }
+                                        if (typeof updateVipLinkStyle === 'function') {
+                                            updateVipLinkStyle();
+                                        }
+                                        
+                                        // 🚨 ДОБАВЛЕНО: ПРЯМАЯ ПРОВЕРКА VIP ПРИ ЗАГРУЗКЕ СТРАНИЦЫ
+                                        checkVipExpirationOnLoad();
+                                    }, 500);
+                                }
+                            });
+                        } catch (error) {
+                            console.error('❌ Ошибка при настройке onAuthStateChange:', error);
+                        }
+                    } else {
+                        console.warn('⚠️ authManager или onAuthStateChange не доступен после DOMContentLoaded');
+                    }
+                    
+                    // 🚨 ДОБАВЛЕНО: ВЫЗЫВАЕМ ПРОВЕРКУ VIP ПРИ ЗАГРУЗКЕ СТРАНИЦЫ
+                    console.log('🔍 Вызываем проверку VIP при загрузке страницы...');
+                    if (typeof checkVipExpirationOnLoad === 'function') {
+                        checkVipExpirationOnLoad();
+                    } else {
+                        console.warn('⚠️ Функция checkVipExpirationOnLoad не найдена');
+                    }
+                }, 500); // Ждем 0.5 секунды после DOMContentLoaded
+            });
+
+        });
+
+        // 🎨 ФУНКЦИИ НАСТРОЙКИ ВНЕШНЕГО ВИДА САЙТА
+
+        // Предустановленные темы
+        function applyThemePreset(preset) {
+            const themes = {
+                dark: {
+                    primaryColor: '#ffd700',
+                    secondaryColor: '#4fc3f7',
+                    bgColor: '#0a192f',
+                    textColor: '#ccd6f6',
+                    mainFont: "'Arial', sans-serif",
+                    fontSize: '16px',
+                    cardColor: '#1a2f5e'
+                },
+                light: {
+                    primaryColor: '#1976d2',
+                    secondaryColor: '#424242',
+                    bgColor: '#fafafa',
+                    textColor: '#212121',
+                    mainFont: "'Roboto', sans-serif",
+                    fontSize: '16px',
+                    cardColor: '#ffffff'
+                },
+                colorful: {
+                    primaryColor: '#e91e63',
+                    secondaryColor: '#ff9800',
+                    bgColor: '#1a1a2e',
+                    textColor: '#ffffff',
+                    mainFont: "'Arial', sans-serif",
+                    fontSize: '16px',
+                    cardColor: '#16213e'
+                },
+                blue: {
+                    primaryColor: '#2196f3',
+                    secondaryColor: '#03dac6',
+                    bgColor: '#0d1117',
+                    textColor: '#e6edf3',
+                    mainFont: "'Helvetica', sans-serif",
+                    fontSize: '16px',
+                    cardColor: '#161b22'
+                },
+                green: {
+                    primaryColor: '#4caf50',
+                    secondaryColor: '#66bb6a',
+                    bgColor: '#0a1f0a',
+                    textColor: '#e8f5e8',
+                    mainFont: "'Georgia', serif",
+                    fontSize: '16px',
+                    cardColor: '#1b2f1b'
+                },
+                purple: {
+                    primaryColor: '#9c27b0',
+                    secondaryColor: '#ba68c8',
+                    bgColor: '#1a0a2e',
+                    textColor: '#f3e5f5',
+                    mainFont: "'Times New Roman', serif",
+                    fontSize: '16px',
+                    cardColor: '#2d1b3d'
+                }
+            };
+
+            const theme = themes[preset];
+            if (theme) {
+                document.getElementById('primaryColor').value = theme.primaryColor;
+                document.getElementById('secondaryColor').value = theme.secondaryColor;
+                document.getElementById('bgColor').value = theme.bgColor;
+                document.getElementById('textColor').value = theme.textColor;
+                document.getElementById('adminMainFont').value = theme.mainFont;
+                document.getElementById('fontSize').value = theme.fontSize;
+                document.getElementById('cardColor').value = theme.cardColor;
+
+                applyThemeColors();
+                // Применяем типографику без уведомления, т.к. общее уведомление о теме уже есть
+                if (typeof applyTypography === 'function') applyTypography();
+                applyModCardsSettings();
+                showNotification(`🎭 Тема "${preset}" применена!`, 'success');
+            }
+        }
+
+        // 🎨 НОВЫЕ, ИСПРАВЛЕННЫЕ ФУНКЦИИ ТЕМЫ
+
+        /**
+         * Загружает и применяет настройки темы для текущего пользователя.
+         * Эта функция теперь является единственной точкой для загрузки темы.
+         */
+        async function loadAndApplyUserTheme() {
+            console.log('🎨 Загрузка и применение темы пользователя...');
+            const currentUser = window.authManager ? window.authManager.getCurrentUser() : null;
+
+            if (!currentUser) {
+                console.log('🎨 Пользователь не авторизован, используется тема по умолчанию.');
+                // Можно применить стили для гостя или оставить как есть
+                return;
+            }
+
+            try {
+                // Каждый пользователь загружает СВОИ персональные настройки
+                const { data, error } = await supabase
+                    .from('user_theme_settings')
+                    .select('*')
+                    .eq('user_id', currentUser.id)
+                    .single();
+
+                if (error) {
+                    // Вместо блокировки просто выводим ошибку в консоль
+                    console.error('🎨 Ошибка при загрузке настроек темы пользователя:', error.message);
+                    return; // Прерываем выполнение, если настройки не найдены
+                }
+
+                if (data) {
+                    console.log('🎨 Настройки темы успешно загружены из БД:', data);
+                    applyThemeStyles(data);
+                } else {
+                    console.warn('🎨 Настройки темы для пользователя не найдены в БД.');
+                }
+
+            } catch (error) {
+                console.error('🎨 Критическая ошибка при применении темы:', error);
+            }
+        }
+
+        /**
+         * Применяет стили на основе объекта настроек.
+         * @param {object} settings - Объект с настройками темы (primary_color, background_color и т.д.)
+         */
+        function applyThemeStyles(settings) {            
+            const themeStyleElement = document.getElementById('global-theme-styles');
+            if (!themeStyleElement) return;
+
+            // Используем CSSOM для более эффективного обновления
+            const styleSheet = themeStyleElement.sheet;
+
+            // Очищаем существующие правила, если они есть
+            while (styleSheet.cssRules.length > 0) {
+                styleSheet.deleteRule(0);
+            }
+
+            // Формируем строку с переменными
+            const variables = `
+                --primary-color: ${settings.primary_color || '#ffd700'};
+                --secondary-color: ${settings.secondary_color || '#4fc3f7'};
+                --background-color: ${settings.background_color || '#0a192f'};
+                --text-color: ${settings.text_color || '#ccd6f6'};
+                --card-color: ${settings.card_color || '#1a2f5e'};
+                --main-font: ${settings.main_font || "'Segoe UI', sans-serif"};
+                --font-size: ${settings.font_size || '16px'};
+            `;
+
+            // Добавляем новое правило для :root
+            styleSheet.insertRule(`:root { ${variables} }`, 0);
+            console.log('🎨 Стили темы успешно применены через CSSOM.');
+        }
+
+        // Сброс настроек к стандартным
+        function resetToDefault() {
+            if (confirm('Вы уверены, что хотите сбросить все настройки внешнего вида к стандартным?')) {
+                localStorage.removeItem('siteThemeSettings');
+                location.reload();
+            }
+        }
+
+        // Функция прокрутки контейнера настроек тем вниз
+        function scrollThemeSettingsToBottom() {
+            const container = document.getElementById('themeSettingsContainer');
+            if (container) {
+                container.scrollTo({
+                    top: container.scrollHeight,
+                    behavior: 'smooth'
+                });
+                
+                // Показываем уведомление
+                showNotification('⬇️ Прокручено вниз', 'info');
+            }
+        }
+
+        // Автоматически показываем/скрываем кнопку прокрутки
+        function updateScrollButtonVisibility() {
+            const container = document.getElementById('themeSettingsContainer');
+            const scrollBtn = container?.querySelector('.scroll-to-bottom-btn');
+            
+            if (container && scrollBtn) {
+                // Показываем кнопку если есть прокрутка
+                if (container.scrollHeight > container.clientHeight) {
+                    scrollBtn.style.display = 'flex';
+                    
+                    // Скрываем кнопку если уже внизу
+                    if (container.scrollTop + container.clientHeight >= container.scrollHeight - 10) {
+                        scrollBtn.style.opacity = '0.3';
+                        scrollBtn.style.cursor = 'default';
+                    } else {
+                        scrollBtn.style.opacity = '1';
+                        scrollBtn.style.cursor = 'pointer';
+                    }
+                } else {
+                    scrollBtn.style.display = 'none';
+                }
+            }
+        }
+
+        // Добавляем обработчик прокрутки для контейнера
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(() => {
+                const container = document.getElementById('themeSettingsContainer');
+                if (container) {
+                    container.addEventListener('scroll', updateScrollButtonVisibility);
+                    updateScrollButtonVisibility(); // Проверяем при загрузке
+                }
+            }, 1000);
+        });
+    </script>
+</head>
+<body>
+
+    <header style="margin-bottom: -15px;">
+        <div class="container">
+            <div class="header-layout">
+                <div class="logo" title="KEROSMODS.RU - Модификации для Farming Simulator">
+                    <span class="logo-main">KEROSMODS.RU</span>
+                    <span class="logo-subtitle">модификации фарминг симулятор</span>
+                </div>
+                <!-- Контейнер для картинки шапки -->
+                <div class="header-image-container">
+                    <img id="headerImage" src="logo/logo-rotating.svg" alt="KEROS Logo" class="header-logo" style="display: block; cursor: pointer;" onclick="window.location.reload();" onload="adjustHeaderImage(this)" title="KEROS Logo - Нажмите для перезагрузки страницы">
+                    <span style="position: absolute; top: -5px; right: -5px; font-size: 16px; animation: bounce 2s infinite;">🚀</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Глобальная панель поиска (над всеми элементами) -->
+    <div class="global-search-bar" style="background: linear-gradient(135deg, #0a192f, #1a2f5e); padding: 15px 0; border-bottom: 2px solid rgba(79, 195, 247, 0.3); position: sticky; top: 0; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+        <div class="container">
+            <div style="display: flex; justify-content: center; align-items: center; gap: 20px;">
+                <div style="color: #4fc3f7; font-weight: bold; font-size: 16px;">🔍 ПОИСК МОДОВ:</div>
+                <div class="nav-search" style="position: relative;">
+                    <input type="search" id="siteSearch" placeholder="Введите KEROS" title="Введите название мода и нажмите Enter" style="width: 400px; height: 40px; font-size: 16px; padding: 10px 15px;">
+                    <button id="searchButton" title="Запустить поиск" style="margin-left: 10px; background: linear-gradient(45deg, #4fc3f7, #2196F3); border: none; color: white; padding: 10px 20px; border-radius: 5px; cursor: pointer; height: 40px; font-size: 14px; font-weight: bold; transition: all 0.3s ease;">НАЙТИ</button>
+                </div>
+                <div id="auth-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Навигационная панель -->
+    <div class="navigation-bar" style="margin-top: 0;">
+        <div class="container">
+            <nav class="main-nav">
+                <a href="index.html" class="active">Главная</a>                
+                <a href="#products" onclick="showProductsPage()">Товары</a>
+                <a href="#mods" onclick="loadModsByCategory('Все', currentGameVersion)">Моды</a>
+                <a href="#upload-mod" id="upload-mod-button" onclick="showUploadModal()" style="display: inline-block;">📤 Загрузить мод</a>
+                <a href="#shop" onclick="showShopModal()" class="nav-vip-link"><span class="blinking-diamond">💎</span><span class="vip-text-shine">VIP</span></a>
+                <a href="#feedback" onclick="showFeedbackModal()">Обратная связь</a>
+                <a href="#contacts">Контакты</a>
+                <a href="https://www.farming-simulator.com/mods.php?lang=ru&country=ru" target="_blank" rel="noopener" title="Официальный ModHub">ModHub</a>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Бегущая строка уведомлений -->
+    <div id="notification-ticker" style="background: rgba(20, 20, 20, 0.8); backdrop-filter: blur(10px); color: rgba(255, 255, 255, 0.9); padding: 8px 0; overflow: hidden; position: relative; display: none; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+        <div style="display: flex; animation: scroll-left 30s linear infinite; white-space: nowrap;">
+            <span id="ticker-content" style="padding-right: 50px;">📢 Добро пожаловать на KEROSMODS.RU! 🚜 Лучшие моды для Farming Simulator!</span>
+        </div>
+    </div>
+
+    <div class="site-layout">
+        <main class="main-content">
+            <div class="container">
+            <h2>Последние моды</h2>
+
+
+            
+            <!-- Контейнер для модов -->
+            <div id="modsContainer" class="mods-container">
+                <!-- Моды будут загружены JavaScript -->
+                <p>Загрузка модов...</p>
+            </div>
+
+            <!-- Пагинация -->
+            <div id="pagination" class="pagination">
+                <!-- Пагинация будет добавлена JavaScript -->
+            </div>
+            </div>
+        </main>
+
+        <!-- Правая боковая панель с категориями -->
+        <aside class="right-sidebar">
+            <!-- ⭐️ Новый контейнер для VIP-статуса ⭐️ -->
+            <div id="sidebar-vip-status-container" style="margin-bottom: 20px; display: none;"></div>
+
+            <!-- Выбор версии игры -->
+            <div class="game-selection">
+                <h3 style="color: #ffd700; margin-bottom: 15px; text-align: center; font-size: 16px;">Выберите игру</h3>
+                <div class="game-buttons">
+                    <button class="game-btn vip-btn requires-vip" onclick="switchGameVersion('vip_mods')" data-game="vip_mods" title="Переключиться на VIP моды" aria-label="Выбрать VIP моды">
+                        <span class="game-icon">💎</span>
+                        <span class="game-name">VIP</span>
+                    </button>
+                    <button class="game-btn fs25-btn active" onclick="switchGameVersion('fs25')" data-game="fs25" title="Переключиться на Farming Simulator 25" aria-label="Выбрать Farming Simulator 25">
+                        <span class="game-icon">🟢</span>
+                        <span class="game-name">FS25</span>
+                    </button>
+                    <button class="game-btn fs22-btn" onclick="switchGameVersion('fs22')" data-game="fs22" title="Переключиться на Farming Simulator 22" aria-label="Выбрать Farming Simulator 22">
+                        <span class="game-icon">🔵</span>
+                        <span class="game-name">FS22</span>
+                    </button>
+                    <button class="game-btn fs19-btn" onclick="switchGameVersion('fs19')" data-game="fs19" title="Переключиться на Farming Simulator 19" aria-label="Выбрать Farming Simulator 19">
+                        <span class="game-icon">🟡</span>
+                        <span class="game-name">FS19</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Категории модов -->
+            <div class="mod-categories">
+                <!-- Все моды (активная по умолчанию) -->
+                <button class="category-btn active" data-category-id="Все" data-icon="🗂️" data-name="Все моды" onclick="loadModsByCategory('Все', currentGameVersion)" title="Показать все моды для текущей игры" aria-label="Показать все моды для текущей игры">🗂️ Все моды</button>
+
+                <!-- VIP Категории -->
+                <div id="vip_modsCategories" class="game-categories requires-vip">
+                    <h4 class="category-game-title" style="margin: 15px 0 10px; font-size: 14px;">💎 VIP Моды</h4>
+                    <button class="category-btn" data-category-id="Все" data-icon="🗂️" data-name="Все моды" onclick="loadModsByCategory('Все', 'vip_mods')" title="Показать все VIP моды" aria-label="Показать все VIP моды">🗂️ Все моды</button>
+                    <button class="category-btn" data-category-id="fs25" data-icon="🟢" data-name="VIP FS25" onclick="loadModsByCategory('fs25', 'vip_mods')">🟢 VIP FS25</button>
+                    <button class="category-btn" data-category-id="fs22" data-icon="🔵" data-name="VIP FS22" onclick="loadModsByCategory('fs22', 'vip_mods')">🔵 VIP FS22</button>
+                    <button class="category-btn" data-category-id="fs19" data-icon="🟡" data-name="VIP FS19" onclick="loadModsByCategory('fs19', 'vip_mods')">🟡 VIP FS19</button>
+                </div>
+
+                <!-- FS25 Категории -->
+                <div id="fs25Categories" class="game-categories active">
+                    <h4 class="category-game-title" style="margin: 15px 0 10px; font-size: 14px;">🟢 Farming Simulator 25</h4>
+                    <button class="category-btn" data-category-id="maps" data-icon="🗺️" data-name="Карты" onclick="loadModsByCategory('maps', 'fs25')">🗺️ Карты</button>
+                    <button class="category-btn" data-category-id="tractors" data-icon="🚜" data-name="Тракторы" onclick="loadModsByCategory('tractors', 'fs25')">🚜 Тракторы</button>
+                    <button class="category-btn" data-category-id="combines" data-icon="🌾" data-name="Комбайны" onclick="loadModsByCategory('combines', 'fs25')">🌾 Комбайны</button>
+                    <button class="category-btn" data-category-id="cars" data-icon="🚗" data-name="Легковые машины" onclick="loadModsByCategory('cars', 'fs25')">🚗 Легковые машины</button>
+                    <button class="category-btn" data-category-id="trucks" data-icon="🚛" data-name="Грузовики" onclick="loadModsByCategory('trucks', 'fs25')">🚛 Грузовики</button>
+                    <button class="category-btn" data-category-id="railway" data-icon="🚂" data-name="Ж/д транспорт" onclick="loadModsByCategory('railway', 'fs25')">🚂 Ж/д транспорт</button>
+                    <button class="category-btn" data-category-id="loaders" data-icon="🏗️" data-name="Погрузчики и экскаваторы" onclick="loadModsByCategory('loaders', 'fs25')">🏗️ Погрузчики и экскаваторы</button>
+                    <button class="category-btn" data-category-id="forestry" data-icon="🌲" data-name="Лесозаготовка" onclick="loadModsByCategory('forestry', 'fs25')">🌲 Лесозаготовка</button>
+                    <button class="category-btn" data-category-id="baling" data-icon="📦" data-name="Тюковка" onclick="loadModsByCategory('baling', 'fs25')">📦 Тюковка</button>
+                    <button class="category-btn" data-category-id="plows" data-icon="🪒" data-name="Плуги" onclick="loadModsByCategory('plows', 'fs25')">🪒 Плуги</button>
+                    <button class="category-btn" data-category-id="cultivators" data-icon="🌱" data-name="Культиваторы" onclick="loadModsByCategory('cultivators', 'fs25')">🌱 Культиваторы</button>
+                    <button class="category-btn" data-category-id="mowers" data-icon="🌿" data-name="Косилки" onclick="loadModsByCategory('mowers', 'fs25')">🌿 Косилки</button>
+                    <button class="category-btn" data-category-id="sprayers" data-icon="💧" data-name="Опрыскиватели" onclick="loadModsByCategory('sprayers', 'fs25')">💧 Опрыскиватели</button>
+                    <button class="category-btn" data-category-id="manure_spreaders" data-icon="🚜" data-name="Навозоразбрасыватели" onclick="loadModsByCategory('manure_spreaders', 'fs25')">🚜 Навозоразбрасыватели</button>
+                    <button class="category-btn" data-category-id="farm_implements" data-icon="🔧" data-name="Сельхоз инвентарь" onclick="loadModsByCategory('farm_implements', 'fs25')">🔧 Сельхоз инвентарь</button>
+                    <button class="category-btn" data-category-id="tools" data-icon="🔧" data-name="Орудия" onclick="loadModsByCategory('tools', 'fs25')">🔧 Орудия</button>
+                    <button class="category-btn" data-category-id="animals" data-icon="🐄" data-name="Животноводство" onclick="loadModsByCategory('animals', 'fs25')">🐄 Животноводство</button>
+                    <button class="category-btn" data-category-id="objects" data-icon="🏢" data-name="Объекты" onclick="loadModsByCategory('objects', 'fs25')">🏢 Объекты</button>
+                    <button class="category-btn" data-category-id="buildings" data-icon="🏢" data-name="Здания" onclick="loadModsByCategory('buildings', 'fs25')">🏢 Здания</button>
+                    <button class="category-btn" data-category-id="scripts" data-icon="⚙️" data-name="Скриптинг" onclick="loadModsByCategory('scripts', 'fs25')">⚙️ Скриптинг</button>
+                    <button class="category-btn" data-category-id="russian_mods" data-icon="🇷🇺" data-name="Русские моды" onclick="loadModsByCategory('russian_mods', 'fs25')">🇷🇺 Русские моды</button>
+                    <button class="category-btn" data-category-id="other_modifications" data-icon="📋" data-name="Другие модификации" onclick="loadModsByCategory('other_modifications', 'fs25')">📋 Другие модификации</button>
+                    <button class="category-btn" data-category-id="other" data-icon="📦" data-name="Прочее" onclick="loadModsByCategory('other', 'fs25')">📦 Прочее</button>
+                </div>
+
+                <!-- FS22 Категории -->
+                <div id="fs22Categories" class="game-categories">
+                    <h4 class="category-game-title" style="margin: 15px 0 10px; font-size: 14px;">🔵 Farming Simulator 22</h4>
+                    <button class="category-btn" data-category-id="maps" data-icon="🗺️" data-name="Карты" onclick="loadModsByCategory('maps', 'fs22')">🗺️ Карты</button>
+                    <button class="category-btn" data-category-id="tractors" data-icon="🚜" data-name="Тракторы" onclick="loadModsByCategory('tractors', 'fs22')">🚜 Тракторы</button>
+                    <button class="category-btn" data-category-id="combines" data-icon="🌾" data-name="Комбайны" onclick="loadModsByCategory('combines', 'fs22')">🌾 Комбайны</button>
+                    <button class="category-btn" data-category-id="cars" data-icon="🚗" data-name="Легковые машины" onclick="loadModsByCategory('cars', 'fs22')">🚗 Легковые машины</button>
+                    <button class="category-btn" data-category-id="trucks" data-icon="🚛" data-name="Грузовики" onclick="loadModsByCategory('trucks', 'fs22')">🚛 Грузовики</button>
+                    <button class="category-btn" data-category-id="railway" data-icon="🚂" data-name="Ж/д транспорт" onclick="loadModsByCategory('railway', 'fs22')">🚂 Ж/д транспорт</button>
+                    <button class="category-btn" data-category-id="loaders" data-icon="🏗️" data-name="Погрузчики и экскаваторы" onclick="loadModsByCategory('loaders', 'fs22')">🏗️ Погрузчики и экскаваторы</button>
+                    <button class="category-btn" data-category-id="forestry" data-icon="🌲" data-name="Лесозаготовка" onclick="loadModsByCategory('forestry', 'fs22')">🌲 Лесозаготовка</button>
+                    <button class="category-btn" data-category-id="baling" data-icon="📦" data-name="Тюковка" onclick="loadModsByCategory('baling', 'fs22')">📦 Тюковка</button>
+                    <button class="category-btn" data-category-id="plows" data-icon="🪒" data-name="Плуги" onclick="loadModsByCategory('plows', 'fs22')">🪒 Плуги</button>
+                    <button class="category-btn" data-category-id="cultivators" data-icon="🌱" data-name="Культиваторы" onclick="loadModsByCategory('cultivators', 'fs22')">🌱 Культиваторы</button>
+                    <button class="category-btn" data-category-id="mowers" data-icon="🌿" data-name="Косилки" onclick="loadModsByCategory('mowers', 'fs22')">🌿 Косилки</button>
+                    <button class="category-btn" data-category-id="sprayers" data-icon="💧" data-name="Опрыскиватели" onclick="loadModsByCategory('sprayers', 'fs22')">💧 Опрыскиватели</button>
+                    <button class="category-btn" data-category-id="manure_spreaders" data-icon="🚜" data-name="Навозоразбрасыватели" onclick="loadModsByCategory('manure_spreaders', 'fs22')">🚜 Навозоразбрасыватели</button>
+                    <button class="category-btn" data-category-id="farm_implements" data-icon="🔧" data-name="Сельхоз инвентарь" onclick="loadModsByCategory('farm_implements', 'fs22')">🔧 Сельхоз инвентарь</button>
+                    <button class="category-btn" data-category-id="tools" data-icon="🔧" data-name="Орудия" onclick="loadModsByCategory('tools', 'fs22')">🔧 Орудия</button>
+                    <button class="category-btn" data-category-id="animals" data-icon="🐄" data-name="Животноводство" onclick="loadModsByCategory('animals', 'fs22')">🐄 Животноводство</button>
+                    <button class="category-btn" data-category-id="objects" data-icon="🏢" data-name="Объекты" onclick="loadModsByCategory('objects', 'fs22')">🏢 Объекты</button>
+                    <button class="category-btn" data-category-id="buildings" data-icon="🏢" data-name="Здания" onclick="loadModsByCategory('buildings', 'fs22')">🏢 Здания</button>
+                    <button class="category-btn" data-category-id="scripts" data-icon="⚙️" data-name="Скриптинг" onclick="loadModsByCategory('scripts', 'fs22')">⚙️ Скриптинг</button>
+                    <button class="category-btn" data-category-id="russian_mods" data-icon="🇷🇺" data-name="Русские моды" onclick="loadModsByCategory('russian_mods', 'fs22')">🇷🇺 Русские моды</button>
+                    <button class="category-btn" data-category-id="other_modifications" data-icon="📋" data-name="Другие модификации" onclick="loadModsByCategory('other_modifications', 'fs22')">📋 Другие модификации</button>
+                    <button class="category-btn" data-category-id="other" data-icon="📦" data-name="Прочее" onclick="loadModsByCategory('other', 'fs22')">📦 Прочее</button>
+                </div>
+
+                <!-- FS19 Категории -->
+                <div id="fs19Categories" class="game-categories">
+                    <h4 class="category-game-title" style="margin: 15px 0 10px; font-size: 14px;">🟡 Farming Simulator 19</h4>
+                    <button class="category-btn" data-category-id="maps" data-icon="🗺️" data-name="Карты" onclick="loadModsByCategory('maps', 'fs19')">🗺️ Карты</button>
+                    <button class="category-btn" data-category-id="tractors" data-icon="🚜" data-name="Тракторы" onclick="loadModsByCategory('tractors', 'fs19')">🚜 Тракторы</button>
+                    <button class="category-btn" data-category-id="combines" data-icon="🌾" data-name="Комбайны" onclick="loadModsByCategory('combines', 'fs19')">🌾 Комбайны</button>
+                    <button class="category-btn" data-category-id="cars" data-icon="🚗" data-name="Легковые машины" onclick="loadModsByCategory('cars', 'fs19')">🚗 Легковые машины</button>
+                    <button class="category-btn" data-category-id="trucks" data-icon="🚛" data-name="Грузовики" onclick="loadModsByCategory('trucks', 'fs19')">🚛 Грузовики</button>
+                    <button class="category-btn" data-category-id="railway" data-icon="🚂" data-name="Ж/д транспорт" onclick="loadModsByCategory('railway', 'fs19')">🚂 Ж/д транспорт</button>
+                    <button class="category-btn" data-category-id="loaders" data-icon="🏗️" data-name="Погрузчики и экскаваторы" onclick="loadModsByCategory('loaders', 'fs19')">🏗️ Погрузчики и экскаваторы</button>
+                    <button class="category-btn" data-category-id="forestry" data-icon="🌲" data-name="Лесозаготовка" onclick="loadModsByCategory('forestry', 'fs19')">🌲 Лесозаготовка</button>
+                    <button class="category-btn" data-category-id="baling" data-icon="📦" data-name="Тюковка" onclick="loadModsByCategory('baling', 'fs19')">📦 Тюковка</button>
+                    <button class="category-btn" data-category-id="plows" data-icon="🪒" data-name="Плуги" onclick="loadModsByCategory('plows', 'fs19')">🪒 Плуги</button>
+                    <button class="category-btn" data-category-id="cultivators" data-icon="🌱" data-name="Культиваторы" onclick="loadModsByCategory('cultivators', 'fs19')">🌱 Культиваторы</button>
+                    <button class="category-btn" data-category-id="mowers" data-icon="🌿" data-name="Косилки" onclick="loadModsByCategory('mowers', 'fs19')">🌿 Косилки</button>
+                    <button class="category-btn" data-category-id="sprayers" data-icon="💧" data-name="Опрыскиватели" onclick="loadModsByCategory('sprayers', 'fs19')">💧 Опрыскиватели</button>
+                    <button class="category-btn" data-category-id="manure_spreaders" data-icon="🚜" data-name="Навозоразбрасыватели" onclick="loadModsByCategory('manure_spreaders', 'fs19')">🚜 Навозоразбрасыватели</button>
+                    <button class="category-btn" data-category-id="farm_implements" data-icon="🔧" data-name="Сельхоз инвентарь" onclick="loadModsByCategory('farm_implements', 'fs19')">🔧 Сельхоз инвентарь</button>
+                    <button class="category-btn" data-category-id="tools" data-icon="🔧" data-name="Орудия" onclick="loadModsByCategory('tools', 'fs19')">🔧 Орудия</button>
+                    <button class="category-btn" data-category-id="animals" data-icon="🐄" data-name="Животноводство" onclick="loadModsByCategory('animals', 'fs19')">🐄 Животноводство</button>
+                    <button class="category-btn" data-category-id="objects" data-icon="🏢" data-name="Объекты" onclick="loadModsByCategory('objects', 'fs19')">🏢 Объекты</button>
+                    <button class="category-btn" data-category-id="buildings" data-icon="🏢" data-name="Здания" onclick="loadModsByCategory('buildings', 'fs19')">🏢 Здания</button>
+                    <button class="category-btn" data-category-id="scripts" data-icon="⚙️" data-name="Скриптинг" onclick="loadModsByCategory('scripts', 'fs19')">⚙️ Скриптинг</button>
+                    <button class="category-btn" data-category-id="russian_mods" data-icon="🇷🇺" data-name="Русские моды" onclick="loadModsByCategory('russian_mods', 'fs19')">🇷🇺 Русские моды</button>
+                    <button class="category-btn" data-category-id="other_modifications" data-icon="📋" data-name="Другие модификации" onclick="loadModsByCategory('other_modifications', 'fs19')">📋 Другие модификации</button>
+                    <button class="category-btn" data-category-id="other" data-icon="📦" data-name="Прочее" onclick="loadModsByCategory('other', 'fs19')">📦 Прочее</button>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <footer>
+        <div class="container">
+            <p>© 2026 KEROSMODS.RU. Все права сайта защищены.</p>
+        </div>
+    </footer>
+
+    <!-- Шаблоны для динамического создания UI -->
+    <div style="display:none !important;" aria-hidden="true">
+        <div id="user-info-template">
+            <div class="user-info-block" id="user-info-content" style="display: none;">
+                <span class="user-identifier" id="user-identifier"></span>
+                <button id="admin-panel-button" style="display: none;" title="Открыть админ панель" onclick="showOwnerPanel()"></button>
+                <button onclick="handleLogout()" class="btn-logout" title="Выйти из аккаунта">Выйти</button>
+            </div>
+        </div>
+        <div id="guest-info-template">
+            <div id="guest-info-content" style="display: flex; gap: 5px;">
+                <button onclick="showRulesModal()" class="btn btn-secondary" title="Прочитать правила сайта">Правила</button>
+                <button onclick="showLoginModal()" class="btn btn-primary" title="Войти в личный кабинет">Войти</button>
+                <button onclick="showRegisterModal()" class="btn btn-secondary" title="Создать новый аккаунт">Регистрация</button>
+            </div>
+        </div>
+        <div id="owner-info-template" style="display: none;">
+            <button onclick="showOwnerPanel()" class="owner-auth-button" title="Панель управления"></button>
+        </div>
+    </div>
+
+    <!-- Модальные окна аутентификации -->
+    <!-- Модальное окно входа -->
+    <div id="loginModal" class="auth-modal" style="display: none;">
+        <div class="auth-content">
+            <h3>Вход в систему</h3>
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="loginInput">Логин или Email:</label>
+                    <input type="text" id="loginInput" placeholder="Введите логин или email" autocomplete="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Пароль:</label>
+                    <div class="input-wrapper password-wrapper">
+                        <input type="password" id="loginPassword" placeholder="Введите пароль" autocomplete="current-password" required>
+                        <span class="password-toggle-icon" onclick="togglePasswordVisibility(event)">👁️</span>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Войти</button>
+                    <button type="button" onclick="hideLoginModal()" class="btn btn-secondary">Отмена</button>
+                </div>
+                <div class="form-footer">
+                    <button type="button" onclick="showPasswordResetModal()" class="btn-link">Забыли пароль?</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно регистрации -->
+    <div id="registerModal" class="auth-modal" style="display: none;">
+        <div class="auth-content">
+            <h3>Рег��страция</h3>
+            <form id="registerForm" onsubmit="handleRegister(event)">
+                <div class="form-group">
+                    <label for="registerUsername">Имя пользователя:</label>
+                    <input type="text" id="registerUsername" autocomplete="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="registerEmail">Email:</label>
+                    <input type="email" id="registerEmail" autocomplete="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="registerPassword">Пароль:</label>
+                    <div class="input-wrapper password-wrapper">
+                        <input type="password" id="registerPassword" placeholder="Введите пароль (мин. 6 символов)" autocomplete="new-password" required minlength="6">
+                        <span class="password-toggle-icon" onclick="togglePasswordVisibility(event)">👁️</span>
+                    </div>
+                    <div class="password-strength" id="passwordStrength" style="margin-top: 5px; font-size: 12px;">
+                        <div class="strength-meter" style="height: 3px; background: #ddd; margin-bottom: 3px; border-radius: 2px;">
+                            <div class="strength-fill" id="strengthFill" style="height: 100%; width: 0%; transition: width 0.3s ease; border-radius: 2px;"></div>
+                        </div>
+                        <span class="strength-text" id="strengthText" style="color: #666;">Слабый пароль</span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="registerPasswordConfirm">Подтверждение пароля:</label>
+                    <div class="input-wrapper password-wrapper">
+                        <input type="password" id="registerPasswordConfirm" placeholder="Повторите пароль" autocomplete="new-password" required minlength="6">
+                        <span class="password-toggle-icon" onclick="togglePasswordVisibility(event)">👁️</span>
+                    </div>
+                    <div class="password-match" id="passwordMatch" style="margin-top: 5px; font-size: 12px; color: #e74c3c; display: none;">
+                        Пароли не совпадают
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Зарегистрироваться</button>
+                    <button type="button" onclick="hideRegisterModal()" class="btn btn-secondary">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно восстановления пароля -->
+    <div id="passwordResetModal" class="auth-modal" style="display: none;">
+        <div class="auth-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 style="color: #ffd700; margin: 0;">🔑 Восстановление пароля</h3>
+                <button onclick="hidePasswordResetModal()" style="background: #f44336; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 16px;">&times;</button>
+            </div>
+
+            <div id="resetStep1">
+                <p style="color: #4fc3f7; text-align: center; margin-bottom: 20px; font-size: 14px;">Введите ваш email адрес для получения инструкций по восстановлению пароля</p>
+
+                <div class="form-group">
+                    <label for="resetEmail" style="display: block; color: #ffd700; margin-bottom: 8px; font-size: 13px;">Email адрес:</label>
+                    <input type="email" id="resetEmail" placeholder="Введите ваш email" autocomplete="email" required style="width: 100%; padding: 12px; border: 2px solid rgba(79, 195, 247, 0.2); background: rgba(10, 25, 47, 0.8); border-radius: 10px; color: white; font-size: 16px; box-sizing: border-box;">
+                </div>
+
+                <div id="resetMessage" style="display: none; margin-top: 15px; padding: 10px; border-radius: 5px; font-size: 14px; text-align: center;"></div>
+
+                <div class="form-actions">
+                    <button onclick="sendPasswordReset()" class="btn btn-primary">📧 Отправить инструкции</button>
+                    <button type="button" onclick="hidePasswordResetModal()" class="btn btn-secondary">Отмена</button>
+                </div>
+            </div>
+
+            <div id="resetStep2" style="display: none;">
+                <div style="text-align: center; padding: 20px;">
+                    <div style="font-size: 48px; margin-bottom: 15px;">📧</div>
+                    <h4 style="color: #4fc3f7; margin-bottom: 10px;">Письмо отправлено!</h4>
+                    <p style="color: #8892b0; margin-bottom: 20px; font-size: 14px;">Мы отправили инструкции по восстановлению пароля на ваш email адрес.</p>
+                    <p style="color: #ffd700; font-size: 13px; margin-bottom: 15px;">Проверьте папку "Спам" если письмо не пришло в течение 5 минут.</p>
+                    <button onclick="hidePasswordResetModal(); showLoginModal()" class="btn btn-primary">Вернуться ко входу</button>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255, 215, 0, 0.2);">
+                <p style="color: #8892b0; font-size: 12px; margin: 0;">Обратитесь к администратору если у вас возникли проблемы с доступом</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно магазина -->
+    <div id="shopModal" class="auth-modal" style="display: none;">
+        <div class="auth-content" style="max-width: 700px; background: linear-gradient(135deg, #1a2f5e, #112240);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 style="color: #ffd700; margin: 0;">🛒 Магазин VIP-статусов</h3>
+                <button onclick="hideShopModal()" style="background: #f44336; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 16px;">&times;</button>
+            </div>
+            <p style="color: #ccd6f6; text-align: center; margin-bottom: 25px; font-size: 14px;">
+                Выберите желаемый статус. После оформления заказа администратор свяжется с вами для подтверждения и оплаты.
+            </p>
+            <div id="shop-products-container" style="display: grid; gap: 20px;">
+                <!-- Товары будут загружены сюда -->
+            </div>
+            <style>
+                .shop-product-card {
+                    background: rgba(79, 195, 247, 0.1);
+                    border: 1px solid rgba(79, 195, 247, 0.3);
+                    border-radius: 10px;
+                    padding: 20px;
+                    text-align: center;
+                }
+                .product-price { margin: 15px 0; }
+                .current-price { font-size: 1.5rem; color: #4CAF50; font-weight: bold; }
+                .old-price { font-size: 1rem; color: #8892b0; text-decoration: line-through; margin-left: 10px; }
+            </style>
+        </div>
+    </div>
+
+
+    <!-- Модальное окно админ панели -->
+<div id="adminModal" class="auth-modal" style="display: none;">
+<div class="auth-content" style="max-width: 1000px; width: 90%; max-height: 90vh; overflow-y: auto;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; position: relative;">
+        <h2 style="color: #ffd700; margin: 0;">👑 Административная панель управления</h2>
+
+        <!-- Кнопки управления окном в стиле Windows -->
+        <div class="admin-windows-controls">
+            <button class="windows-btn windows-minimize" onclick="adminPanel.minimizeWindow()" title="Свернуть окно"></button>
+            <button class="windows-btn windows-maximize" onclick="adminPanel.toggleMaximize()" title="Развернуть/Восстановить окно"></button>
+            <button class="windows-btn windows-close" onclick="adminPanel.closeWindow()" title="Закрыть окно"></button>
+        </div>
+
+        <!-- Кнопка закрытия для мобильных устройств -->
+        <button onclick="closeAdminModal()" style="background: #f44336; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 16px; display: none;" class="mobile-close">&times;</button>
+    </div>
+
+            <!-- Аудио плеер админ панели - размещен вверху для удобства -->
+            <div id="adminAudioPlayer" class="admin-audio-player" style="margin-bottom: 30px; padding: 20px; background: rgba(79, 195, 247, 0.1); border-radius: 10px; border: 1px solid rgba(79, 195, 247, 0.3);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h4 style="color: #ffd700; margin: 0; display: flex; align-items: center;">
+                        <span class="player-status" id="playerStatus" style="margin-right: 10px;">⏸️</span>
+                        🎵 Аудио плеер админ панели
+                    </h4>
+                    <div class="player-controls" style="display: flex; gap: 10px; align-items: center;">
+                        <button onclick="adminPanel.togglePlayerMinimize()" class="btn" id="minimizeBtn" style="background: #ff9800; color: white;" title="Свернуть плеер в компактный вид">СВЕРНУТЬ</button>
+                        <button onclick="adminPanel.closeAudioPlayer()" class="btn" id="closeBtn" style="background: #f44336; color: white;" title="Полностью закрыть плеер">ЗАКРЫТЬ</button>
+                        <button onclick="toggleFullscreenMedia()" class="btn" id="fullscreenBtn" style="background: linear-gradient(135deg, #1a237e, #283593); color: white;" title="Развернуть видео на весь экран">НА ВЕСЬ ЭКРАН</button>
+                    </div>
+                </div>
+
+                <div class="player-content">
+                    <!-- Основной плеер -->
+                    <div id="mainPlayer" class="player-main">
+                        <div style="display: flex; gap: 15px; align-items: center; margin-bottom: 15px;">
+                            <button onclick="adminPanel.playAudio()" class="btn" id="playBtn" style="background: linear-gradient(135deg, #1a237e, #283593); color: white;">ИГРАТЬ</button>
+                            <button onclick="adminPanel.pauseAudio()" class="btn" id="pauseBtn" style="background: #ff9800; color: white;">ПАУЗА</button>
+                            <button onclick="adminPanel.stopAudio()" class="btn" id="stopBtn" style="background: #f44336; color: white;">СТОП</button>
+                            <div style="flex: 1;">
+                                <div class="progress-container" style="background: rgba(255,255,255,0.1); height: 8px; border-radius: 4px; cursor: pointer; margin-bottom: 5px;" onclick="adminPanel.setAudioProgress(event)">
+                                    <div class="progress-bar" id="progressBar" style="background: #ffd700; height: 100%; width: 0%; border-radius: 4px; transition: width 0.1s;"></div>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 12px; color: #8892b0;">
+                                    <span id="currentTime">0:00</span>
+                                    <span id="duration">0:00</span>
+                                </div>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <button onclick="adminPanel.previousTrack()" class="btn" style="background: #2196f3; color: white;" title="Предыдущий трек">ПРЕДЫДУЩИЙ</button>
+                                <button onclick="adminPanel.nextTrack()" class="btn" style="background: #2196f3; color: white;" title="Следующий трек">СЛЕДУЮЩИЙ</button>
+                                <button onclick="adminPanel.toggleShuffle()" class="btn" id="shuffleBtn" style="background: #9c27b0; color: white;" title="Перемешать плейлист">ПЕРЕМЕШАТЬ</button>
+                                <button onclick="adminPanel.toggleRepeat()" class="btn" id="repeatBtn" style="background: #9c27b0; color: white;" title="Режим повтора">ПОВТОР</button>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom: 15px;">
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <label style="color: #ffd700; font-size: 12px; min-width: 60px;">Громкость:</label>
+                                <input type="range" id="volumeSlider" min="0" max="100" value="50" style="flex: 1; height: 6px; background: rgba(255,215,0,0.3); border-radius: 3px;" oninput="adminPanel.setVolume(this.value)">
+                                <span id="volumeValue" style="color: #ffd700; font-size: 12px; min-width: 35px;">50%</span>
+                            </div>
+                        </div>
+
+                        <div class="playlist-section">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <h5 style="color: #ffd700; margin: 0;">Плейлист</h5>
+                                <button onclick="adminPanel.addAudioFile()" class="btn" style="background: linear-gradient(135deg, #1a237e, #283593); color: white; font-size: 14px;">ДОБАВИТЬ МУЗЫКУ</button>
+                            </div>
+                            <div id="playlist" class="playlist-container" style="max-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 5px; padding: 10px;">
+                                <p style="color: #8892b0; text-align: center; margin: 0; font-size: 12px;">Плейлист пуст. Добавьте аудио файлы.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Свернутый плеер -->
+                    <div id="miniPlayer" class="player-mini" style="display: none;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <button onclick="adminPanel.playAudio()" class="btn" id="miniPlayBtn" style="background: linear-gradient(135deg, #1a237e, #283593); color: white; padding: 8px 12px; font-size: 12px;">ИГРАТЬ</button>
+                            <div style="flex: 1; min-width: 0;">
+                                <div class="progress-container" style="background: rgba(255,255,255,0.1); height: 4px; border-radius: 2px; cursor: pointer; margin-bottom: 3px;" onclick="adminPanel.setAudioProgress(event)">
+                                    <div class="progress-bar" id="miniProgressBar" style="background: #ffd700; height: 100%; width: 0%; border-radius: 2px;"></div>
+                                </div>
+                                <div style="font-size: 10px; color: #ffd700;" id="miniTrackInfo">Нет трека</div>
+                            </div>
+                            <button onclick="adminPanel.togglePlayerMinimize()" class="btn" style="background: #ff9800; color: white; padding: 6px 10px; font-size: 11px;">РАЗВЕРНУТЬ ПЛЕЕР</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="admin-panel-grid">
+                <!-- Основные настройки -->
+                <div class="admin-section">
+                    <h3 style="color: #ffd700; margin-bottom: 20px; text-align: center;">⚙️ Настройки сайта</h3>
+
+                    <div class="setting-item">
+                        <div class="setting-title">Логотип сайта</div>
+                        <img id="currentLogo" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIzMCIgY3k9IjMwIiByPSIzMCIgZmlsbD0iI2ZmZDcwMCIvPjx0ZXh0IHg9IjMwIiB5PSIzNSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjEyIiBmaWxsPSIjMDAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5MT0dPPC90ZXh0Pjwvc3ZnPg==" alt="Logo" style="width: 60px; height: 60px; border-radius: 50%; margin: 10px auto; display: block;">
+                        <input type="file" id="logoUpload" accept="image/*" style="width: 100%; margin: 10px 0; padding: 8px; background: rgba(79, 195, 247, 0.1); border: 1px solid #4fc3f7; border-radius: 5px; color: white;">
+                        <button class="btn" onclick="uploadLogo()" style="width: 100%; background: #4fc3f7; color: white;">📷 Загрузить логотип</button>
+                    </div>
+
+                    <div class="setting-item">
+                        <div class="setting-title">Фон сайта</div>
+                        <img id="currentHeaderBg" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjY4IiB2aWV3Qm94PSIwIDAgMTIwIDY4IiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iNjgiIGZpbGw9IiMxYTJhNmMiLz48dGV4dCB4PSI2MCIgeT0iMzQiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMCIgZmlsbD0iI2ZmZDcwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Qkc8L3RleHQ+PC9zdmc+" alt="Header BG" style="width: 100%; height: 68px; object-fit: cover; border-radius: 5px; margin: 10px 0; border: 1px solid #ffd700;">
+                        <input type="file" id="headerBgUpload" accept="image/*" style="width: 100%; margin: 10px 0; padding: 8px; background: rgba(79, 195, 247, 0.1); border: 1px solid #4fc3f7; border-radius: 5px; color: white;">
+                        <button class="btn" onclick="uploadHeaderBg()" style="width: 100%; background: #ff9800; color: white;">🖼️ Загрузить фон</button>
+                    </div>
+
+                    <div class="setting-item">
+                        <div class="setting-title">Музыка сайта</div>
+                        <button class="btn" onclick="toggleMusic()" id="musicToggle" style="width: 100%; margin: 10px 0; background: #9c27b0; color: white;">🎵 Включить/выключить</button>
+                        <div style="margin: 10px 0;">
+                            <label style="display: block; color: #ffd700; margin-bottom: 5px; font-size: 12px;">Громкость: <span id="volumeValue">50%</span></label>
+                            <input type="range" id="volumeSlider" min="0" max="100" value="50" style="width: 100%; height: 6px; background: rgba(255,215,0,0.3); border-radius: 3px;">
+                        </div>
+                    </div>
+
+                    <div class="setting-item">
+                        <div class="setting-title">🖼️ Картинка шапки сайта</div>
+                        <!-- Текущая картинка шапки -->
+                        <div class="current-header-image" style="margin: 10px 0; text-align: center;">
+                            <div id="currentHeaderImagePreview" style="width: 60px; height: 60px; border-radius: 50%; border: 2px solid rgba(79, 195, 247, 0.3); background: rgba(79, 195, 247, 0.1); margin: 0 auto; display: flex; align-items: center; justify-content: center; color: rgba(79, 195, 247, 0.7); font-size: 24px;">🖼️</div>
+                        </div>
+                        <input type="file" id="headerImageUpload" accept="image/*" style="width: 100%; margin: 10px 0; padding: 8px; background: rgba(79, 195, 247, 0.1); border: 1px solid #4fc3f7; border-radius: 5px; color: white;">
+                        <button class="btn" onclick="uploadHeaderImage()" style="width: 100%; background: #ff9800; color: white; margin-bottom: 8px;">📷 Загрузить картинку</button>
+                        <button class="btn" onclick="removeHeaderImage()" style="width: 100%; background: #f44336; color: white;">🗑️ Удалить картинку</button>
+
+                        <!-- Настройки позиционирования картинки -->
+                        <div style="margin-top: 15px; padding: 10px; background: rgba(79, 195, 247, 0.05); border-radius: 8px; border: 1px solid rgba(79, 195, 247, 0.2);">
+                            <div class="setting-title" style="font-size: 12px; margin-bottom: 10px; color: #ffd700;">⚙️ Настройки картинки</div>
+                            <div style="margin-bottom: 8px;">
+                                <label style="display: block; color: #ffd700; margin-bottom: 5px; font-size: 11px;">Размер: <span id="imageSizeValue">60px</span></label>
+                                <input type="range" id="headerImageSize" min="40" max="100" value="60" style="width: 100%; height: 4px; background: rgba(255,215,0,0.3); border-radius: 2px;" oninput="adjustHeaderImageSize(this.value)">
+                            </div>
+                            <div style="margin-bottom: 8px;">
+                                <label style="display: block; color: #ffd700; margin-bottom: 5px; font-size: 11px;">Форма: <span id="imageShapeValue">Круг</span></label>
+                                <select id="headerImageShape" style="width: 100%; padding: 4px; background: rgba(10, 25, 47, 0.8); border: 1px solid #4fc3f7; border-radius: 4px; color: white; font-size: 11px;" onchange="changeHeaderImageShape(this.value)">
+                                    <option value="circle">Круг</option>
+                                    <option value="square">Квадрат</option>
+                                    <option value="rounded">Закругленный квадрат</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display: block; color: #ffd700; margin-bottom: 5px; font-size: 11px;">Эффекты</label>
+                                <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                                    <button class="btn" onclick="toggleHeaderImageEffect('none')" style="font-size: 10px; padding: 3px 6px; background: #4fc3f7;">Без эффекта</button>
+                                    <button class="btn" onclick="toggleHeaderImageEffect('glow')" style="font-size: 10px; padding: 3px 6px; background: #9c27b0;">Свечение</button>
+                                    <button class="btn" onclick="toggleHeaderImageEffect('rotate')" style="font-size: 10px; padding: 3px 6px; background: #ff9800;">Вращение</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 🎨 РАЗДЕЛ ВНЕШНЕГО ВИДА - РАСШИРЕННЫЕ НАСТРОЙКИ -->
+                    <div class="setting-item">
+                        <div class="setting-title">🎨 Расширенные настройки внешнего вида</div>
+                        <div style="background: rgba(79, 195, 247, 0.05); border: 1px solid rgba(79, 195, 247, 0.2); border-radius: 8px; padding: 15px; margin-top: 10px; max-height: 500px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(79, 195, 247, 0.5) rgba(10, 25, 47, 0.2); position: relative;" id="themeSettingsContainer">
+
+                            <!-- Цвета темы -->
+                            <div class="theme-colors-section" style="margin-bottom: 20px;">
+                                <h5 style="color: #ffd700; margin-bottom: 10px; font-size: 12px;">🎨 Цвета темы сайта</h5>
+                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                                    <div>
+                                        <label style="display: block; color: #ffd700; margin-bottom: 5px; font-size: 11px;">Основной цвет:</label>
+                                        <input type="color" id="primaryColor" value="#ffd700" style="width: 100%; height: 35px; border: none; border-radius: 5px; cursor: pointer;">
+                                    </div>
+                                    <div>
+                                        <label style="display: block; color: #ffd700; margin-bottom: 5px; font-size: 11px;">Вторичный цвет:</label>
+                                        <input type="color" id="secondaryColor" value="#4fc3f7" style="width: 100%; height: 35px; border: none; border-radius: 5px; cursor: pointer;">
+                                    </div>
+                                    <div>
+                                        <label style="display: block; color: #ffd700; margin-bottom: 5px; font-size: 11px;">Цвет фона:</label>
+                                        <input type="color" id="bgColor" value="#0a192f" style="width: 100%; height: 35px; border: none; border-radius: 5px; cursor: pointer;">
+                                    </div>
+                                    <div>
+                                        <label style="display: block; color: #ffd700; margin-bottom: 5px; font-size: 11px;">Цвет текста:</label>
+                                        <input type="color" id="textColor" value="#ccd6f6" style="width: 100%; height: 35px; border: none; border-radius: 5px; cursor: pointer;">
+                                    </div>
+                                </div>
+                                <button onclick="applyThemeColors()" class="btn" style="width: 100%; margin-top: 10px; background: linear-gradient(135deg, #1a237e, #283593); color: white; font-size: 12px;">✅ Применить цвета темы</button>
+                            </div>
+
+                            <!-- Шрифты и типографика -->
+                            <div class="typography-section" style="margin-bottom: 20px;">
+                                <h5 style="color: #ffd700; margin-bottom: 10px; font-size: 12px;">🔤 Шрифты и типографика</h5>
+                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                                    <div>
+                                        <label style="display: block; color: #ffd700; margin-bottom: 5px; font-size: 11px;">Основной шрифт:</label>
+                                        <select id="adminMainFont" onchange="handleTypographyChange()" style="width: 100%; padding: 8px; background: rgba(10, 25, 47, 0.8); border: 1px solid #4fc3f7; border-radius: 4px; color: white; font-size: 11px;">
+                                            <optgroup label="Без засечек (Sans-Serif)">
+                                                <option value="'Arial', sans-serif" selected>Arial</option>
+                                                <option value="'Segoe UI', Tahoma, Geneva, Verdana, sans-serif">Segoe UI (Стандартный)</option>
+                                                <option value="'Roboto', sans-serif">Roboto</option>
+                                                <option value="'Comfortaa', sans-serif">Comfortaa (Скруглённый)</option>
+                                            </optgroup>
+                                            <optgroup label="С засечками (Serif)">
+                                                <option value="'Georgia', serif">Georgia</option>
+                                                <option value="'Times New Roman', serif">Times New Roman</option>
+                                                <option value="'Playfair Display', serif">Playfair Display (Элегантный)</option>
+                                            </optgroup>
+                                            <optgroup label="Декоративные и моноширинные">
+                                                <option value="'Fira Code', monospace">Fira Code (Моноширинный)</option>
+                                                <option value="'Lobster', cursive">Lobster (Рукописный)</option>
+                                            </optgroup>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="display: block; color: #ffd700; margin-bottom: 5px; font-size: 11px;">Размер шрифта:</label>
+                                        <select id="fontSize" onchange="handleTypographyChange()" style="width: 100%; padding: 8px; background: rgba(10, 25, 47, 0.8); border: 1px solid #4fc3f7; border-radius: 4px; color: white; font-size: 11px;">
+                                            <option value="14px">Маленький (14px)</option>
+                                            <option value="16px" selected>Средний (16px)</option>
+                                            <option value="18px">Большой (18px)</option>
+                                            <option value="20px">Очень большой (20px)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <script>
+                                    let typographyTimeout; // Переменная для хранения таймера
+
+                                    // Делаем функции глобальными
+                                    window.applyAndNotifyTypography = function() {
+                                        if (typeof applyTypography === 'function') {
+                                            applyTypography(); // Вызываем оригинальную функцию
+                                            const fontSelect = document.getElementById('adminMainFont');
+                                            if (fontSelect && typeof safeShowNotification === 'function') {
+                                                const selectedFontName = fontSelect.options[fontSelect.selectedIndex].text;
+                                                safeShowNotification(`🔤 Шрифт '${selectedFontName}' успешно применен!`, 'success');
+                                            } else if (fontSelect && typeof showNotification === 'function') {
+                                                const selectedFontName = fontSelect.options[fontSelect.selectedIndex].text;
+                                                showNotification(`🔤 Шрифт '${selectedFontName}' успешно применен!`, 'info');
+                                            }
+                                        }
+                                    }
+
+                                    /**
+                                     * Обрабатывает изменение шрифта или его размера с задержкой.
+                                     */
+                                    window.handleTypographyChange = function() {
+                                        clearTimeout(typographyTimeout); // Сбрасываем предыдущий таймер, если он был
+                                        
+                                        // Показываем временное уведомление
+                                        if (typeof safeShowNotification === 'function') {
+                                            safeShowNotification('⏳ Применяем шрифт через 2 секунды...', 'info');
+                                        } else if (typeof showNotification === 'function') {
+                                            showNotification('⏳ Применяем шрифт через 2 секунды...', 'info', 2000);
+                                        }
+
+                                        // Устанавливаем новый таймер на 2 секунды
+                                        typographyTimeout = setTimeout(window.applyAndNotifyTypography, 2000);
+                                    }
+
+                                    /**
+                                     * ✅ FIX: Добавляем недостающую функцию applyTypography.
+                                     * Она считывает выбранный шрифт и размер и применяет их через CSS переменные.
+                                     */
+                                    window.applyTypography = function() {
+                                        const mainFont = document.getElementById('adminMainFont').value;
+                                        const fontSize = document.getElementById('fontSize').value;
+                                        const root = document.documentElement;
+
+                                        root.style.setProperty('--main-font', mainFont);
+                                        root.style.setProperty('--font-size', fontSize);
+                                        
+                                        // Также применяем напрямую к элементам для надежности
+                                        document.body.style.fontFamily = mainFont;
+                                        document.body.style.fontSize = fontSize;
+                                        
+                                        // Применяем ко всем текстовым элементам
+                                        const textElements = document.querySelectorAll('body, html, div, span, p, a, h1, h2, h3, h4, h5, h6, li, td, th, label, input, select, textarea, button');
+                                        textElements.forEach(element => {
+                                            element.style.fontFamily = mainFont;
+                                            element.style.fontSize = fontSize;
+                                        });
+                                        
+                                        console.log(`🔤 Применены шрифты: ${mainFont} (${fontSize})`);
+                                    }
+                                </script>
+                            </div>
+
+                            <!-- Анимации и эффекты -->
+                            <div class="animations-section" style="margin-bottom: 20px;">
+                                <h5 style="color: #ffd700; margin-bottom: 10px; font-size: 12px;">✨ Анимации и эффекты</h5>
+                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                                    <div>
+                                        <label style="display: block; color: #ffd700; margin-bottom: 5px; font-size: 11px;">Скорость анимаций:</label>
+                                        <select id="animationSpeed" style="width: 100%; padding: 8px; background: rgba(10, 25, 47, 0.8); border: 1px solid #4fc3f7; border-radius: 4px; color: white; font-size: 11px;">
+                                            <option value="0.1s">Очень быстро (0.1s)</option>
+                                            <option value="0.3s" selected>Нормально (0.3s)</option>
+                                            <option value="0.5s">Медленно (0.5s)</option>
+                                            <option value="1s">Очень медленно (1s)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="display: block; color: #ffd700; margin-bottom: 5px; font-size: 11px;">Интенсивность эффектов:</label>
+                                        <select id="effectIntensity" style="width: 100%; padding: 8px; background: rgba(10, 25, 47, 0.8); border: 1px solid #4fc3f7; border-radius: 4px; color: white; font-size: 11px;">
+                                            <option value="0.3">Слабые</option>
+                                            <option value="0.5" selected>Средние</option>
+                                            <option value="0.8">Сильные</option>
+                                            <option value="1.0">Максимальные</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div style="margin-top: 10px;">
+                                    <label style="display: block; color: #ffd700; margin-bottom: 8px; font-size: 11px;">
+                                        <input type="checkbox" id="enableShadows" checked style="margin-right: 8px;">Включить тени элементов
+                                    </label>
+                                    <label style="display: block; color: #ffd700; margin-bottom: 8px; font-size: 11px;">
+                                        <input type="checkbox" id="enableGlows" checked style="margin-right: 8px;">Включить свечение
+                                    </label>
+                                </div>
+                                <button onclick="applyAnimations()" class="btn" style="width: 100%; margin-top: 10px; background: #9c27b0; color: white; font-size: 12px;">🎭 Применить эффекты</button>
+                            </div>
+
+                            <!-- Настройки карточек модов -->
+                            <div class="mod-cards-section" style="margin-bottom: 20px;">
+                                <h5 style="color: #ffd700; margin-bottom: 10px; font-size: 12px;">🃏 Карточки модов</h5>
+                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                                    <div>
+                                        <label style="display: block; color: #ffd700; margin-bottom: 5px; font-size: 11px;">Стиль карточек:</label>
+                                        <select id="cardStyle" style="width: 100%; padding: 8px; background: rgba(10, 25, 47, 0.8); border: 1px solid #4fc3f7; border-radius: 4px; color: white; font-size: 11px;">
+                                            <option value="modern" selected>Современный</option>
+                                            <option value="classic">Классический</option>
+                                            <option value="minimal">Минималистичный</option>
+                                            <option value="compact">Компактный</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="display: block; color: #ffd700; margin-bottom: 5px; font-size: 11px;">Цвет карточек:</label>
+                                        <input type="color" id="cardColor" value="#1a2f5e" style="width: 100%; height: 35px; border: none; border-radius: 5px; cursor: pointer;">
+                                    </div>
+                                </div>
+                                <button onclick="applyModCardsSettings()" class="btn" style="width: 100%; margin-top: 10px; background: #2196f3; color: white; font-size: 12px;">🎮 Применить настройки карточек</button>
+                            </div>
+
+                            <!-- Настройки кнопок -->
+                            <div class="buttons-section" style="margin-bottom: 20px;">
+                                <h5 style="color: #ffd700; margin-bottom: 10px; font-size: 12px;">🔘 Кнопки сайта</h5>
+                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                                    <div>
+                                        <label style="display: block; color: #ffd700; margin-bottom: 5px; font-size: 11px;">Форма кнопок:</label>
+                                        <select id="buttonShape" style="width: 100%; padding: 8px; background: rgba(10, 25, 47, 0.8); border: 1px solid #4fc3f7; border-radius: 4px; color: white; font-size: 11px;">
+                                            <option value="rounded" selected>Закругленные</option>
+                                            <option value="square">Квадратные</option>
+                                            <option value="pill">Капсульные</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="display: block; color: #ffd700; margin-bottom: 5px; font-size: 11px;">Размер кнопок:</label>
+                                        <select id="buttonSize" style="width: 100%; padding: 8px; background: rgba(10, 25, 47, 0.8); border: 1px solid #4fc3f7; border-radius: 4px; color: white; font-size: 11px;">
+                                            <option value="small">Маленькие</option>
+                                            <option value="medium" selected>Средние</option>
+                                            <option value="large">Большие</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <button onclick="applyButtonSettings()" class="btn" style="width: 100%; margin-top: 10px; background: #ff5722; color: white; font-size: 12px;">🎯 Применить настройки кнопок</button>
+                            </div>
+
+                            <!-- Предустановленные темы -->
+                            <div class="presets-section">
+                                <h5 style="color: #ffd700; margin-bottom: 10px; font-size: 12px;">🎭 Предустановленные темы</h5>
+                                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                                    <button onclick="applyThemePreset('dark')" class="btn" style="font-size: 10px; padding: 6px; background: #1a2f5e;">🌙 Темная</button>
+                                    <button onclick="applyThemePreset('light')" class="btn" style="font-size: 10px; padding: 6px; background: #4fc3f7;">☀️ Светлая</button>
+                                    <button onclick="applyThemePreset('colorful')" class="btn" style="font-size: 10px; padding: 6px; background: #e91e63;">🌈 Яркая</button>
+                                    <button onclick="applyThemePreset('blue')" class="btn" style="font-size: 10px; padding: 6px; background: #2196f3;">🔵 Синяя</button>
+                                    <button onclick="applyThemePreset('green')" class="btn" style="font-size: 10px; padding: 6px; background: linear-gradient(135deg, #1a237e, #283593);">🟢 Тёмно-синяя</button>
+                                    <button onclick="applyThemePreset('purple')" class="btn" style="font-size: 10px; padding: 6px; background: #9c27b0;">🟣 Фиолетовая</button>
+                                </div>
+                                <button onclick="resetToDefault()" class="btn" style="width: 100%; margin-top: 10px; background: #f44336; color: white; font-size: 12px;">🔄 Сбросить настройки</button>
+                            </div>
+                            
+                            <!-- Кнопка прокрутки вниз -->
+                            <button class="scroll-to-bottom-btn" onclick="scrollThemeSettingsToBottom()" title="Вниз">
+                                ↓
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 🎯 Управление бегущей строкой -->
+                    <div class="setting-item">
+                        <div class="setting-title">📢 Бегущая строка</div>
+                        <div style="background: rgba(0, 184, 148, 0.05); border: 1px solid rgba(0, 184, 148, 0.2); border-radius: 8px; padding: 15px; margin-top: 10px;">
+                            <p style="color: #8892b0; font-size: 11px; margin-bottom: 10px;">
+                                Управление рекламой, предупреждениями, VIP-уведомлениями и новинками
+                            </p>
+                            <button onclick="selectAdminSection('ticker')" class="btn" style="width: 100%; background: linear-gradient(135deg, #00b894, #00cec9); color: #000; font-weight: bold; font-size: 12px;">
+                                🎯 Управление бегущей строкой
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Управление контентом -->
+                <div class="admin-section">
+                    <h3 style="color: #ffd700; margin-bottom: 20px; text-align: center;">📋 Управление контентом</h3>
+
+                    <div class="setting-item">
+                        <button class="btn" onclick="showUsersManagement()" style="width: 100%; margin: 8px 0; background: linear-gradient(135deg, #2196f3, #21cbf3); color: white;">👥 Пользователи</button>
+                        <button class="btn" onclick="showPasswordResetUsers()" style="width: 100%; margin: 8px 0; background: linear-gradient(135deg, #4fc3f7, #29b6f6); color: white;">🔑 Сброс паролей</button>
+                        <button class="btn" onclick="showModsManagement()" style="width: 100%; margin: 8px 0; background: linear-gradient(135deg, #ff9800, #ffc107); color: white;">🛠️ Моды</button>
+                        <button class="btn" onclick="selectAdminSection('shop')" style="width: 100%; margin: 8px 0; background: linear-gradient(135deg, #1a237e, #283593); color: white;">🛒 Магазин</button>
+                        <button class="btn" onclick="selectAdminSection('feedback')" style="width: 100%; margin: 8px 0; background: linear-gradient(135deg, #ff5722, #ff9800); color: white;">✉️ Обратная связь</button>
+                        <button class="btn" onclick="selectAdminSection('ticker')" style="width: 100%; margin: 8px 0; background: linear-gradient(135deg, #00b894, #00cec9); color: #000; font-weight: bold;">🎯 Бегущая строка</button>
+                        <button class="btn" onclick="manageNewsBlocks()" style="width: 100%; margin: 8px 0; background: linear-gradient(135deg, #9c27b0, #e91e63); color: white;">📰 Новости</button>
+                    </div>
+
+                    <div class="setting-item" style="margin-top: 20px;">
+                        <div class="setting-title">Статистика сайта</div>
+                        <div style="background: rgba(79, 195, 247, 0.1); border-radius: 8px; padding: 15px; text-align: center;">
+                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                                <div style="background: rgba(10, 25, 47, 0.8); padding: 10px; border-radius: 5px;">
+                                    <div style="color: #4fc3f7; font-size: 1.5rem; font-weight: bold;" id="totalUsers">0</div>
+                                    <div style="color: #8892b0; font-size: 0.8rem;">Пользователей</div>
+                                </div>
+                                <div style="background: rgba(10, 25, 47, 0.8); padding: 10px; border-radius: 5px;">
+                                    <div style="color: #4CAF50; font-size: 1.5rem; font-weight: bold;" id="totalMods">0</div>
+                                    <div style="color: #8892b0; font-size: 0.8rem;">Модов</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Детальная информация -->
+                    <div id="adminDetails" style="display: none; margin-top: 20px;">
+                        <div class="setting-title">Детали</div>
+                        <div id="adminDetailsContent" style="background: rgba(79, 195, 247, 0.05); border-radius: 5px; padding: 15px; border: 1px solid rgba(79, 195, 247, 0.2);"></div>
+                    </div>
+                </div>
+
+                <!-- Управление обратной связью -->
+                <div class="admin-section" id="feedbackManagementSection" style="display: none;">
+                    <!-- Контент будет загружен через JavaScript -->
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255, 215, 0, 0.3);">
+                <div style="color: #ffd700; margin-bottom: 10px;">
+                    👑 Владелец сайта: ldjone@mail.ru | Полный доступ к системе
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <button onclick="showAdminPanel()" class="btn" style="background: #ff9800; padding: 10px 20px; margin-right: 10px;">🛠️ Админ-панель</button>
+                </div>
+                <div style="font-size: 12px; color: #8892b0;">
+                    Доступ к админ-панели по ролям
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Panel Initialization -->
+    <script>
+        // Wait for all scripts to load
+        window.addEventListener('load', function() {
+            console.log('🔧 [Admin] All resources loaded, initializing admin panel...');
+            
+            // Check if admin panel elements exist
+            const adminModal = document.getElementById('adminModal');
+            const adminButton = document.querySelector('[onclick*="showAdminPanel"]');
+            
+            if (!adminModal) {
+                console.error('❌ [Admin] Admin modal not found!');
+            }
+            
+            if (!adminButton) {
+                console.error('❌ [Admin] Admin button not found!');
+            } else {
+                // Add click event to admin button
+                adminButton.onclick = function() {
+                    console.log('🔄 [Admin] Toggling admin panel...');
+                    if (adminModal.style.display === 'none' || !adminModal.style.display) {
+                        adminModal.style.display = 'block';
+                        // Trigger any admin panel initialization here
+                        if (window.showAdminPanel) {
+                            showAdminPanel();
+                        } else {
+                            console.error('❌ [Admin] showAdminPanel function not found!');
+                            // Try to load admin panel scripts
+                            const script = document.createElement('script');
+                            script.src = 'js/admin-panel-fixed.js';
+                            script.onload = function() {
+                                if (window.showAdminPanel) {
+                                    showAdminPanel();
+                                } else {
+                                    console.error('❌ [Admin] Failed to load admin panel functions!');
+                                }
+                            };
+                            document.head.appendChild(script);
+                        }
+                    } else {
+                        adminModal.style.display = 'none';
+                    }
+                };
+                
+                console.log('✅ [Admin] Admin button initialized');
+            }
+            
+            // Check if user is admin and show admin button
+            async function checkAdminStatus() {
+                try {
+                    const { data: { user } } = await window.supabase.auth.getUser();
+                    if (user) {
+                        const { data: profile } = await window.supabase
+                            .from('profiles')
+                            .select('role')
+                            .eq('id', user.id)
+                            .single();
+                            
+                        if (profile && (profile.role === 'admin' || profile.role === 'moderator')) {
+                            const adminBtn = document.querySelector('.admin-btn');
+                            if (adminBtn) adminBtn.style.display = 'block';
+                            console.log('👑 [Admin] Admin user detected');
+                        }
+                    }
+                } catch (error) {
+                    console.error('❌ [Admin] Error checking admin status:', error);
+                }
+            }
+            
+            // Run admin check
+            checkAdminStatus();
+        });
+        
+        // Fallback admin panel toggle function
+        function toggleAdminPanel() {
+            const adminModal = document.getElementById('adminModal');
+            if (adminModal) {
+                adminModal.style.display = adminModal.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+    </script>
+
+    <!-- Глобальная панель администратора (вне всех контейнеров) -->
+    <div id="admin-panel" style="display: none; position: fixed; top: 50%; left: 50%; width: 1200px; height: 800px; background: rgba(10, 25, 47, 0.98); z-index: 99999; color: #ccd6f6; backdrop-filter: blur(10px); transform: translate(-50%, -50%) scale(0.8); opacity: 0; transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94); overflow: hidden; box-shadow: 0 25px 80px rgba(0, 0, 0, 0.6); border-radius: 25px; border: 3px solid rgba(79, 195, 247, 0.4);" class="admin-panel">
+        <div style="display: flex; flex-direction: column; height: 100%;">
+            <!-- Заголовок админ-панели -->
+            <div style="background: linear-gradient(270deg, #ff8c00, #d32f2f, #ffd700, #d32f2f, #ff8c00); background-size: 400% 400%; animation: redGoldGradientShift 4s ease infinite; padding: 20px; border-bottom: 3px solid #ff8c00; box-shadow: 0 4px 20px rgba(255, 140, 0, 0.5);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2 style="margin: 0; color: #ffd700; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); font-size: 24px;">🔧 ПАНЕЛЬ АДМИНИСТРАТОРА</h2>
+                    <button id="admin-panel-close-button" onclick="window.hideAdminPanel()" style="background: linear-gradient(45deg, #f44336, #d32f2f); color: white; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-size: 18px; font-weight: bold; box-shadow: 0 4px 12px rgba(244, 67, 54, 0.4); transition: all 0.3s ease;">&times; ЗАКРЫТЬ</button>
+                </div>
+            </div>
+            
+            <!-- Навигация и контент -->
+            <div style="flex: 1; display: flex; overflow: hidden;">
+                <!-- Боковая навигация -->
+                <div style="width: 280px; background: rgba(0, 0, 0, 0.4); border-right: 2px solid #ff8c00; padding: 20px 0; overflow-y: auto;">
+                    <div class="admin-nav" style="display: flex; flex-direction: column; gap: 15px;">
+                        <div style="padding: 0 20px; margin-bottom: 20px;">
+                            <h3 style="color: #ffd700; margin: 0; font-size: 16px; text-align: center; text-transform: uppercase; letter-spacing: 1px;">Управление</h3>
+                        </div>
+                        <button class="admin-nav-btn" onclick="showModsManagement()" style="background: linear-gradient(270deg, #4CAF50, #45a049); color: white; border: none; padding: 15px 25px; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: bold; margin: 0 20px; transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);">🎮 Моды</button>
+                        <button class="admin-nav-btn" onclick="showUsersManagement()" style="background: linear-gradient(270deg, #2196F3, #1976D2); color: white; border: none; padding: 15px 25px; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: bold; margin: 0 20px; transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);">👥 Пользователи</button>
+                        <button class="admin-nav-btn" onclick="showVipManagement()" style="background: linear-gradient(270deg, #ff9800, #e68900); color: white; border: none; padding: 15px 25px; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: bold; margin: 0 20px; transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);">🛒 VIP Магазин</button>
+                        <button class="admin-nav-btn" onclick="showSettingsManagement()" style="background: linear-gradient(270deg, #9c27b0, #7b1fa2); color: white; border: none; padding: 15px 25px; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: bold; margin: 0 20px; transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(156, 39, 176, 0.3);">⚙️ Настройки</button>
+                        <button class="admin-nav-btn" onclick="selectAdminSection('ticker')" style="background: linear-gradient(270deg, #00b894, #00cec9); color: white; border: none; padding: 15px 25px; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: bold; margin: 0 20px; transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(0, 184, 148, 0.3);">🎯 Бегущая строка</button>
+                    </div>
+                </div>
+                
+                <!-- Основная контентная область -->
+                <div id="admin-content-area" class="admin-content-area" style="flex: 1; padding: 30px; overflow-y: auto; background: rgba(10, 25, 47, 0.6);">
+                    <div style="color: #00ff41; padding: 30px; text-align: center; background: rgba(0, 255, 65, 0.1); border-radius: 15px; border: 2px solid rgba(0, 255, 65, 0.3);">
+                        <h4 style="margin: 0 0 15px 0; font-size: 24px;">🎉 АДМИН-ПАНЕЛЬ ЗАГРУЖЕНА!</h4>
+                        <p style="margin: 0; font-size: 18px; opacity: 0.9;">Выберите раздел для управления системой.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Оверлей для админ-панели -->
+    <div id="admin-panel-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 99998;"></div>
+
+    <!-- Единая система бегущей строки -->
+    <script src="js/unified_ticker_ui.js"></script>
+    <script src="js/ticker_edit_functions.js"></script>
+    
+
+    
+</body>
+</html>
