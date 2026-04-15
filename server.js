@@ -12,7 +12,7 @@ const io = new Server(server, {
   }
 });
 
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = new Map();
 
