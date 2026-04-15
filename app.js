@@ -140,15 +140,17 @@ window.addEventListener('load', () => {
                   addLogEntry('Приглашение', `Найдена комната на сервере: ${foundRoom.name}`);
                   joinRoomById(pendingRoom);
                 } else {
-                  // Room doesn't exist, try to join anyway (server will handle)
-                  addLogEntry('Приглашение', `Комната ${pendingRoom} не найдена в списке, пробуем присоединиться...`);
-                  joinRoomById(pendingRoom);
+                  // Room doesn't exist - stay in lobby, show error
+                  addLogEntry('Ошибка', `Комната ${pendingRoom} не найдена на сервере`);
+                  alert(`Комната ${pendingRoom} не найдена. Возможно, она была удалена.`);
+                  // Stay in lobby, don't auto-create room
                 }
               })
               .catch(err => {
                 console.error('Error checking room:', err);
-                // Try to join anyway
-                joinRoomById(pendingRoom);
+                // On error, stay in lobby
+                addLogEntry('Ошибка', 'Не удалось проверить комнату на сервере');
+                alert('Ошибка подключения к серверу. Остаёмся в лобби.');
               });
           }
         }
@@ -289,12 +291,10 @@ async function loadServerRooms() {
     return false;
   };
   
-  // Keep only local rooms that:
-  // 1. Exist on server, OR
-  // 2. Were created by current user AND are not ghost rooms
+  // AGGRESSIVE: Remove ALL ghost rooms regardless of creator!
   const cleanedLocalRooms = localRooms.filter(r => {
     if (isGhostRoom(r)) {
-      console.log('[GHOST] Filtering out ghost room:', r.id);
+      console.log('[GHOST] DELETING ghost room:', r.id, 'creator:', r.creator);
       return false;
     }
     return serverRoomIds.has(r.id) || r.creator === currentUser?.username;
@@ -544,6 +544,12 @@ function createRoom() {
   const name = document.getElementById('newRoomName').value.trim();
   if (!name) {
     alert('Введите название комнаты!');
+    return;
+  }
+  
+  // Prevent creating ghost rooms (name that looks like ID)
+  if (/^[A-Z0-9]{8}$/.test(name)) {
+    alert('Название комнаты не должно выглядеть как ID (8 заглавных букв/цифр)! Придумайте нормальное название.');
     return;
   }
   
