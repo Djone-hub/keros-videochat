@@ -80,8 +80,15 @@ io.on('connection', (socket) => {
     
     if (!rooms.has(roomId)) {
       // If room exists in store, use that name
-      const displayName = storedRoom ? storedRoom.name : (roomName || roomId);
-      rooms.set(roomId, { name: displayName, users: new Set() });
+      // Only create if room exists in persistent store OR roomName is provided (explicit creation)
+      if (storedRoom || roomName) {
+        const displayName = storedRoom ? storedRoom.name : (roomName || roomId);
+        rooms.set(roomId, { name: displayName, users: new Set() });
+      } else {
+        // Room doesn't exist anywhere and no name provided - reject join
+        socket.emit('room-error', { message: 'Комната не найдена' });
+        return;
+      }
     } else if (roomName && roomName !== roomId) {
       // Update room name if provided and different from ID
       rooms.get(roomId).name = roomName;
@@ -220,7 +227,12 @@ io.on('connection', (socket) => {
   socket.on('delete-room', (roomId) => {
     // Only creator can delete
     const storedRoom = roomStore.get(roomId);
-    if (storedRoom && storedRoom.creator === socket.userName) {
+    const activeRoom = rooms.get(roomId);
+    
+    // Check both stored room and active room for creator
+    const creator = storedRoom?.creator || activeRoom?.creator;
+    
+    if (creator === socket.userName) {
       roomStore.delete(roomId);
       if (rooms.has(roomId)) {
         rooms.delete(roomId);
@@ -229,6 +241,9 @@ io.on('connection', (socket) => {
       io.emit('room-deleted', roomId);
       io.emit('rooms-updated');
       console.log(`Room ${roomId} deleted by ${socket.userName}`);
+    } else {
+      console.log(`Delete rejected: ${socket.userName} is not creator of ${roomId}`);
+      socket.emit('room-error', { message: 'Только создатель может удалить комнату' });
     }
   });
 

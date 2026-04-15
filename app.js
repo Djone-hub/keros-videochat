@@ -486,7 +486,8 @@ function createRoom() {
   
   const roomId = generateRoomId();
   const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
-  rooms.push({ id: roomId, name, created: Date.now(), creator: currentUser.username, avatar: newRoomAvatar });
+  const newRoom = { id: roomId, name, created: Date.now(), creator: currentUser.username, avatar: newRoomAvatar };
+  rooms.push(newRoom);
   localStorage.setItem('keroschat_rooms', JSON.stringify(rooms));
   
   // Also store room info for server-side search
@@ -908,6 +909,15 @@ socket.on('room-deleted', (roomId) => {
   if (currentRoom === roomId) {
     leaveRoom();
     alert('Эта комната была удалена создателем.');
+  }
+});
+
+socket.on('room-error', (error) => {
+  addLogEntry('Ошибка', error.message);
+  alert(error.message);
+  // If in room, go back to lobby
+  if (currentRoom) {
+    leaveRoom();
   }
 });
 
