@@ -323,7 +323,13 @@ async function createPeerConnection(userId) {
   pc.ontrack = (e) => {
     const stream = e.streams[0];
     socket.emit('get-user-name', userId, (name) => {
-      addVideoStream(userId, stream, name || 'Участник');
+      const userName = name || 'Участник';
+      // Add to active users if not exists
+      if (!activeUsers.has(userId)) {
+        activeUsers.set(userId, { id: userId, name: userName });
+      }
+      addVideoStream(userId, stream, userName);
+      updateActiveUsers();
     });
   };
   
@@ -382,6 +388,7 @@ socket.on('offer', async (userId, offer) => {
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
   socket.emit('answer', userId, answer);
+  updateActiveUsers();
 });
 
 socket.on('answer', async (userId, answer) => {

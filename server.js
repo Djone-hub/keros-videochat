@@ -79,6 +79,20 @@ io.on('connection', (socket) => {
     console.log(`User left room ${roomId}`);
   });
 
+  socket.on('get-user-name', (userId, callback) => {
+    if (rooms.has(socket.roomId)) {
+      const room = rooms.get(socket.roomId);
+      const user = Array.from(room).find(u => u.id === userId);
+      if (user) {
+        callback(user.name);
+      } else {
+        callback(null);
+      }
+    } else {
+      callback(null);
+    }
+  });
+
   socket.on('disconnect', () => {
     if (socket.roomId && rooms.has(socket.roomId)) {
       const room = rooms.get(socket.roomId);
