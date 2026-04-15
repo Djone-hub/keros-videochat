@@ -168,37 +168,43 @@ function showLobby() {
     avatarEl.textContent = currentUser.username.charAt(0).toUpperCase();
   }
   
-  // Load rooms
-  loadRoomsList();
+  // Load rooms from server
+  loadServerRooms();
 }
 
-let allRooms = [];
-let newRoomAvatar = null;
+// Store server rooms
+let serverRooms = [];
 
-function loadRoomsList(filter = '') {
-  allRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+function loadServerRooms() {
+  // Get rooms from server
+  socket.emit('get-available-rooms', (rooms) => {
+    serverRooms = rooms || [];
+    // Merge with local rooms
+    const localRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+    
+    // Merge server rooms with local rooms (local takes precedence for same ID)
+    const mergedMap = new Map();
+    serverRooms.forEach(r => mergedMap.set(r.id, r));
+    localRooms.forEach(r => mergedMap.set(r.id, r));
+    
+    allRooms = Array.from(mergedMap.values());
+    renderRoomsList(allRooms);
+  });
+}
+
+function renderRoomsList(roomsToRender) {
   const list = document.getElementById('roomsList');
   list.innerHTML = '';
   
-  // Filter rooms if search term provided (by name, ID, or creator username)
-  const rooms = filter 
-    ? allRooms.filter(r => r.name.toLowerCase().includes(filter.toLowerCase()) || 
-                          r.id.toLowerCase().includes(filter.toLowerCase()) ||
-                          (r.creator && r.creator.toLowerCase().includes(filter.toLowerCase())))
-    : allRooms;
-  
-  if (rooms.length === 0) {
-    list.innerHTML = filter 
-      ? '<p style="color: #72767d; padding: 16px; text-align: center;">Ничего не найдено</p>'
-      : '<p style="color: #72767d; padding: 16px; text-align: center;">Нет комнат. Создайте первую!</p>';
+  if (roomsToRender.length === 0) {
+    list.innerHTML = '<p style="color: #72767d; padding: 16px; text-align: center;">Нет комнат. Создайте первую!</p>';
     return;
   }
   
-  rooms.forEach(room => {
+  roomsToRender.forEach(room => {
     const item = document.createElement('div');
     item.className = 'room-item';
     item.onclick = (e) => {
-      // Don't join if clicked on action buttons
       if (e.target.closest('.room-actions')) return;
       joinRoomById(room.id);
     };
@@ -211,7 +217,6 @@ function loadRoomsList(filter = '') {
       </div>
     ` : '';
     
-    // Room icon/avatar
     const iconHtml = room.avatar ? 
       `<img src="${room.avatar}" alt="${room.name}">` : 
       '#';
@@ -220,11 +225,42 @@ function loadRoomsList(filter = '') {
       <div class="icon">${iconHtml}</div>
       <div class="info">
         <div class="name">${room.name}</div>
-        <div class="count">ID: ${room.id} ${isCreator ? '(Вы создатель)' : ''}</div>
+        <div class="count">ID: ${room.id} ${isCreator ? '(Вы создатель)' : `Создатель: ${room.creator || 'Неизвестен'}`}</div>
       </div>
       ${actionsHtml}
     `;
     list.appendChild(item);
+  });
+}
+
+let allRooms = [];
+let newRoomAvatar = null;
+
+function loadRoomsList(filter = '') {
+  // Use server rooms if available, otherwise fall back to local
+  const rooms = filter 
+    ? allRooms.filter(r => r.name.toLowerCase().includes(filter.toLowerCase()) || 
+                          r.id.toLowerCase().includes(filter.toLowerCase()) ||
+                          (r.creator && r.creator.toLowerCase().includes(filter.toLowerCase())))
+    : allRooms;
+  
+  renderRoomsList(rooms);
+}
+
+function searchRooms(query) {
+  if (!query) {
+    loadRoomsList();
+    return;
+  }
+  
+  // Search on server
+  socket.emit('search-rooms', query, (results) => {
+    if (results && results.length > 0) {
+      renderRoomsList(results);
+    } else {
+      // Fall back to local search
+      loadRoomsList(query);
+    }
   });
 }
 
@@ -301,14 +337,12 @@ function deleteRoom(roomId) {
   
   if (filteredRooms.length !== rooms.length) {
     localStorage.setItem('keroschat_rooms', JSON.stringify(filteredRooms));
-    loadRoomsList();
+    // Notify server to delete room
+    socket.emit('delete-room', roomId);
+    loadServerRooms();
     addLogEntry('Комната', `Комната ${roomId} удалена`);
     alert('Комната удалена!');
   }
-}
-
-function searchRooms(query) {
-  loadRoomsList(query);
 }
 
 function showCreateRoomModal() {
@@ -356,8 +390,11 @@ function createRoom() {
   rooms.push({ id: roomId, name, created: Date.now(), creator: currentUser.username, avatar: newRoomAvatar });
   localStorage.setItem('keroschat_rooms', JSON.stringify(rooms));
   
+  // Also store room info for server-side search
+  allRooms.push({ id: roomId, name, creator: currentUser.username, avatar: newRoomAvatar });
+  
   hideCreateRoomModal();
-  loadRoomsList();
+  loadServerRooms();
   joinRoomById(roomId);
 }
 
@@ -370,10 +407,13 @@ function generateRoomId() {
 async function joinRoomById(roomId) {
   currentRoom = roomId;
   
-  // Find room name from stored rooms
+  // Find room name from stored rooms (local or server)
   const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
-  const room = rooms.find(r => r.id === roomId);
+  const localRoom = rooms.find(r => r.id === roomId);
+  const serverRoom = serverRooms.find(r => r.id === roomId);
+  const room = localRoom || serverRoom;
   currentRoomName = room ? room.name : roomId;
+  const roomAvatar = room ? room.avatar : null;
   
   addLogEntry('Комната', `Подключение к комнате: ${currentRoomName} (${roomId})`);
   
@@ -399,8 +439,8 @@ async function joinRoomById(roomId) {
     return;
   }
   
-  // Join socket room with avatar and room name
-  socket.emit('join-room', roomId, currentUser.username, userAvatar, currentRoomName);
+  // Join socket room with avatar, room name and room avatar
+  socket.emit('join-room', roomId, currentUser.username, userAvatar, currentRoomName, roomAvatar);
   
   // Show room UI
   showRoomUI();
@@ -718,12 +758,23 @@ socket.on('room-info', (room) => {
   // Update room name from server
   if (room && room.name) {
     currentRoomName = room.name;
+    
     // Update display if already in room
     const displayEl = document.getElementById('displayRoomId');
     if (displayEl && currentRoom) {
       displayEl.textContent = currentRoomName;
     }
+    
+    // Update room avatar in header if provided
+    const avatarEl = document.getElementById('roomHeaderAvatar');
+    if (avatarEl && room.avatar) {
+      avatarEl.innerHTML = `<img src="${room.avatar}" alt="${room.name}">`;
+    }
+    
     addLogEntry('Комната', `Получена информация о комнате: ${room.name}`);
+    
+    // Refresh room list to show updated info
+    loadServerRooms();
   }
 });
 
