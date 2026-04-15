@@ -64,6 +64,21 @@ io.on('connection', (socket) => {
     socket.to(socket.roomId).emit('screen-share-stopped', socket.id);
   });
 
+  socket.on('leave-room', (roomId) => {
+    socket.leave(roomId);
+    if (rooms.has(roomId)) {
+      const room = rooms.get(roomId);
+      room.forEach(user => {
+        if (user.id === socket.id) room.delete(user);
+      });
+      if (room.size === 0) {
+        rooms.delete(roomId);
+      }
+      socket.to(roomId).emit('user-left', socket.id);
+    }
+    console.log(`User left room ${roomId}`);
+  });
+
   socket.on('disconnect', () => {
     if (socket.roomId && rooms.has(socket.roomId)) {
       const room = rooms.get(socket.roomId);

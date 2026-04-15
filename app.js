@@ -16,15 +16,39 @@ const iceServers = {
   ]
 };
 
-// Sound effects
+// Soft sound effects ( pleasant tones instead of harsh clicks )
 const sounds = {
-  micOn: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZURE'),
-  micOff: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZURE'),
-  screenOn: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZURE'),
-  screenOff: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZURE'),
-  join: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZURE'),
-  leave: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZURE')
+  micOn: createSoftTone(600, 0.15, 'sine'),      // Soft high tone
+  micOff: createSoftTone(400, 0.15, 'sine'),     // Soft low tone
+  screenOn: createSoftTone(500, 0.2, 'triangle'),  // Medium pleasant
+  screenOff: createSoftTone(350, 0.2, 'triangle'),// Lower pleasant
+  join: createSoftTone(700, 0.3, 'sine'),        // Happy high
+  leave: createSoftTone(300, 0.3, 'sine')          // Sad low
 };
+
+function createSoftTone(frequency, duration, type = 'sine') {
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  return {
+    play: () => {
+      const osc = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      
+      osc.connect(gain);
+      gain.connect(audioContext.destination);
+      
+      osc.frequency.value = frequency;
+      osc.type = type;
+      
+      // Soft envelope - no harsh clicks
+      gain.gain.setValueAtTime(0, audioContext.currentTime);
+      gain.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+      
+      osc.start(audioContext.currentTime);
+      osc.stop(audioContext.currentTime + duration);
+    }
+  };
+}
 
 function playSound(soundName) {
   const sound = sounds[soundName];
@@ -79,16 +103,66 @@ function copyLink() {
 
 function leaveRoom() {
   playSound('leave');
+  disconnectFromRoom();
+  showLobby();
+}
+
+function disconnectFromRoom() {
   if (localStream) {
     localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
   }
   if (screenStream) {
     screenStream.getTracks().forEach(t => t.stop());
+    screenStream = null;
   }
   peers.forEach(pc => pc.close());
   peers.clear();
-  socket.disconnect();
-  location.reload();
+  activeUsers.clear();
+  
+  // Leave socket room but keep connection
+  if (roomId) {
+    socket.emit('leave-room', roomId);
+  }
+}
+
+function showLobby() {
+  // Hide room, show login
+  document.getElementById('roomScreen').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  
+  // Clear video grid and chat
+  document.getElementById('videoGrid').innerHTML = '';
+  document.getElementById('chatMessages').innerHTML = '';
+  document.getElementById('activeUsers').innerHTML = `
+    <div class="user-item">
+      <div class="user-avatar">?</div>
+      <span class="user-name">Не в комнате</span>
+      <div class="user-status inactive"></div>
+    </div>
+  `;
+  
+  // Reset state
+  roomId = '';
+  isMicOn = true;
+  isCamOn = true;
+  isScreenSharing = false;
+  
+  // Reset buttons
+  const micBtn = document.getElementById('micBtn');
+  micBtn.classList.remove('danger');
+  micBtn.querySelector('.label').textContent = 'Мик';
+  
+  const camBtn = document.getElementById('camBtn');
+  camBtn.classList.remove('danger');
+  camBtn.querySelector('.label').textContent = 'Камера';
+  
+  const screenBtn = document.getElementById('screenBtn');
+  screenBtn.classList.remove('active');
+  screenBtn.querySelector('.label').textContent = 'Экран';
+  
+  // Clear URL
+  window.history.replaceState({}, '', window.location.pathname);
 }
 
 function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false) {
@@ -209,8 +283,11 @@ function updateActiveUsers() {
   // Add local user
   const localItem = document.createElement('div');
   localItem.className = 'user-item';
+  const avatarHtml = userAvatar ? 
+    `<img src="${userAvatar}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">` :
+    `<div class="user-avatar">${userName.charAt(0).toUpperCase()}</div>`;
   localItem.innerHTML = `
-    <div class="user-avatar">${userName.charAt(0).toUpperCase()}</div>
+    ${avatarHtml}
     <span class="user-name">${userName} (Вы)</span>
     <div class="user-status"></div>
   `;
@@ -228,6 +305,12 @@ function updateActiveUsers() {
     `;
     list.appendChild(item);
   });
+  
+  // Update settings panel if open
+  const settingsPanel = document.getElementById('settingsPanel');
+  if (settingsPanel && settingsPanel.style.display === 'flex') {
+    updateRemoteVolumeControls();
+  }
 }
 
 async function createPeerConnection(userId) {
@@ -566,4 +649,123 @@ window.addEventListener('load', () => {
   if (room) {
     document.getElementById('roomId').value = room;
   }
+  
+  // Unlock audio for mobile on first interaction
+  document.body.addEventListener('click', unlockAudio, { once: true });
+  document.body.addEventListener('touchstart', unlockAudio, { once: true });
 });
+
+// Fix audio for mobile devices
+function unlockAudio() {
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioContext.state === 'suspended') {
+    audioContext.resume();
+  }
+  
+  // Unmute all remote videos
+  document.querySelectorAll('video').forEach(video => {
+    video.muted = false;
+    video.play().catch(e => console.log('Video play failed:', e));
+  });
+}
+
+// Settings Panel
+function toggleSettings() {
+  const panel = document.getElementById('settingsPanel');
+  panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+  
+  if (panel.style.display === 'flex') {
+    updateRemoteVolumeControls();
+  }
+}
+
+function updateRemoteVolumeControls() {
+  const container = document.getElementById('remoteVolumeControls');
+  
+  if (peers.size === 0) {
+    container.innerHTML = '<p style="color: #72767d; font-size: 12px;">Нет других участников</p>';
+    return;
+  }
+  
+  container.innerHTML = '';
+  peers.forEach((pc, id) => {
+    const user = activeUsers.get(id);
+    const name = user ? user.name : 'Участник';
+    
+    const div = document.createElement('div');
+    div.className = 'remote-volume-item';
+    div.innerHTML = `
+      <span>${name}</span>
+      <input type="range" min="0" max="100" value="100" 
+             onchange="setRemoteVolume('${id}', this.value)">
+    `;
+    container.appendChild(div);
+  });
+}
+
+function setMicVolume(value) {
+  // Store preference
+  localStorage.setItem('micVolume', value);
+  
+  // Apply to local stream if exists
+  if (localStream) {
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (audioTrack && audioTrack.applyConstraints) {
+      // Web Audio API approach for gain control
+      // This is a simplified approach - real implementation would use AudioContext
+      console.log('Mic volume set to:', value);
+    }
+  }
+}
+
+// Avatar upload
+let userAvatar = null;
+
+function uploadAvatar(input) {
+  const file = input.files[0];
+  if (!file) return;
+  
+  // Limit file size to 2MB
+  if (file.size > 2 * 1024 * 1024) {
+    alert('Файл слишком большой! Максимум 2MB');
+    return;
+  }
+  
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    userAvatar = e.target.result;
+    localStorage.setItem('userAvatar', userAvatar);
+    
+    // Preview
+    const preview = document.getElementById('avatarPreview');
+    preview.innerHTML = `<img src="${userAvatar}" alt="Avatar">`;
+    
+    alert('Аватар загружен!');
+  };
+  reader.readAsDataURL(file);
+}
+
+// Load saved avatar on start
+window.addEventListener('load', () => {
+  const savedAvatar = localStorage.getItem('userAvatar');
+  if (savedAvatar) {
+    userAvatar = savedAvatar;
+    const preview = document.getElementById('avatarPreview');
+    if (preview) {
+      preview.innerHTML = `<img src="${userAvatar}" alt="Avatar">`;
+    }
+  }
+});
+
+// Fix for mobile audio - ensure video elements are unmuted after connection
+function fixMobileAudio() {
+  document.querySelectorAll('video').forEach(video => {
+    if (!video.muted) {
+      video.volume = 1.0;
+      video.play().catch(e => console.log('Autoplay prevented:', e));
+    }
+  });
+}
+
+// Call fixMobileAudio periodically for new connections
+setInterval(fixMobileAudio, 2000);
