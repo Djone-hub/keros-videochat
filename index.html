@@ -188,6 +188,43 @@
     .room-item:hover { background: #40444b; }
     .room-item.active { background: #5865f2; }
     .room-item .icon {
+      width: 40px;
+      height: 40px;
+      background: #5865f2;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .room-item .icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .room-avatar-upload {
+      margin: 12px 0;
+    }
+    .room-avatar-preview {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: #40444b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 8px auto;
+      overflow: hidden;
+      font-size: 32px;
+    }
+    .room-avatar-preview img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .room-header-avatar {
       width: 32px;
       height: 32px;
       border-radius: 50%;
@@ -195,7 +232,13 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 14px;
+      overflow: hidden;
+      font-size: 16px;
+    }
+    .room-header-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
     .room-item .info {
       flex: 1;
@@ -341,7 +384,6 @@
       font-size: 13px;
     }
     .room-header button.leave { background: #ed4245; }
-    .room-header button.disconnect { background: #faa81a; color: #000; }
     .room-header button.settings { background: #72767d; }
     
     .main-layout {
@@ -624,6 +666,13 @@
       background: #ed4245;
       color: #fff;
     }
+    .control-btn.disconnect {
+      background: #faa81a;
+      color: #000;
+    }
+    .control-btn.disconnect:hover {
+      background: #ffb84d;
+    }
     .control-btn .icon { font-size: 20px; }
     .control-btn .label { font-size: 11px; font-weight: 500; }
     
@@ -725,6 +774,60 @@
       border-radius: 50%;
       object-fit: cover;
     }
+    
+    /* Footer Branding */
+    .app-footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 40px;
+      background: linear-gradient(90deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #16213e 75%, #1a1a2e 100%);
+      background-size: 200% 100%;
+      animation: shimmer 3s ease-in-out infinite;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      z-index: 1000;
+      border-top: 2px solid #5865f2;
+    }
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .app-footer .camera-icon {
+      font-size: 24px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.1); opacity: 0.8; }
+    }
+    .app-footer .brand-text {
+      font-size: 14px;
+      font-weight: 700;
+      background: linear-gradient(90deg, #fff, #5865f2, #fff);
+      background-size: 200% 100%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: textShimmer 3s ease-in-out infinite;
+    }
+    @keyframes textShimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .app-footer .version {
+      font-size: 11px;
+      color: #72767d;
+      margin-left: 4px;
+    }
+    
+    /* Adjust body padding for footer */
+    body {
+      padding-bottom: 40px;
+    }
   </style>
 </head>
 <body>
@@ -793,6 +896,12 @@
     <div class="modal">
       <h3>➕ Создать новую комнату</h3>
       <input type="text" id="newRoomName" placeholder="Название комнаты" maxlength="30">
+      <div class="room-avatar-upload">
+        <label>🖼️ Аватар комнаты (необязательно)</label>
+        <input type="file" id="roomAvatarUpload" accept="image/*" style="display: none;" onchange="previewRoomAvatar(this)">
+        <div class="room-avatar-preview" id="roomAvatarPreview">#</div>
+        <button type="button" onclick="document.getElementById('roomAvatarUpload').click()" style="margin-top: 8px; padding: 6px 12px; background: #5865f2; border: none; color: #fff; border-radius: 4px; cursor: pointer;">📤 Загрузить аватар</button>
+      </div>
       <div class="modal-buttons">
         <button class="cancel" onclick="hideCreateRoomModal()">Отмена</button>
         <button class="create" onclick="createRoom()">Создать</button>
@@ -803,11 +912,13 @@
   <!-- Room Screen -->
   <div class="room-screen" id="roomScreen">
     <div class="room-header">
-      <h2><span id="displayRoomId">general</span></h2>
+      <h2 style="display: flex; align-items: center; gap: 8px;">
+        <div class="room-header-avatar" id="roomHeaderAvatar">#</div>
+        <span id="displayRoomId">general</span>
+      </h2>
       <div class="actions">
         <button onclick="copyLink()">📋 Ссылка</button>
         <button class="settings" onclick="toggleSettings()">⚙️</button>
-        <button class="disconnect" onclick="disconnectAndJoinAnother()" title="Отключиться и выбрать другую комнату">🔌 Откл.</button>
         <button class="leave" onclick="leaveRoom()">🏠 Лобби</button>
       </div>
     </div>
@@ -851,6 +962,10 @@
         <span class="icon">🖥️</span>
         <span class="label">Экран</span>
       </button>
+      <button class="control-btn disconnect" id="disconnectBtn" onclick="disconnectAndJoinAnother()">
+        <span class="icon">🔌</span>
+        <span class="label">Откл.</span>
+      </button>
     </div>
   </div>
   
@@ -865,7 +980,7 @@
         <label>🎤 Громкость микрофона</label>
         <div class="volume-slider">
           <span>🔈</span>
-          <input type="range" id="micVolume" min="0" max="100" value="100" onchange="setMicVolume(this.value)">
+          <input type="range" id="micVolume" min="0" max="100" value="50" onchange="setMicVolume(this.value)">
           <span>🔊</span>
         </div>
       </div>
@@ -895,5 +1010,12 @@
   
   <script src="/socket.io/socket.io.js"></script>
   <script src="app.js"></script>
+  
+  <!-- Footer Branding -->
+  <div class="app-footer">
+    <span class="camera-icon">📹</span>
+    <span class="brand-text">KEROS VIDEOCHAT</span>
+    <span class="version">v1.0.0.0</span>
+  </div>
 </body>
 </html>

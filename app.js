@@ -173,16 +173,18 @@ function showLobby() {
 }
 
 let allRooms = [];
+let newRoomAvatar = null;
 
 function loadRoomsList(filter = '') {
   allRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
   const list = document.getElementById('roomsList');
   list.innerHTML = '';
   
-  // Filter rooms if search term provided
+  // Filter rooms if search term provided (by name, ID, or creator username)
   const rooms = filter 
     ? allRooms.filter(r => r.name.toLowerCase().includes(filter.toLowerCase()) || 
-                          r.id.toLowerCase().includes(filter.toLowerCase()))
+                          r.id.toLowerCase().includes(filter.toLowerCase()) ||
+                          (r.creator && r.creator.toLowerCase().includes(filter.toLowerCase())))
     : allRooms;
   
   if (rooms.length === 0) {
@@ -204,13 +206,18 @@ function loadRoomsList(filter = '') {
     const isCreator = room.creator === currentUser?.username;
     const actionsHtml = isCreator ? `
       <div class="room-actions" onclick="event.stopPropagation()">
-        <button onclick="editRoom('${room.id}', '${room.name}')" title="Редактировать">✏️</button>
+        <button onclick="editRoom('${room.id}', '${room.name}', '${room.avatar || ''}')" title="Редактировать">✏️</button>
         <button onclick="deleteRoom('${room.id}')" title="Удалить">🗑️</button>
       </div>
     ` : '';
     
+    // Room icon/avatar
+    const iconHtml = room.avatar ? 
+      `<img src="${room.avatar}" alt="${room.name}">` : 
+      '#';
+    
     item.innerHTML = `
-      <div class="icon">#</div>
+      <div class="icon">${iconHtml}</div>
       <div class="info">
         <div class="name">${room.name}</div>
         <div class="count">ID: ${room.id} ${isCreator ? '(Вы создатель)' : ''}</div>
@@ -221,19 +228,68 @@ function loadRoomsList(filter = '') {
   });
 }
 
-function editRoom(roomId, currentName) {
+function editRoom(roomId, currentName, currentAvatar) {
+  // Create custom modal for editing room
   const newName = prompt('Введите новое название комнаты:', currentName);
-  if (!newName || newName.trim() === '' || newName === currentName) return;
+  if (!newName || newName.trim() === '') return;
   
+  const changeAvatar = confirm('Хотите изменить аватар комнаты?');
+  let newAvatar = currentAvatar;
+  
+  if (changeAvatar) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        if (file.size > 2 * 1024 * 1024) {
+          alert('Файл слишком большой! Максимум 2MB');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          newAvatar = ev.target.result;
+          saveRoomEdit(roomId, newName.trim(), newAvatar);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        saveRoomEdit(roomId, newName.trim(), currentAvatar);
+      }
+    };
+    input.click();
+  } else {
+    if (newName !== currentName) {
+      saveRoomEdit(roomId, newName.trim(), currentAvatar);
+    }
+  }
+}
+
+function saveRoomEdit(roomId, newName, newAvatar) {
   const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
   const roomIndex = rooms.findIndex(r => r.id === roomId);
   
   if (roomIndex !== -1) {
-    rooms[roomIndex].name = newName.trim();
+    rooms[roomIndex].name = newName;
+    if (newAvatar) {
+      rooms[roomIndex].avatar = newAvatar;
+    }
     localStorage.setItem('keroschat_rooms', JSON.stringify(rooms));
     loadRoomsList();
-    addLogEntry('Комната', `Название комнаты ${roomId} изменено на "${newName.trim()}"`);
-    alert('Название комнаты обновлено!');
+    
+    // Update header if we're in this room
+    if (currentRoom === roomId) {
+      currentRoomName = newName;
+      const displayEl = document.getElementById('displayRoomId');
+      if (displayEl) displayEl.textContent = newName;
+      const avatarEl = document.getElementById('roomHeaderAvatar');
+      if (avatarEl && newAvatar) {
+        avatarEl.innerHTML = `<img src="${newAvatar}" alt="${newName}">`;
+      }
+    }
+    
+    addLogEntry('Комната', `Комната ${roomId} обновлена: название "${newName}"`);
+    alert('Комната обновлена!');
   }
 }
 
@@ -258,11 +314,34 @@ function searchRooms(query) {
 function showCreateRoomModal() {
   document.getElementById('createRoomModal').classList.add('active');
   document.getElementById('newRoomName').focus();
+  // Reset avatar preview
+  newRoomAvatar = null;
+  document.getElementById('roomAvatarPreview').innerHTML = '#';
+  document.getElementById('roomAvatarUpload').value = '';
 }
 
 function hideCreateRoomModal() {
   document.getElementById('createRoomModal').classList.remove('active');
   document.getElementById('newRoomName').value = '';
+  newRoomAvatar = null;
+  document.getElementById('roomAvatarPreview').innerHTML = '#';
+}
+
+function previewRoomAvatar(input) {
+  const file = input.files[0];
+  if (!file) return;
+  
+  if (file.size > 2 * 1024 * 1024) {
+    alert('Файл слишком большой! Максимум 2MB');
+    return;
+  }
+  
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    newRoomAvatar = e.target.result;
+    document.getElementById('roomAvatarPreview').innerHTML = `<img src="${newRoomAvatar}" alt="avatar">`;
+  };
+  reader.readAsDataURL(file);
 }
 
 function createRoom() {
@@ -274,7 +353,7 @@ function createRoom() {
   
   const roomId = generateRoomId();
   const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
-  rooms.push({ id: roomId, name, created: Date.now(), creator: currentUser.username });
+  rooms.push({ id: roomId, name, created: Date.now(), creator: currentUser.username, avatar: newRoomAvatar });
   localStorage.setItem('keroschat_rooms', JSON.stringify(rooms));
   
   hideCreateRoomModal();
@@ -301,13 +380,27 @@ async function joinRoomById(roomId) {
   // Request media
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    
+    // Set default microphone volume to 50%
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (audioTrack) {
+      // Apply constraints to set volume (browser support varies)
+      try {
+        const capabilities = audioTrack.getCapabilities();
+        if (capabilities.volume) {
+          await audioTrack.applyConstraints({ volume: 0.5 });
+        }
+      } catch (e) {
+        console.log('Could not set default mic volume via constraints');
+      }
+    }
   } catch (err) {
     alert('Ошибка доступа к камере/микрофону: ' + err.message);
     return;
   }
   
-  // Join socket room
-  socket.emit('join-room', roomId, currentUser.username);
+  // Join socket room with avatar and room name
+  socket.emit('join-room', roomId, currentUser.username, userAvatar, currentRoomName);
   
   // Show room UI
   showRoomUI();
@@ -324,7 +417,21 @@ function showRoomUI() {
   document.getElementById('lobbyScreen').style.display = 'none';
   document.getElementById('roomScreen').style.display = 'flex';
   document.getElementById('roomScreen').style.flexDirection = 'column';
-  document.getElementById('displayRoomId').textContent = currentRoomName || currentRoom;
+  // Always show room name, not ID
+  const displayName = currentRoomName && currentRoomName !== currentRoom ? currentRoomName : currentRoom;
+  document.getElementById('displayRoomId').textContent = displayName;
+  
+  // Set room avatar in header
+  const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+  const room = rooms.find(r => r.id === currentRoom);
+  const avatarEl = document.getElementById('roomHeaderAvatar');
+  if (avatarEl) {
+    if (room && room.avatar) {
+      avatarEl.innerHTML = `<img src="${room.avatar}" alt="${room.name}">`;
+    } else {
+      avatarEl.textContent = '#';
+    }
+  }
 }
 
 function leaveRoom() {
@@ -451,10 +558,12 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
       volumeControl.className = 'remote-volume';
       volumeControl.innerHTML = `
         <span>🔊</span>
-        <input type="range" min="0" max="100" value="100" 
+        <input type="range" min="0" max="100" value="50" 
                onchange="setRemoteVolume('${id}', this.value)" title="Громкость">
       `;
       label.appendChild(volumeControl);
+      // Set default volume to 50%
+      video.volume = 0.5;
     }
     
     // Add fullscreen button for screen share
@@ -506,14 +615,20 @@ function updateActiveUsers() {
   `;
   list.appendChild(localItem);
   
-  // Remote users with speaking indicator
+  // Remote users with speaking indicator and avatar
   peers.forEach((pc, id) => {
     const user = activeUsers.get(id);
     const item = document.createElement('div');
     item.className = 'user-item';
     item.id = `user-item-${id}`;
+    
+    // Check if user has avatar
+    const avatarHtml = (user && user.avatar) ? 
+      `<img src="${user.avatar}" alt="avatar">` :
+      (user ? user.name.charAt(0).toUpperCase() : '?');
+    
     item.innerHTML = `
-      <div class="user-avatar" id="avatar-${id}">${user ? user.name.charAt(0).toUpperCase() : '?'}</div>
+      <div class="user-avatar" id="avatar-${id}">${avatarHtml}</div>
       <span class="user-name">${user ? user.name : 'Участник'}</span>
       <div class="user-status" id="status-${id}"></div>
     `;
@@ -598,6 +713,19 @@ async function createPeerConnection(userId) {
 }
 
 // ========== SOCKET EVENTS ==========
+
+socket.on('room-info', (room) => {
+  // Update room name from server
+  if (room && room.name) {
+    currentRoomName = room.name;
+    // Update display if already in room
+    const displayEl = document.getElementById('displayRoomId');
+    if (displayEl && currentRoom) {
+      displayEl.textContent = currentRoomName;
+    }
+    addLogEntry('Комната', `Получена информация о комнате: ${room.name}`);
+  }
+});
 
 socket.on('users-in-room', async (users) => {
   for (const user of users) {
@@ -913,10 +1041,10 @@ function updateRemoteVolumeControls() {
     const user = activeUsers.get(id);
     const name = user ? user.name : 'Участник';
     
-    // Get current volume from video element
+    // Get current volume from video element (default 50%)
     const videoContainer = document.getElementById(`video-${id}`);
     const video = videoContainer ? videoContainer.querySelector('video') : null;
-    const currentVolume = video ? Math.round(video.volume * 100) : 100;
+    const currentVolume = video ? Math.round(video.volume * 100) : 50;
     
     const div = document.createElement('div');
     div.className = 'remote-volume-item';

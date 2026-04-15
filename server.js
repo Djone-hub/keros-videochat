@@ -19,21 +19,28 @@ const rooms = new Map();
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  socket.on('join-room', (roomId, userName) => {
+  socket.on('join-room', (roomId, userName, userAvatar, roomName) => {
     socket.join(roomId);
     socket.roomId = roomId;
     socket.userName = userName;
+    socket.userAvatar = userAvatar;
 
     if (!rooms.has(roomId)) {
-      rooms.set(roomId, new Set());
+      rooms.set(roomId, { name: roomName || roomId, users: new Set() });
+    } else if (roomName) {
+      // Update room name if provided
+      rooms.get(roomId).name = roomName;
     }
-    rooms.get(roomId).add({ id: socket.id, name: userName });
+    
+    const room = rooms.get(roomId);
+    room.users.add({ id: socket.id, name: userName, avatar: userAvatar });
 
-    const users = Array.from(rooms.get(roomId)).filter(u => u.id !== socket.id);
+    const users = Array.from(room.users).filter(u => u.id !== socket.id);
+    socket.emit('room-info', { id: roomId, name: room.name });
     socket.emit('users-in-room', users);
-    socket.to(roomId).emit('user-joined', { id: socket.id, name: userName });
+    socket.to(roomId).emit('user-joined', { id: socket.id, name: userName, avatar: userAvatar });
 
-    console.log(`${userName} joined room ${roomId}`);
+    console.log(`${userName} joined room ${roomId} (${room.name})`);
   });
 
   socket.on('offer', (targetId, offer) => {
@@ -68,10 +75,10 @@ io.on('connection', (socket) => {
     socket.leave(roomId);
     if (rooms.has(roomId)) {
       const room = rooms.get(roomId);
-      room.forEach(user => {
-        if (user.id === socket.id) room.delete(user);
+      room.users.forEach(user => {
+        if (user.id === socket.id) room.users.delete(user);
       });
-      if (room.size === 0) {
+      if (room.users.size === 0) {
         rooms.delete(roomId);
       }
       socket.to(roomId).emit('user-left', socket.id);
@@ -82,7 +89,7 @@ io.on('connection', (socket) => {
   socket.on('get-user-name', (userId, callback) => {
     if (rooms.has(socket.roomId)) {
       const room = rooms.get(socket.roomId);
-      const user = Array.from(room).find(u => u.id === userId);
+      const user = Array.from(room.users).find(u => u.id === userId);
       if (user) {
         callback(user.name);
       } else {
@@ -96,10 +103,10 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     if (socket.roomId && rooms.has(socket.roomId)) {
       const room = rooms.get(socket.roomId);
-      room.forEach(user => {
-        if (user.id === socket.id) room.delete(user);
+      room.users.forEach(user => {
+        if (user.id === socket.id) room.users.delete(user);
       });
-      if (room.size === 0) {
+      if (room.users.size === 0) {
         rooms.delete(socket.roomId);
       }
       socket.to(socket.roomId).emit('user-left', socket.id);
