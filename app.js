@@ -102,17 +102,27 @@ window.addEventListener('load', () => {
             // Room exists locally, join it
             joinRoomById(pendingRoom);
           } else {
-            // Try to get room info from server first
-            socket.emit('get-room-info', pendingRoom, (roomInfo) => {
-              if (roomInfo) {
-                // Room exists on server, join it
-                currentRoomName = roomInfo.name;
+            // Try to get room info from server via REST API
+            fetch('/api/rooms')
+              .then(res => res.json())
+              .then(serverRooms => {
+                const foundRoom = serverRooms.find(r => r.id === pendingRoom);
+                if (foundRoom) {
+                  // Room exists on server, join it
+                  currentRoomName = foundRoom.name;
+                  addLogEntry('Приглашение', `Найдена комната на сервере: ${foundRoom.name}`);
+                  joinRoomById(pendingRoom);
+                } else {
+                  // Room doesn't exist, try to join anyway (server will handle)
+                  addLogEntry('Приглашение', `Комната ${pendingRoom} не найдена в списке, пробуем присоединиться...`);
+                  joinRoomById(pendingRoom);
+                }
+              })
+              .catch(err => {
+                console.error('Error checking room:', err);
+                // Try to join anyway
                 joinRoomById(pendingRoom);
-              } else {
-                // Room doesn't exist, ask user
-                alert(`Комната ${pendingRoom} не найдена. Она может быть удалена или еще не создана.`);
-              }
-            });
+              });
           }
         }
       }, 800);
@@ -700,8 +710,8 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
       const fullscreenBtn = document.createElement('button');
       fullscreenBtn.className = 'fullscreen-btn';
       fullscreenBtn.innerHTML = '🔍';
-      fullscreenBtn.title = 'На весь экран';
-      fullscreenBtn.onclick = () => openScreenModal();
+      fullscreenBtn.title = 'Увеличить';
+      fullscreenBtn.onclick = () => openScreenModal(id);
       container.appendChild(fullscreenBtn);
     }
     
@@ -1075,12 +1085,22 @@ async function toggleScreen() {
 }
 
 // ========== FULLSCREEN SCREEN SHARE ==========
-function openScreenModal() {
-  const container = document.querySelector('.video-container.screen-share');
-  if (!container) return;
+function openScreenModal(videoId) {
+  // Find the screen share video element by id
+  const container = document.getElementById(`video-${videoId}`);
+  if (!container) {
+    console.warn('Screen share container not found:', videoId);
+    return;
+  }
   
   const video = container.querySelector('video');
-  if (!video) return;
+  if (!video) {
+    console.warn('Video element not found in container:', videoId);
+    return;
+  }
+  
+  const label = container.querySelector('.video-label');
+  const userName = label ? label.textContent : 'Демонстрация экрана';
   
   // Create modal
   const modal = document.createElement('div');
@@ -1107,7 +1127,7 @@ function openScreenModal() {
     border-bottom: 1px solid #202225;
   `;
   header.innerHTML = `
-    <span style="color: #fff; font-weight: 600;">🖥️ Демонстрация экрана</span>
+    <span style="color: #fff; font-weight: 600;">🖥️ Демонстрация экрана — ${userName}</span>
     <button onclick="closeScreenModal()" style="
       background: #ed4245;
       color: #fff;
@@ -1116,7 +1136,7 @@ function openScreenModal() {
       border-radius: 4px;
       cursor: pointer;
       font-size: 14px;
-    ">✕ Закрыть</button>
+    ">✕ Закрыть (Esc)</button>
   `;
   
   const videoContainer = document.createElement('div');
@@ -1133,10 +1153,26 @@ function openScreenModal() {
   clonedVideo.autoplay = true;
   clonedVideo.playsInline = true;
   clonedVideo.style.cssText = `
-    max-width: 100%;
-    max-height: 100%;
+    width: 100%;
+    height: 100%;
     object-fit: contain;
   `;
+  
+  // Add keyboard support to close modal
+  const handleKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      closeScreenModal();
+      document.removeEventListener('keydown', handleKeyDown);
+    }
+  };
+  document.addEventListener('keydown', handleKeyDown);
+  
+  // Close on click outside video
+  videoContainer.onclick = (e) => {
+    if (e.target === videoContainer) {
+      closeScreenModal();
+    }
+  };
   
   videoContainer.appendChild(clonedVideo);
   modal.appendChild(header);

@@ -108,6 +108,9 @@ io.on('connection', (socket) => {
 
     const users = Array.from(room.users).filter(u => u.id !== socket.id);
     
+    console.log(`[DEBUG] Room ${roomId} has ${room.users.size} total users, sending ${users.length} others to ${userName}`);
+    console.log(`[DEBUG] Users in room:`, Array.from(room.users).map(u => ({id: u.id, name: u.name})));
+    
     // Send room info with name from server (either stored or provided)
     const finalRoomName = storedRoom ? storedRoom.name : room.name;
     socket.emit('room-info', { id: roomId, name: finalRoomName, avatar: storedRoom?.avatar });
