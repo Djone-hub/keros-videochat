@@ -14,8 +14,8 @@
       overflow: hidden;
     }
     
-    /* Login Screen */
-    .login-screen {
+    /* Auth Screen */
+    .auth-screen {
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -24,8 +24,8 @@
       gap: 20px;
       background: #202225;
     }
-    .login-screen h1 { font-size: 2.5rem; color: #5865f2; }
-    .login-box {
+    .auth-screen h1 { font-size: 2.5rem; color: #5865f2; }
+    .auth-box {
       background: #2f3136;
       padding: 40px;
       border-radius: 8px;
@@ -35,7 +35,29 @@
       min-width: 400px;
       box-shadow: 0 4px 20px rgba(0,0,0,0.4);
     }
-    .login-box input {
+    .auth-tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .auth-tab {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      background: #40444b;
+      color: #b9bbbe;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .auth-tab.active {
+      background: #5865f2;
+      color: #fff;
+    }
+    .auth-form { display: none; }
+    .auth-form.active { display: flex; flex-direction: column; gap: 15px; }
+    .auth-box input {
       padding: 12px 16px;
       border: 1px solid #202225;
       border-radius: 4px;
@@ -44,8 +66,8 @@
       font-size: 16px;
       outline: none;
     }
-    .login-box input:focus { border-color: #5865f2; }
-    .login-box button {
+    .auth-box input:focus { border-color: #5865f2; }
+    .auth-box button[type="submit"] {
       padding: 12px 24px;
       border: none;
       border-radius: 4px;
@@ -56,60 +78,216 @@
       cursor: pointer;
       transition: background 0.2s;
     }
-    .login-box button:hover { background: #4752c4; }
-    .create-room-btn {
-      background: #3ba55d !important;
-    }
-    .create-room-btn:hover { background: #2d7d46 !important; }
+    .auth-box button[type="submit"]:hover { background: #4752c4; }
     
-    /* Mic Test */
-    .mic-test {
-      background: #40444b;
-      border-radius: 8px;
-      padding: 15px;
-      margin: 10px 0;
+    /* Lobby Screen */
+    .lobby-screen {
+      display: none;
+      height: 100vh;
+      flex-direction: column;
     }
-    .mic-test h4 { color: #b9bbbe; margin-bottom: 10px; font-size: 12px; text-transform: uppercase; }
-    .mic-visualizer {
+    .lobby-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 24px;
+      background: #2f3136;
+      border-bottom: 1px solid #202225;
+    }
+    .lobby-header h2 { 
+      color: #fff; 
+      font-size: 20px; 
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .user-info .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #5865f2;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 4px;
-      height: 40px;
-      margin-bottom: 10px;
+      font-weight: 600;
+      overflow: hidden;
     }
-    .mic-bar {
-      width: 4px;
-      background: #5865f2;
-      border-radius: 2px;
-      transition: height 0.1s;
-      min-height: 4px;
-      max-height: 40px;
+    .user-info .avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
-    .mic-controls {
-      display: flex;
-      gap: 10px;
-    }
-    .mic-controls button {
-      flex: 1;
-      padding: 8px;
+    .user-info button {
+      padding: 8px 16px;
       border: none;
       border-radius: 4px;
-      background: #5865f2;
+      background: #ed4245;
       color: #fff;
       cursor: pointer;
-      font-size: 12px;
+      font-size: 13px;
     }
-    .mic-controls button:hover { background: #4752c4; }
     
-    /* Room Screen - Discord Layout */
+    .lobby-content {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    
+    /* Room List Sidebar */
+    .rooms-sidebar {
+      width: 300px;
+      background: #2f3136;
+      border-right: 1px solid #202225;
+      display: flex;
+      flex-direction: column;
+    }
+    .rooms-header {
+      padding: 16px;
+      border-bottom: 1px solid #202225;
+    }
+    .rooms-header h3 {
+      font-size: 12px;
+      color: #96989d;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .create-room-btn {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 4px;
+      background: #3ba55d;
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .create-room-btn:hover { background: #2d7d46; }
+    .rooms-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+    .room-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.1s;
+      margin-bottom: 4px;
+    }
+    .room-item:hover { background: #40444b; }
+    .room-item.active { background: #5865f2; }
+    .room-item .icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #5865f2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+    .room-item .info {
+      flex: 1;
+    }
+    .room-item .name {
+      font-size: 14px;
+      color: #fff;
+      font-weight: 500;
+    }
+    .room-item .count {
+      font-size: 12px;
+      color: #96989d;
+    }
+    
+    /* Main Lobby Area */
+    .lobby-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #36393f;
+      padding: 24px;
+    }
+    .welcome-section {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .welcome-section h3 {
+      font-size: 24px;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .welcome-section p {
+      color: #96989d;
+      font-size: 14px;
+    }
+    
+    /* Create Room Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.7);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: #2f3136;
+      border-radius: 8px;
+      padding: 24px;
+      min-width: 400px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    }
+    .modal h3 {
+      font-size: 20px;
+      color: #fff;
+      margin-bottom: 16px;
+    }
+    .modal input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #202225;
+      border-radius: 4px;
+      background: #40444b;
+      color: #fff;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+    .modal-buttons {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+    .modal button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .modal .cancel { background: #72767d; color: #fff; }
+    .modal .create { background: #3ba55d; color: #fff; }
+    
+    /* Room Screen */
     .room-screen { 
       display: none; 
       height: 100vh;
       flex-direction: column;
     }
-    
-    /* Top Header */
     .room-header {
       display: flex;
       justify-content: space-between;
@@ -131,21 +309,11 @@
       content: '#';
       color: #72767d;
     }
-    .room-link {
+    .room-header .actions {
       display: flex;
       gap: 10px;
-      align-items: center;
     }
-    .room-link input {
-      padding: 6px 12px;
-      border: none;
-      border-radius: 4px;
-      background: #40444b;
-      color: #b9bbbe;
-      font-size: 13px;
-      width: 250px;
-    }
-    .room-link button {
+    .room-header button {
       padding: 6px 12px;
       border: none;
       border-radius: 4px;
@@ -154,11 +322,9 @@
       cursor: pointer;
       font-size: 13px;
     }
-    .room-link button:last-child {
-      background: #ed4245;
-    }
+    .room-header button.leave { background: #ed4245; }
+    .room-header button.settings { background: #72767d; }
     
-    /* Main Layout */
     .main-layout {
       display: flex;
       flex: 1;
@@ -196,12 +362,7 @@
       cursor: pointer;
       transition: background 0.1s;
     }
-    .user-item:hover {
-      background: rgba(79,84,92,0.4);
-    }
-    .user-item.inactive {
-      opacity: 0.5;
-    }
+    .user-item:hover { background: rgba(79,84,92,0.4); }
     .user-avatar {
       width: 32px;
       height: 32px;
@@ -220,15 +381,9 @@
       height: 100%;
       object-fit: cover;
     }
-    .user-avatar.inactive {
-      background: #72767d;
-    }
     .user-name {
       font-size: 14px;
       color: #fff;
-    }
-    .user-name.inactive {
-      color: #72767d;
     }
     .user-status {
       width: 8px;
@@ -236,9 +391,6 @@
       border-radius: 50%;
       background: #3ba55d;
       margin-left: auto;
-    }
-    .user-status.inactive {
-      background: #72767d;
     }
     
     /* Center - Video Grid */
@@ -248,7 +400,6 @@
       flex-direction: column;
       background: #36393f;
     }
-    
     .video-grid {
       flex: 1;
       display: grid;
@@ -257,7 +408,6 @@
       padding: 16px;
       overflow-y: auto;
     }
-    
     .video-container {
       position: relative;
       background: #202225;
@@ -265,23 +415,19 @@
       overflow: hidden;
       aspect-ratio: 16/9;
     }
-    
     .video-container video {
       width: 100%;
       height: 100%;
       object-fit: cover;
     }
-    
     .video-container.screen-share video {
       object-fit: contain;
       background: #000;
     }
-    
     .video-container.screen-share {
       grid-column: span 2;
       aspect-ratio: 16/9;
     }
-    
     .video-label {
       position: absolute;
       bottom: 8px;
@@ -294,7 +440,6 @@
       align-items: center;
       gap: 8px;
     }
-    
     .fullscreen-btn {
       position: absolute;
       top: 8px;
@@ -307,7 +452,6 @@
       cursor: pointer;
       font-size: 14px;
     }
-    
     .remote-volume {
       display: flex;
       align-items: center;
@@ -339,7 +483,6 @@
       display: flex;
       flex-direction: column;
     }
-    
     .chat-header {
       padding: 16px;
       border-bottom: 1px solid #202225;
@@ -349,7 +492,6 @@
       color: #fff;
       font-weight: 600;
     }
-    
     .chat-messages {
       flex: 1;
       overflow-y: auto;
@@ -358,13 +500,11 @@
       flex-direction: column;
       gap: 12px;
     }
-    
     .chat-message {
       display: flex;
       gap: 12px;
       align-items: flex-start;
     }
-    
     .chat-avatar {
       width: 40px;
       height: 40px;
@@ -376,40 +516,33 @@
       font-weight: 600;
       flex-shrink: 0;
     }
-    
     .chat-content {
       flex: 1;
     }
-    
     .chat-header-info {
       display: flex;
       align-items: baseline;
       gap: 8px;
       margin-bottom: 4px;
     }
-    
     .chat-sender {
       font-weight: 600;
       color: #fff;
       font-size: 15px;
     }
-    
     .chat-time {
       font-size: 12px;
       color: #72767d;
     }
-    
     .chat-text {
       font-size: 14px;
       color: #dcddde;
       line-height: 1.4;
     }
-    
     .chat-input-area {
       padding: 16px;
       border-top: 1px solid #202225;
     }
-    
     .chat-input {
       display: flex;
       gap: 8px;
@@ -417,7 +550,6 @@
       padding: 12px;
       border-radius: 8px;
     }
-    
     .chat-input input {
       flex: 1;
       border: none;
@@ -426,9 +558,7 @@
       font-size: 14px;
       outline: none;
     }
-    
     .chat-input input::placeholder { color: #72767d; }
-    
     .chat-input button {
       padding: 8px 16px;
       border: none;
@@ -449,7 +579,6 @@
       background: #202225;
       border-top: 1px solid #202225;
     }
-    
     .control-btn {
       display: flex;
       flex-direction: column;
@@ -464,122 +593,24 @@
       transition: all 0.2s;
       min-width: 64px;
     }
-    
     .control-btn:hover {
       background: #4f545c;
       color: #fff;
     }
-    
     .control-btn.active {
       background: #5865f2;
       color: #fff;
     }
-    
     .control-btn.danger {
       background: #ed4245;
       color: #fff;
     }
-    
-    .control-btn.danger:hover {
-      background: #c03537;
-    }
-    
-    .control-btn .icon {
-      font-size: 20px;
-    }
-    
-    .control-btn .label {
-      font-size: 11px;
-      font-weight: 500;
-    }
-    
-    /* Screen Share Modal */
-    .screen-share-modal {
-      display: none;
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 80%;
-      max-width: 1200px;
-      height: 70%;
-      background: #2f3136;
-      border-radius: 8px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.6);
-      z-index: 1000;
-      flex-direction: column;
-    }
-    
-    .screen-share-modal.active {
-      display: flex;
-    }
-    
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 16px;
-      border-bottom: 1px solid #202225;
-    }
-    
-    .modal-header h3 {
-      color: #fff;
-      font-size: 16px;
-    }
-    
-    .close-modal {
-      background: none;
-      border: none;
-      color: #b9bbbe;
-      font-size: 20px;
-      cursor: pointer;
-    }
-    
-    .modal-content {
-      flex: 1;
-      padding: 16px;
-      display: flex;
-      gap: 16px;
-    }
-    
-    .screen-share-video {
-      flex: 1;
-      background: #000;
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    
-    .screen-share-video video {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-    }
-    
-    .chat-overlay {
-      width: 300px;
-      background: #36393f;
-      border-radius: 8px;
-      display: flex;
-      flex-direction: column;
-    }
-    
-    .overlay-backdrop {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.7);
-      z-index: 999;
-    }
-    
-    .overlay-backdrop.active {
-      display: block;
-    }
+    .control-btn .icon { font-size: 20px; }
+    .control-btn .label { font-size: 11px; font-weight: 500; }
     
     /* Settings Panel */
     .settings-panel {
+      display: none;
       position: fixed;
       top: 48px;
       right: 0;
@@ -588,10 +619,9 @@
       background: #2f3136;
       border-left: 1px solid #202225;
       z-index: 100;
-      display: flex;
       flex-direction: column;
     }
-    
+    .settings-panel.active { display: flex; }
     .settings-header {
       display: flex;
       justify-content: space-between;
@@ -599,12 +629,10 @@
       padding: 16px;
       border-bottom: 1px solid #202225;
     }
-    
     .settings-header h3 {
       font-size: 16px;
       color: #fff;
     }
-    
     .settings-header button {
       background: none;
       border: none;
@@ -612,17 +640,12 @@
       font-size: 18px;
       cursor: pointer;
     }
-    
     .settings-content {
       flex: 1;
       overflow-y: auto;
       padding: 16px;
     }
-    
-    .setting-item {
-      margin-bottom: 20px;
-    }
-    
+    .setting-item { margin-bottom: 20px; }
     .setting-item label {
       display: block;
       font-size: 12px;
@@ -631,7 +654,6 @@
       margin-bottom: 8px;
       font-weight: 600;
     }
-    
     .setting-item button {
       width: 100%;
       padding: 10px;
@@ -642,11 +664,28 @@
       cursor: pointer;
       font-size: 13px;
     }
-    
-    .setting-item button:hover {
-      background: #4752c4;
+    .volume-slider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
-    
+    .volume-slider input[type="range"] {
+      flex: 1;
+      height: 6px;
+      background: #40444b;
+      border-radius: 3px;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .volume-slider input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      background: #5865f2;
+      border-radius: 50%;
+      cursor: pointer;
+    }
     .remote-volume-item {
       display: flex;
       align-items: center;
@@ -656,17 +695,11 @@
       background: #40444b;
       border-radius: 4px;
     }
-    
     .remote-volume-item span {
       font-size: 13px;
       color: #dcddde;
       flex: 1;
     }
-    
-    .remote-volume-item input[type="range"] {
-      width: 100px;
-    }
-    
     #avatarPreview img {
       width: 64px;
       height: 64px;
@@ -676,103 +709,96 @@
   </style>
 </head>
 <body>
-  <!-- Login Screen -->
-  <div class="login-screen" id="loginScreen">
+  <!-- Auth Screen -->
+  <div class="auth-screen" id="authScreen">
     <h1>🎥 Keros VideoChat</h1>
-    <div class="login-box">
-      <input type="text" id="userName" placeholder="Ваше имя" maxlength="20">
+    <div class="auth-box">
+      <div class="auth-tabs">
+        <button class="auth-tab active" onclick="switchTab('login')">Вход</button>
+        <button class="auth-tab" onclick="switchTab('register')">Регистрация</button>
+      </div>
       
-      <!-- Mic Test Section -->
-      <div class="mic-test" id="micTest">
-        <h4>🎤 Проверка микрофона</h4>
-        <div class="mic-visualizer" id="micVisualizer">
-          <div class="mic-bar" style="height: 4px;"></div>
-          <div class="mic-bar" style="height: 4px;"></div>
-          <div class="mic-bar" style="height: 4px;"></div>
-          <div class="mic-bar" style="height: 4px;"></div>
-          <div class="mic-bar" style="height: 4px;"></div>
-          <div class="mic-bar" style="height: 4px;"></div>
-          <div class="mic-bar" style="height: 4px;"></div>
-          <div class="mic-bar" style="height: 4px;"></div>
-          <div class="mic-bar" style="height: 4px;"></div>
-          <div class="mic-bar" style="height: 4px;"></div>
+      <form class="auth-form active" id="loginForm" onsubmit="handleLogin(event)">
+        <input type="text" id="loginUsername" placeholder="Никнейм" required maxlength="20">
+        <input type="password" id="loginPassword" placeholder="Пароль" required>
+        <button type="submit">🔐 Войти</button>
+      </form>
+      
+      <form class="auth-form" id="registerForm" onsubmit="handleRegister(event)">
+        <input type="text" id="regUsername" placeholder="Никнейм" required maxlength="20">
+        <input type="password" id="regPassword" placeholder="Пароль" required minlength="4">
+        <input type="password" id="regPasswordConfirm" placeholder="Повторите пароль" required>
+        <button type="submit">📝 Зарегистрироваться</button>
+      </form>
+    </div>
+  </div>
+  
+  <!-- Lobby Screen -->
+  <div class="lobby-screen" id="lobbyScreen">
+    <div class="lobby-header">
+      <h2>🏠 Лобби Keros VideoChat</h2>
+      <div class="user-info">
+        <div class="avatar" id="lobbyAvatar">Я</div>
+        <span id="lobbyUsername">Пользователь</span>
+        <button onclick="logout()">Выйти</button>
+      </div>
+    </div>
+    
+    <div class="lobby-content">
+      <div class="rooms-sidebar">
+        <div class="rooms-header">
+          <h3>💬 Комнаты</h3>
+          <button class="create-room-btn" onclick="showCreateRoomModal()">➕ Создать комнату</button>
         </div>
-        <div class="mic-controls">
-          <button onclick="testMicrophone()">🔊 Тест</button>
-          <button onclick="stopMicTest()">⏹ Стоп</button>
+        <div class="rooms-list" id="roomsList">
+          <!-- Rooms will be added here -->
         </div>
       </div>
-
-      <input type="text" id="roomId" placeholder="ID комнаты (или оставь пустым для новой)">
-      <button onclick="createNewRoom()" class="create-room-btn">➕ Создать комнату</button>
-      <button onclick="joinRoom()">🚀 Войти в комнату</button>
+      
+      <div class="lobby-main">
+        <div class="welcome-section">
+          <h3>Добро пожаловать в Keros VideoChat! 👋</h3>
+          <p>Выберите комнату слева или создайте свою. Приглашайте друзей по ссылке!</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Create Room Modal -->
+  <div class="modal-overlay" id="createRoomModal">
+    <div class="modal">
+      <h3>➕ Создать новую комнату</h3>
+      <input type="text" id="newRoomName" placeholder="Название комнаты" maxlength="30">
+      <div class="modal-buttons">
+        <button class="cancel" onclick="hideCreateRoomModal()">Отмена</button>
+        <button class="create" onclick="createRoom()">Создать</button>
+      </div>
     </div>
   </div>
   
   <!-- Room Screen -->
   <div class="room-screen" id="roomScreen">
-    <!-- Header -->
     <div class="room-header">
       <h2><span id="displayRoomId">general</span></h2>
-      <div class="room-link">
-        <input type="text" id="shareLink" readonly>
-        <button onclick="copyLink()">📋 Копировать</button>
-        <button onclick="toggleSettings()">⚙️ Настройки</button>
+      <div class="actions">
+        <button onclick="copyLink()">📋 Ссылка</button>
+        <button class="settings" onclick="toggleSettings()">⚙️</button>
+        <button class="leave" onclick="leaveRoom()">🏠 В лобби</button>
       </div>
     </div>
     
-    <!-- Settings Panel -->
-    <div class="settings-panel" id="settingsPanel" style="display: none;">
-      <div class="settings-header">
-        <h3>⚙️ Настройки комнаты</h3>
-        <button onclick="toggleSettings()">✕</button>
-      </div>
-      <div class="settings-content">
-        <div class="setting-item">
-          <label>🎤 Громкость микрофона</label>
-          <div class="volume-slider">
-            <span>🔈</span>
-            <input type="range" id="micVolume" min="0" max="100" value="100" onchange="setMicVolume(this.value)">
-            <span>🔊</span>
-          </div>
-        </div>
-        <div class="setting-item">
-          <label>🔊 Громкость собеседников</label>
-          <div id="remoteVolumeControls">
-            <p style="color: #72767d; font-size: 12px;">Подключитесь к комнате для управления громкостью участников</p>
-          </div>
-        </div>
-        <div class="setting-item">
-          <label>🖼️ Ваша аватарка</label>
-          <input type="file" id="avatarUpload" accept="image/*" onchange="uploadAvatar(this)" style="display: none;">
-          <button onclick="document.getElementById('avatarUpload').click()">📤 Загрузить аватар</button>
-          <div id="avatarPreview" style="margin-top: 10px;"></div>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Main Layout -->
     <div class="main-layout">
-      <!-- Left Sidebar - Active Members -->
       <div class="left-sidebar">
         <div class="sidebar-header">
           <h3>👥 Участники — <span id="userCount">1</span></h3>
         </div>
-        <div class="user-list" id="activeUsers">
-          <div class="user-item">
-            <div class="user-avatar">Я</div>
-            <span class="user-name">Вы</span>
-            <div class="user-status"></div>
-          </div>
-        </div>
+        <div class="user-list" id="activeUsers"></div>
       </div>
       
-      <!-- Center - Video Grid -->
       <div class="center-area">
         <div class="video-grid" id="videoGrid"></div>
       </div>
       
-      <!-- Right Sidebar - Chat -->
       <div class="right-sidebar">
         <div class="chat-header">
           <h3>💬 Чат</h3>
@@ -787,7 +813,6 @@
       </div>
     </div>
     
-    <!-- Bottom Control Bar -->
     <div class="bottom-bar">
       <button class="control-btn" id="micBtn" onclick="toggleMic()">
         <span class="icon">🎤</span>
@@ -801,30 +826,35 @@
         <span class="icon">🖥️</span>
         <span class="label">Экран</span>
       </button>
-      <button class="control-btn" id="callBtn" onclick="leaveRoom()">
-        <span class="icon">📞</span>
-        <span class="label">Выйти</span>
-      </button>
     </div>
   </div>
   
-  <!-- Screen Share Modal -->
-  <div class="overlay-backdrop" id="screenBackdrop" onclick="closeScreenModal()"></div>
-  <div class="screen-share-modal" id="screenShareModal">
-    <div class="modal-header">
-      <h3>🖥️ Демонстрация экрана</h3>
-      <button class="close-modal" onclick="closeScreenModal()">✕</button>
+  <!-- Settings Panel -->
+  <div class="settings-panel" id="settingsPanel">
+    <div class="settings-header">
+      <h3>⚙️ Настройки</h3>
+      <button onclick="toggleSettings()">✕</button>
     </div>
-    <div class="modal-content">
-      <div class="screen-share-video" id="modalVideoContainer"></div>
-      <div class="chat-overlay" id="modalChat">
-        <div class="chat-messages" id="modalChatMessages" style="flex: 1; overflow-y: auto; padding: 12px;"></div>
-        <div class="chat-input-area" style="padding: 12px; border-top: 1px solid #202225;">
-          <div class="chat-input">
-            <input type="text" id="modalChatInput" placeholder="Сообщение..." onkeypress="if(event.key==='Enter')sendModalMessage()">
-            <button onclick="sendModalMessage()">➤</button>
-          </div>
+    <div class="settings-content">
+      <div class="setting-item">
+        <label>🎤 Громкость микрофона</label>
+        <div class="volume-slider">
+          <span>🔈</span>
+          <input type="range" id="micVolume" min="0" max="100" value="100" onchange="setMicVolume(this.value)">
+          <span>🔊</span>
         </div>
+      </div>
+      <div class="setting-item">
+        <label>🔊 Громкость собеседников</label>
+        <div id="remoteVolumeControls">
+          <p style="color: #72767d; font-size: 12px;">Нет других участников</p>
+        </div>
+      </div>
+      <div class="setting-item">
+        <label>🖼️ Ваша аватарка</label>
+        <input type="file" id="avatarUpload" accept="image/*" onchange="uploadAvatar(this)" style="display: none;">
+        <button onclick="document.getElementById('avatarUpload').click()">📤 Загрузить аватар</button>
+        <div id="avatarPreview" style="margin-top: 10px;"></div>
       </div>
     </div>
   </div>

@@ -1,13 +1,17 @@
+// Keros VideoChat - Full Authentication & Lobby System
 const socket = io();
+
+// State
+let currentUser = null;
+let currentRoom = null;
 let localStream = null;
 let screenStream = null;
 let peers = new Map();
-let roomId = '';
-let userName = '';
+let activeUsers = new Map();
 let isMicOn = true;
 let isCamOn = true;
 let isScreenSharing = false;
-let activeUsers = new Map();
+let userAvatar = null;
 
 const iceServers = {
   iceServers: [
@@ -16,98 +20,195 @@ const iceServers = {
   ]
 };
 
-// Soft sound effects ( pleasant tones instead of harsh clicks )
-const sounds = {
-  micOn: createSoftTone(600, 0.15, 'sine'),      // Soft high tone
-  micOff: createSoftTone(400, 0.15, 'sine'),     // Soft low tone
-  screenOn: createSoftTone(500, 0.2, 'triangle'),  // Medium pleasant
-  screenOff: createSoftTone(350, 0.2, 'triangle'),// Lower pleasant
-  join: createSoftTone(700, 0.3, 'sine'),        // Happy high
-  leave: createSoftTone(300, 0.3, 'sine')          // Sad low
-};
+// ========== AUTHENTICATION ==========
 
-function createSoftTone(frequency, duration, type = 'sine') {
-  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  return {
-    play: () => {
-      const osc = audioContext.createOscillator();
-      const gain = audioContext.createGain();
-      
-      osc.connect(gain);
-      gain.connect(audioContext.destination);
-      
-      osc.frequency.value = frequency;
-      osc.type = type;
-      
-      // Soft envelope - no harsh clicks
-      gain.gain.setValueAtTime(0, audioContext.currentTime);
-      gain.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.05);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
-      
-      osc.start(audioContext.currentTime);
-      osc.stop(audioContext.currentTime + duration);
-    }
-  };
+// Check if user is already logged in
+window.addEventListener('load', () => {
+  const savedUser = localStorage.getItem('keroschat_user');
+  if (savedUser) {
+    currentUser = JSON.parse(savedUser);
+    userAvatar = localStorage.getItem('keroschat_avatar');
+    showLobby();
+  }
+});
+
+function switchTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+  
+  if (tab === 'login') {
+    document.querySelector('.auth-tab:first-child').classList.add('active');
+    document.getElementById('loginForm').classList.add('active');
+  } else {
+    document.querySelector('.auth-tab:last-child').classList.add('active');
+    document.getElementById('registerForm').classList.add('active');
+  }
 }
 
-function playSound(soundName) {
-  const sound = sounds[soundName];
-  if (sound) {
-    sound.currentTime = 0;
-    sound.play().catch(e => console.log('Sound play failed:', e));
+function handleLogin(e) {
+  e.preventDefault();
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  
+  // Check stored users
+  const users = JSON.parse(localStorage.getItem('keroschat_users') || '[]');
+  const user = users.find(u => u.username === username && u.password === password);
+  
+  if (user) {
+    currentUser = user;
+    localStorage.setItem('keroschat_user', JSON.stringify(user));
+    userAvatar = localStorage.getItem(`keroschat_avatar_${username}`);
+    showLobby();
+  } else {
+    alert('Неверный никнейм или пароль!');
   }
+}
+
+function handleRegister(e) {
+  e.preventDefault();
+  const username = document.getElementById('regUsername').value.trim();
+  const password = document.getElementById('regPassword').value;
+  const passwordConfirm = document.getElementById('regPasswordConfirm').value;
+  
+  if (password !== passwordConfirm) {
+    alert('Пароли не совпадают!');
+    return;
+  }
+  
+  // Check if username exists
+  const users = JSON.parse(localStorage.getItem('keroschat_users') || '[]');
+  if (users.find(u => u.username === username)) {
+    alert('Такой никнейм уже занят!');
+    return;
+  }
+  
+  // Create new user
+  const newUser = { username, password, created: Date.now() };
+  users.push(newUser);
+  localStorage.setItem('keroschat_users', JSON.stringify(users));
+  
+  // Auto login
+  currentUser = newUser;
+  localStorage.setItem('keroschat_user', JSON.stringify(newUser));
+  showLobby();
+  alert('Регистрация успешна!');
+}
+
+function logout() {
+  localStorage.removeItem('keroschat_user');
+  currentUser = null;
+  location.reload();
+}
+
+// ========== LOBBY ==========
+
+function showLobby() {
+  document.getElementById('authScreen').style.display = 'none';
+  document.getElementById('roomScreen').style.display = 'none';
+  document.getElementById('lobbyScreen').style.display = 'flex';
+  
+  // Update user info
+  document.getElementById('lobbyUsername').textContent = currentUser.username;
+  const avatarEl = document.getElementById('lobbyAvatar');
+  if (userAvatar) {
+    avatarEl.innerHTML = `<img src="${userAvatar}" alt="avatar">`;
+  } else {
+    avatarEl.textContent = currentUser.username.charAt(0).toUpperCase();
+  }
+  
+  // Load rooms
+  loadRoomsList();
+}
+
+function loadRoomsList() {
+  const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+  const list = document.getElementById('roomsList');
+  list.innerHTML = '';
+  
+  if (rooms.length === 0) {
+    list.innerHTML = '<p style="color: #72767d; padding: 16px; text-align: center;">Нет комнат. Создайте первую!</p>';
+    return;
+  }
+  
+  rooms.forEach(room => {
+    const item = document.createElement('div');
+    item.className = 'room-item';
+    item.onclick = () => joinRoomById(room.id);
+    item.innerHTML = `
+      <div class="icon">#</div>
+      <div class="info">
+        <div class="name">${room.name}</div>
+        <div class="count">Нажмите чтобы присоединиться</div>
+      </div>
+    `;
+    list.appendChild(item);
+  });
+}
+
+function showCreateRoomModal() {
+  document.getElementById('createRoomModal').classList.add('active');
+  document.getElementById('newRoomName').focus();
+}
+
+function hideCreateRoomModal() {
+  document.getElementById('createRoomModal').classList.remove('active');
+  document.getElementById('newRoomName').value = '';
+}
+
+function createRoom() {
+  const name = document.getElementById('newRoomName').value.trim();
+  if (!name) {
+    alert('Введите название комнаты!');
+    return;
+  }
+  
+  const roomId = generateRoomId();
+  const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+  rooms.push({ id: roomId, name, created: Date.now(), creator: currentUser.username });
+  localStorage.setItem('keroschat_rooms', JSON.stringify(rooms));
+  
+  hideCreateRoomModal();
+  loadRoomsList();
+  joinRoomById(roomId);
 }
 
 function generateRoomId() {
   return Math.random().toString(36).substring(2, 10).toUpperCase();
 }
 
-function joinRoom() {
-  userName = document.getElementById('userName').value.trim() || 'Аноним';
-  roomId = document.getElementById('roomId').value.trim().toUpperCase() || generateRoomId();
+// ========== ROOM ==========
+
+async function joinRoomById(roomId) {
+  currentRoom = roomId;
   
-  navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-    .then(stream => {
-      localStream = stream;
-      socket.emit('join-room', roomId, userName);
-      showRoom();
-      addVideoStream('local', stream, userName, true, false);
-      updateActiveUsers();
-    })
-    .catch(err => {
-      alert('Ошибка доступа к камере/микрофону: ' + err.message);
-    });
+  // Request media
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  } catch (err) {
+    alert('Ошибка доступа к камере/микрофону: ' + err.message);
+    return;
+  }
+  
+  // Join socket room
+  socket.emit('join-room', roomId, currentUser.username);
+  
+  // Show room UI
+  showRoomUI();
+  
+  // Add local video
+  addVideoStream('local', localStream, currentUser.username, true, false);
+  updateActiveUsers();
 }
 
-function showRoom() {
-  document.getElementById('loginScreen').style.display = 'none';
+function showRoomUI() {
+  document.getElementById('lobbyScreen').style.display = 'none';
   document.getElementById('roomScreen').style.display = 'flex';
   document.getElementById('roomScreen').style.flexDirection = 'column';
-  document.getElementById('displayRoomId').textContent = roomId;
-  
-  const shareUrl = `${window.location.origin}?room=${roomId}`;
-  document.getElementById('shareLink').value = shareUrl;
-  
-  const urlParams = new URLSearchParams(window.location.search);
-  if (!urlParams.get('room')) {
-    window.history.replaceState({}, '', `?room=${roomId}`);
-  }
-}
-
-function copyLink() {
-  const link = document.getElementById('shareLink');
-  link.select();
-  document.execCommand('copy');
-  alert('Ссылка скопирована!');
+  document.getElementById('displayRoomId').textContent = currentRoom;
 }
 
 function leaveRoom() {
-  playSound('leave');
-  disconnectFromRoom();
-  showLobby();
-}
-
-function disconnectFromRoom() {
+  // Stop streams
   if (localStream) {
     localStream.getTracks().forEach(t => t.stop());
     localStream = null;
@@ -116,37 +217,24 @@ function disconnectFromRoom() {
     screenStream.getTracks().forEach(t => t.stop());
     screenStream = null;
   }
+  
+  // Close peer connections
   peers.forEach(pc => pc.close());
   peers.clear();
   activeUsers.clear();
   
-  // Leave socket room but keep connection
-  if (roomId) {
-    socket.emit('leave-room', roomId);
-  }
-}
-
-function showLobby() {
-  // Hide room, show login
-  document.getElementById('roomScreen').style.display = 'none';
-  document.getElementById('loginScreen').style.display = 'flex';
-  
-  // Clear video grid and chat
-  document.getElementById('videoGrid').innerHTML = '';
-  document.getElementById('chatMessages').innerHTML = '';
-  document.getElementById('activeUsers').innerHTML = `
-    <div class="user-item">
-      <div class="user-avatar">?</div>
-      <span class="user-name">Не в комнате</span>
-      <div class="user-status inactive"></div>
-    </div>
-  `;
+  // Leave socket room
+  socket.emit('leave-room', currentRoom);
   
   // Reset state
-  roomId = '';
+  currentRoom = null;
   isMicOn = true;
   isCamOn = true;
   isScreenSharing = false;
+  
+  // Clear UI
+  document.getElementById('videoGrid').innerHTML = '';
+  document.getElementById('chatMessages').innerHTML = '';
   
   // Reset buttons
   const micBtn = document.getElementById('micBtn');
@@ -161,9 +249,21 @@ function showLobby() {
   screenBtn.classList.remove('active');
   screenBtn.querySelector('.label').textContent = 'Экран';
   
-  // Clear URL
-  window.history.replaceState({}, '', window.location.pathname);
+  // Show settings panel if open
+  document.getElementById('settingsPanel').classList.remove('active');
+  
+  // Back to lobby
+  showLobby();
 }
+
+function copyLink() {
+  const link = `${window.location.origin}?room=${currentRoom}`;
+  navigator.clipboard.writeText(link).then(() => {
+    alert('Ссылка скопирована!');
+  });
+}
+
+// ========== VIDEO & PEERS ==========
 
 function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false) {
   let container = document.getElementById(`video-${id}`);
@@ -183,16 +283,6 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     label.className = 'video-label';
     label.textContent = isLocal ? `${name} (Вы)` : name;
     
-    // Fullscreen/Modal button for screen share
-    if (isScreenShare) {
-      const modalBtn = document.createElement('button');
-      modalBtn.innerHTML = '🔍';
-      modalBtn.className = 'fullscreen-btn';
-      modalBtn.onclick = () => openScreenModal(id, stream, name);
-      container.appendChild(modalBtn);
-    }
-    
-    // Volume control for remote
     if (!isLocal) {
       const volumeControl = document.createElement('div');
       volumeControl.className = 'remote-volume';
@@ -214,57 +304,6 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
   updateUserCount();
 }
 
-function openScreenModal(id, stream, name) {
-  const modal = document.getElementById('screenShareModal');
-  const backdrop = document.getElementById('screenBackdrop');
-  const container = document.getElementById('modalVideoContainer');
-  
-  container.innerHTML = '';
-  const video = document.createElement('video');
-  video.srcObject = stream;
-  video.autoplay = true;
-  video.playsInline = true;
-  video.style.width = '100%';
-  video.style.height = '100%';
-  container.appendChild(video);
-  
-  modal.classList.add('active');
-  backdrop.classList.add('active');
-}
-
-function closeScreenModal() {
-  document.getElementById('screenShareModal').classList.remove('active');
-  document.getElementById('screenBackdrop').classList.remove('active');
-}
-
-function sendModalMessage() {
-  const input = document.getElementById('modalChatInput');
-  const text = input.value.trim();
-  if (text) {
-    socket.emit('chat-message', text);
-    addModalChatMessage(userName, text);
-    input.value = '';
-  }
-}
-
-function addModalChatMessage(sender, text) {
-  const messages = document.getElementById('modalChatMessages');
-  const msgDiv = document.createElement('div');
-  msgDiv.className = 'chat-message';
-  msgDiv.innerHTML = `
-    <div class="chat-avatar" style="width: 32px; height: 32px; font-size: 12px;">${sender.charAt(0)}</div>
-    <div class="chat-content">
-      <div class="chat-header-info">
-        <span class="chat-sender" style="font-size: 13px;">${sender}</span>
-        <span class="chat-time" style="font-size: 11px;">${new Date().toLocaleTimeString()}</span>
-      </div>
-      <div class="chat-text" style="font-size: 13px;">${escapeHtml(text)}</div>
-    </div>
-  `;
-  messages.appendChild(msgDiv);
-  messages.scrollTop = messages.scrollHeight;
-}
-
 function removeVideoStream(id) {
   const container = document.getElementById(`video-${id}`);
   if (container) container.remove();
@@ -280,20 +319,20 @@ function updateActiveUsers() {
   const list = document.getElementById('activeUsers');
   list.innerHTML = '';
   
-  // Add local user
+  // Local user
   const localItem = document.createElement('div');
   localItem.className = 'user-item';
   const avatarHtml = userAvatar ? 
-    `<img src="${userAvatar}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">` :
-    `<div class="user-avatar">${userName.charAt(0).toUpperCase()}</div>`;
+    `<img src="${userAvatar}" alt="avatar">` :
+    currentUser.username.charAt(0).toUpperCase();
   localItem.innerHTML = `
-    ${avatarHtml}
-    <span class="user-name">${userName} (Вы)</span>
+    <div class="user-avatar">${avatarHtml}</div>
+    <span class="user-name">${currentUser.username} (Вы)</span>
     <div class="user-status"></div>
   `;
   list.appendChild(localItem);
   
-  // Add remote users
+  // Remote users
   peers.forEach((pc, id) => {
     const user = activeUsers.get(id);
     const item = document.createElement('div');
@@ -306,9 +345,9 @@ function updateActiveUsers() {
     list.appendChild(item);
   });
   
-  // Update settings panel if open
+  // Update settings if open
   const settingsPanel = document.getElementById('settingsPanel');
-  if (settingsPanel && settingsPanel.style.display === 'flex') {
+  if (settingsPanel.classList.contains('active')) {
     updateRemoteVolumeControls();
   }
 }
@@ -324,7 +363,6 @@ async function createPeerConnection(userId) {
     const stream = e.streams[0];
     socket.emit('get-user-name', userId, (name) => {
       const userName = name || 'Участник';
-      // Add to active users if not exists
       if (!activeUsers.has(userId)) {
         activeUsers.set(userId, { id: userId, name: userName });
       }
@@ -351,8 +389,9 @@ async function createPeerConnection(userId) {
   return pc;
 }
 
+// ========== SOCKET EVENTS ==========
+
 socket.on('users-in-room', async (users) => {
-  playSound('join');
   for (const user of users) {
     activeUsers.set(user.id, user);
     const pc = await createPeerConnection(user.id);
@@ -364,14 +403,12 @@ socket.on('users-in-room', async (users) => {
 });
 
 socket.on('user-joined', async (user) => {
-  playSound('join');
   activeUsers.set(user.id, user);
   addChatMessage('Система', `${user.name} присоединился`, true);
   updateActiveUsers();
 });
 
 socket.on('user-left', (userId) => {
-  playSound('leave');
   removeVideoStream(userId);
   if (peers.has(userId)) {
     peers.get(userId).close();
@@ -405,18 +442,9 @@ socket.on('ice-candidate', async (userId, candidate) => {
 
 socket.on('chat-message', (msg) => {
   addChatMessage(msg.sender, msg.text, false, msg.time);
-  addModalChatMessage(msg.sender, msg.text);
 });
 
-socket.on('screen-share-started', (userId) => {
-  const container = document.getElementById(`video-${userId}`);
-  if (container) container.classList.add('screen-share');
-});
-
-socket.on('screen-share-stopped', (userId) => {
-  const container = document.getElementById(`video-${userId}`);
-  if (container) container.classList.remove('screen-share');
-});
+// ========== CONTROLS ==========
 
 function toggleMic() {
   if (localStream) {
@@ -429,11 +457,9 @@ function toggleMic() {
       if (isMicOn) {
         btn.classList.remove('danger');
         btn.querySelector('.label').textContent = 'Мик';
-        playSound('micOn');
       } else {
         btn.classList.add('danger');
         btn.querySelector('.label').textContent = 'Мик выкл';
-        playSound('micOff');
       }
     }
   }
@@ -460,7 +486,6 @@ function toggleCam() {
 
 async function toggleScreen() {
   if (isScreenSharing) {
-    playSound('screenOff');
     if (screenStream) {
       screenStream.getTracks().forEach(t => t.stop());
     }
@@ -477,7 +502,7 @@ async function toggleScreen() {
     if (localContainer) {
       localContainer.remove();
     }
-    addVideoStream('local', localStream, userName, true, false);
+    addVideoStream('local', localStream, currentUser.username, true, false);
     
     isScreenSharing = false;
     socket.emit('screen-share-stopped');
@@ -488,7 +513,6 @@ async function toggleScreen() {
   } else {
     try {
       screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-      playSound('screenOn');
       
       const screenTrack = screenStream.getVideoTracks()[0];
       screenTrack.onended = () => toggleScreen();
@@ -504,7 +528,7 @@ async function toggleScreen() {
       if (localContainer) {
         localContainer.remove();
       }
-      addVideoStream('local', screenStream, userName, true, true);
+      addVideoStream('local', screenStream, currentUser.username, true, true);
       
       isScreenSharing = true;
       socket.emit('screen-share-started');
@@ -518,12 +542,14 @@ async function toggleScreen() {
   }
 }
 
+// ========== CHAT ==========
+
 function addChatMessage(sender, text, isSystem = false, time = null) {
   const messages = document.getElementById('chatMessages');
   const msgDiv = document.createElement('div');
   msgDiv.className = 'chat-message';
   
-  const isMe = sender === userName;
+  const isMe = sender === currentUser?.username;
   const initial = sender.charAt(0).toUpperCase();
   
   msgDiv.innerHTML = `
@@ -544,9 +570,9 @@ function addChatMessage(sender, text, isSystem = false, time = null) {
 function sendMessage() {
   const input = document.getElementById('chatInput');
   const text = input.value.trim();
-  if (text) {
+  if (text && currentRoom) {
     socket.emit('chat-message', text);
-    addChatMessage(userName, text, false, new Date().toLocaleTimeString());
+    addChatMessage(currentUser.username, text, false, new Date().toLocaleTimeString());
     input.value = '';
   }
 }
@@ -557,131 +583,12 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-function setRemoteVolume(userId, value) {
-  const container = document.getElementById(`video-${userId}`);
-  if (container) {
-    const video = container.querySelector('video');
-    if (video) {
-      video.volume = value / 100;
-    }
-  }
-}
+// ========== SETTINGS ==========
 
-// Microphone test variables
-let micTestStream = null;
-let micTestInterval = null;
-let audioContext = null;
-let analyser = null;
-
-async function testMicrophone() {
-  try {
-    micTestStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const source = audioContext.createMediaStreamSource(micTestStream);
-    analyser = audioContext.createAnalyser();
-    analyser.fftSize = 32;
-    source.connect(analyser);
-    
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-    const bars = document.querySelectorAll('.mic-bar');
-    
-    micTestInterval = setInterval(() => {
-      analyser.getByteFrequencyData(dataArray);
-      
-      bars.forEach((bar, index) => {
-        const value = dataArray[index] || 0;
-        const height = Math.max(4, (value / 255) * 40);
-        bar.style.height = `${height}px`;
-        
-        if (value > 200) {
-          bar.style.background = '#ed4245';
-        } else if (value > 100) {
-          bar.style.background = '#5865f2';
-        } else {
-          bar.style.background = '#3ba55d';
-        }
-      });
-    }, 50);
-    
-  } catch (err) {
-    alert('Ошибка доступа к микрофону: ' + err.message);
-  }
-}
-
-function stopMicTest() {
-  if (micTestInterval) {
-    clearInterval(micTestInterval);
-    micTestInterval = null;
-  }
-  if (micTestStream) {
-    micTestStream.getTracks().forEach(t => t.stop());
-    micTestStream = null;
-  }
-  if (audioContext) {
-    audioContext.close();
-    audioContext = null;
-  }
-  
-  const bars = document.querySelectorAll('.mic-bar');
-  bars.forEach(bar => {
-    bar.style.height = '4px';
-    bar.style.background = '#5865f2';
-  });
-}
-
-function createNewRoom() {
-  const newRoomId = generateRoomId();
-  document.getElementById('roomId').value = newRoomId;
-  
-  const btn = document.querySelector('.create-room-btn');
-  btn.textContent = '✅ Комната создана!';
-  setTimeout(() => {
-    btn.textContent = '➕ Создать комнату';
-  }, 2000);
-}
-
-window.addEventListener('beforeunload', () => {
-  if (localStream) {
-    localStream.getTracks().forEach(t => t.stop());
-  }
-  if (screenStream) {
-    screenStream.getTracks().forEach(t => t.stop());
-  }
-});
-
-window.addEventListener('load', () => {
-  const urlParams = new URLSearchParams(window.location.search);
-  const room = urlParams.get('room');
-  if (room) {
-    document.getElementById('roomId').value = room;
-  }
-  
-  // Unlock audio for mobile on first interaction
-  document.body.addEventListener('click', unlockAudio, { once: true });
-  document.body.addEventListener('touchstart', unlockAudio, { once: true });
-});
-
-// Fix audio for mobile devices
-function unlockAudio() {
-  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  if (audioContext.state === 'suspended') {
-    audioContext.resume();
-  }
-  
-  // Unmute all remote videos
-  document.querySelectorAll('video').forEach(video => {
-    video.muted = false;
-    video.play().catch(e => console.log('Video play failed:', e));
-  });
-}
-
-// Settings Panel
 function toggleSettings() {
   const panel = document.getElementById('settingsPanel');
-  panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
-  
-  if (panel.style.display === 'flex') {
+  panel.classList.toggle('active');
+  if (panel.classList.contains('active')) {
     updateRemoteVolumeControls();
   }
 }
@@ -710,29 +617,24 @@ function updateRemoteVolumeControls() {
   });
 }
 
-function setMicVolume(value) {
-  // Store preference
-  localStorage.setItem('micVolume', value);
-  
-  // Apply to local stream if exists
-  if (localStream) {
-    const audioTrack = localStream.getAudioTracks()[0];
-    if (audioTrack && audioTrack.applyConstraints) {
-      // Web Audio API approach for gain control
-      // This is a simplified approach - real implementation would use AudioContext
-      console.log('Mic volume set to:', value);
+function setRemoteVolume(userId, value) {
+  const container = document.getElementById(`video-${userId}`);
+  if (container) {
+    const video = container.querySelector('video');
+    if (video) {
+      video.volume = value / 100;
     }
   }
 }
 
-// Avatar upload
-let userAvatar = null;
+function setMicVolume(value) {
+  localStorage.setItem('micVolume', value);
+}
 
 function uploadAvatar(input) {
   const file = input.files[0];
   if (!file) return;
   
-  // Limit file size to 2MB
   if (file.size > 2 * 1024 * 1024) {
     alert('Файл слишком большой! Максимум 2MB');
     return;
@@ -741,38 +643,28 @@ function uploadAvatar(input) {
   const reader = new FileReader();
   reader.onload = (e) => {
     userAvatar = e.target.result;
-    localStorage.setItem('userAvatar', userAvatar);
+    localStorage.setItem(`keroschat_avatar_${currentUser.username}`, userAvatar);
     
-    // Preview
+    // Update preview
     const preview = document.getElementById('avatarPreview');
     preview.innerHTML = `<img src="${userAvatar}" alt="Avatar">`;
+    
+    // Update lobby avatar
+    const lobbyAvatar = document.getElementById('lobbyAvatar');
+    lobbyAvatar.innerHTML = `<img src="${userAvatar}" alt="avatar">`;
     
     alert('Аватар загружен!');
   };
   reader.readAsDataURL(file);
 }
 
-// Load saved avatar on start
-window.addEventListener('load', () => {
-  const savedAvatar = localStorage.getItem('userAvatar');
-  if (savedAvatar) {
-    userAvatar = savedAvatar;
-    const preview = document.getElementById('avatarPreview');
-    if (preview) {
-      preview.innerHTML = `<img src="${userAvatar}" alt="Avatar">`;
-    }
+// ========== CLEANUP ==========
+
+window.addEventListener('beforeunload', () => {
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+  }
+  if (screenStream) {
+    screenStream.getTracks().forEach(t => t.stop());
   }
 });
-
-// Fix for mobile audio - ensure video elements are unmuted after connection
-function fixMobileAudio() {
-  document.querySelectorAll('video').forEach(video => {
-    if (!video.muted) {
-      video.volume = 1.0;
-      video.play().catch(e => console.log('Autoplay prevented:', e));
-    }
-  });
-}
-
-// Call fixMobileAudio periodically for new connections
-setInterval(fixMobileAudio, 2000);
