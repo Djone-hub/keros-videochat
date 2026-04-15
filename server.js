@@ -225,14 +225,20 @@ io.on('connection', (socket) => {
   });
   
   socket.on('delete-room', (roomId) => {
-    // Only creator can delete
     const storedRoom = roomStore.get(roomId);
     const activeRoom = rooms.get(roomId);
+    
+    console.log(`[DELETE] Room ${roomId} delete attempt by ${socket.userName}`);
+    console.log(`[DELETE] storedRoom:`, storedRoom);
+    console.log(`[DELETE] activeRoom:`, activeRoom ? { name: activeRoom.name, creator: activeRoom.creator } : null);
     
     // Check both stored room and active room for creator
     const creator = storedRoom?.creator || activeRoom?.creator;
     
-    if (creator === socket.userName) {
+    // Allow deletion if:
+    // 1. User is the creator, OR
+    // 2. No creator is set (orphaned room) - first user to delete becomes "owner"
+    if (creator === socket.userName || !creator) {
       roomStore.delete(roomId);
       if (rooms.has(roomId)) {
         rooms.delete(roomId);
@@ -240,9 +246,9 @@ io.on('connection', (socket) => {
       saveRoomsToFile();
       io.emit('room-deleted', roomId);
       io.emit('rooms-updated');
-      console.log(`Room ${roomId} deleted by ${socket.userName}`);
+      console.log(`[DELETE] Room ${roomId} deleted by ${socket.userName}`);
     } else {
-      console.log(`Delete rejected: ${socket.userName} is not creator of ${roomId}`);
+      console.log(`[DELETE] Rejected: ${socket.userName} is not creator (creator=${creator})`);
       socket.emit('room-error', { message: 'Только создатель может удалить комнату' });
     }
   });
