@@ -323,6 +323,7 @@
       font-size: 13px;
     }
     .room-header button.leave { background: #ed4245; }
+    .room-header button.disconnect { background: #faa81a; color: #000; }
     .room-header button.settings { background: #72767d; }
     
     .main-layout {
@@ -748,6 +749,11 @@
       <div class="rooms-sidebar">
         <div class="rooms-header">
           <h3>💬 Комнаты</h3>
+          <div class="search-box" style="margin-bottom: 12px;">
+            <input type="text" id="roomSearch" placeholder="🔍 Поиск комнаты..." 
+                   style="width: 100%; padding: 8px 12px; border: 1px solid #202225; border-radius: 4px; background: #40444b; color: #fff; font-size: 13px;"
+                   oninput="searchRooms(this.value)">
+          </div>
           <button class="create-room-btn" onclick="showCreateRoomModal()">➕ Создать комнату</button>
         </div>
         <div class="rooms-list" id="roomsList">
@@ -783,7 +789,8 @@
       <div class="actions">
         <button onclick="copyLink()">📋 Ссылка</button>
         <button class="settings" onclick="toggleSettings()">⚙️</button>
-        <button class="leave" onclick="leaveRoom()">🏠 В лобби</button>
+        <button class="disconnect" onclick="disconnectAndJoinAnother()" title="Отключиться и выбрать другую комнату">🔌 Откл.</button>
+        <button class="leave" onclick="leaveRoom()">🏠 Лобби</button>
       </div>
     </div>
     

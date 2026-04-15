@@ -20,6 +20,38 @@ const iceServers = {
   ]
 };
 
+// ========== SOUND SYSTEM ==========
+const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+function playSoftTone(frequency, duration, type = 'sine', volume = 0.1) {
+  const osc = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  
+  osc.connect(gain);
+  gain.connect(audioContext.destination);
+  
+  osc.frequency.value = frequency;
+  osc.type = type;
+  
+  gain.gain.setValueAtTime(0, audioContext.currentTime);
+  gain.gain.linearRampToValueAtTime(volume, audioContext.currentTime + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+  
+  osc.start(audioContext.currentTime);
+  osc.stop(audioContext.currentTime + duration);
+}
+
+const sounds = {
+  micOn: () => playSoftTone(600, 0.15, 'sine', 0.1),
+  micOff: () => playSoftTone(350, 0.15, 'sine', 0.1),
+  camOn: () => playSoftTone(500, 0.15, 'triangle', 0.1),
+  camOff: () => playSoftTone(300, 0.15, 'triangle', 0.1),
+  screenOn: () => playSoftTone(700, 0.2, 'sine', 0.15),
+  screenOff: () => playSoftTone(400, 0.2, 'sine', 0.15),
+  userJoin: () => playSoftTone(550, 0.3, 'sine', 0.1),
+  userLeave: () => playSoftTone(380, 0.3, 'sine', 0.1)
+};
+
 // ========== AUTHENTICATION ==========
 
 // Check if user is already logged in
@@ -27,8 +59,21 @@ window.addEventListener('load', () => {
   const savedUser = localStorage.getItem('keroschat_user');
   if (savedUser) {
     currentUser = JSON.parse(savedUser);
-    userAvatar = localStorage.getItem('keroschat_avatar');
-    showLobby();
+    userAvatar = localStorage.getItem(`keroschat_avatar_${currentUser.username}`);
+    
+    // Check for room invite in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const inviteRoom = urlParams.get('room');
+    
+    if (inviteRoom) {
+      // Store invite and show lobby first (for auth)
+      sessionStorage.setItem('pendingRoomInvite', inviteRoom);
+      showLobby();
+      // Auto-join after brief delay
+      setTimeout(() => joinRoomById(inviteRoom), 500);
+    } else {
+      showLobby();
+    }
   }
 });
 
@@ -120,13 +165,23 @@ function showLobby() {
   loadRoomsList();
 }
 
-function loadRoomsList() {
-  const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+let allRooms = [];
+
+function loadRoomsList(filter = '') {
+  allRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
   const list = document.getElementById('roomsList');
   list.innerHTML = '';
   
+  // Filter rooms if search term provided
+  const rooms = filter 
+    ? allRooms.filter(r => r.name.toLowerCase().includes(filter.toLowerCase()) || 
+                          r.id.toLowerCase().includes(filter.toLowerCase()))
+    : allRooms;
+  
   if (rooms.length === 0) {
-    list.innerHTML = '<p style="color: #72767d; padding: 16px; text-align: center;">Нет комнат. Создайте первую!</p>';
+    list.innerHTML = filter 
+      ? '<p style="color: #72767d; padding: 16px; text-align: center;">Ничего не найдено</p>'
+      : '<p style="color: #72767d; padding: 16px; text-align: center;">Нет комнат. Создайте первую!</p>';
     return;
   }
   
@@ -138,11 +193,15 @@ function loadRoomsList() {
       <div class="icon">#</div>
       <div class="info">
         <div class="name">${room.name}</div>
-        <div class="count">Нажмите чтобы присоединиться</div>
+        <div class="count">ID: ${room.id}</div>
       </div>
     `;
     list.appendChild(item);
   });
+}
+
+function searchRooms(query) {
+  loadRoomsList(query);
 }
 
 function showCreateRoomModal() {
@@ -198,6 +257,9 @@ async function joinRoomById(roomId) {
   // Add local video
   addVideoStream('local', localStream, currentUser.username, true, false);
   updateActiveUsers();
+  
+  // Start speaking detection
+  startSpeakingDetection();
 }
 
 function showRoomUI() {
@@ -256,6 +318,49 @@ function leaveRoom() {
   showLobby();
 }
 
+function disconnectAndJoinAnother() {
+  // Just disconnect and return to lobby without stopping streams
+  // Leave socket room
+  socket.emit('leave-room', currentRoom);
+  
+  // Close peer connections but keep streams
+  peers.forEach(pc => pc.close());
+  peers.clear();
+  activeUsers.clear();
+  
+  // Reset state
+  currentRoom = null;
+  isMicOn = true;
+  isCamOn = true;
+  isScreenSharing = false;
+  
+  // Clear UI
+  document.getElementById('videoGrid').innerHTML = '';
+  document.getElementById('chatMessages').innerHTML = '';
+  
+  // Reset buttons
+  const micBtn = document.getElementById('micBtn');
+  micBtn.classList.remove('danger');
+  micBtn.querySelector('.label').textContent = 'Мик';
+  
+  const camBtn = document.getElementById('camBtn');
+  camBtn.classList.remove('danger');
+  camBtn.querySelector('.label').textContent = 'Камера';
+  
+  const screenBtn = document.getElementById('screenBtn');
+  screenBtn.classList.remove('active');
+  screenBtn.querySelector('.label').textContent = 'Экран';
+  
+  // Show settings panel if open
+  document.getElementById('settingsPanel').classList.remove('active');
+  
+  // Back to lobby - streams continue running
+  showLobby();
+  
+  // Show message to select another room
+  alert('Вы отключены от комнаты. Выберите другую комнату из списка или создайте новую.');
+}
+
 function copyLink() {
   const link = `${window.location.origin}?room=${currentRoom}`;
   navigator.clipboard.writeText(link).then(() => {
@@ -294,6 +399,16 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
       label.appendChild(volumeControl);
     }
     
+    // Add fullscreen button for screen share
+    if (isScreenShare) {
+      const fullscreenBtn = document.createElement('button');
+      fullscreenBtn.className = 'fullscreen-btn';
+      fullscreenBtn.innerHTML = '🔍';
+      fullscreenBtn.title = 'На весь экран';
+      fullscreenBtn.onclick = () => openScreenModal();
+      container.appendChild(fullscreenBtn);
+    }
+    
     container.appendChild(video);
     container.appendChild(label);
     document.getElementById('videoGrid').appendChild(container);
@@ -319,28 +434,30 @@ function updateActiveUsers() {
   const list = document.getElementById('activeUsers');
   list.innerHTML = '';
   
-  // Local user
+  // Local user with speaking indicator
   const localItem = document.createElement('div');
   localItem.className = 'user-item';
+  localItem.id = 'user-local-item';
   const avatarHtml = userAvatar ? 
     `<img src="${userAvatar}" alt="avatar">` :
     currentUser.username.charAt(0).toUpperCase();
   localItem.innerHTML = `
-    <div class="user-avatar">${avatarHtml}</div>
+    <div class="user-avatar" id="avatar-local">${avatarHtml}</div>
     <span class="user-name">${currentUser.username} (Вы)</span>
-    <div class="user-status"></div>
+    <div class="user-status" id="status-local"></div>
   `;
   list.appendChild(localItem);
   
-  // Remote users
+  // Remote users with speaking indicator
   peers.forEach((pc, id) => {
     const user = activeUsers.get(id);
     const item = document.createElement('div');
     item.className = 'user-item';
+    item.id = `user-item-${id}`;
     item.innerHTML = `
-      <div class="user-avatar">${user ? user.name.charAt(0).toUpperCase() : '?'}</div>
+      <div class="user-avatar" id="avatar-${id}">${user ? user.name.charAt(0).toUpperCase() : '?'}</div>
       <span class="user-name">${user ? user.name : 'Участник'}</span>
-      <div class="user-status"></div>
+      <div class="user-status" id="status-${id}"></div>
     `;
     list.appendChild(item);
   });
@@ -350,6 +467,39 @@ function updateActiveUsers() {
   if (settingsPanel.classList.contains('active')) {
     updateRemoteVolumeControls();
   }
+}
+
+// ========== SPEAKING DETECTION ==========
+function startSpeakingDetection() {
+  if (!localStream || !localStream.getAudioTracks()[0]) return;
+  
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  const analyser = audioContext.createAnalyser();
+  const source = audioContext.createMediaStreamSource(localStream);
+  source.connect(analyser);
+  
+  analyser.fftSize = 64;
+  const dataArray = new Uint8Array(analyser.frequencyBinCount);
+  
+  function checkSpeaking() {
+    analyser.getByteFrequencyData(dataArray);
+    const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+    
+    const statusEl = document.getElementById('status-local');
+    if (statusEl) {
+      if (average > 30 && isMicOn) {
+        statusEl.style.background = '#3ba55d';
+        statusEl.style.boxShadow = '0 0 8px #3ba55d';
+      } else {
+        statusEl.style.background = '#72767d';
+        statusEl.style.boxShadow = 'none';
+      }
+    }
+    
+    requestAnimationFrame(checkSpeaking);
+  }
+  
+  checkSpeaking();
 }
 
 async function createPeerConnection(userId) {
@@ -403,12 +553,14 @@ socket.on('users-in-room', async (users) => {
 });
 
 socket.on('user-joined', async (user) => {
+  sounds.userJoin();
   activeUsers.set(user.id, user);
   addChatMessage('Система', `${user.name} присоединился`, true);
   updateActiveUsers();
 });
 
 socket.on('user-left', (userId) => {
+  sounds.userLeave();
   removeVideoStream(userId);
   if (peers.has(userId)) {
     peers.get(userId).close();
@@ -453,6 +605,13 @@ function toggleMic() {
       audioTrack.enabled = !audioTrack.enabled;
       isMicOn = audioTrack.enabled;
       
+      // Play sound
+      if (isMicOn) {
+        sounds.micOn();
+      } else {
+        sounds.micOff();
+      }
+      
       const btn = document.getElementById('micBtn');
       if (isMicOn) {
         btn.classList.remove('danger');
@@ -472,6 +631,13 @@ function toggleCam() {
       videoTrack.enabled = !videoTrack.enabled;
       isCamOn = videoTrack.enabled;
       
+      // Play sound
+      if (isCamOn) {
+        sounds.camOn();
+      } else {
+        sounds.camOff();
+      }
+      
       const btn = document.getElementById('camBtn');
       if (isCamOn) {
         btn.classList.remove('danger');
@@ -486,6 +652,8 @@ function toggleCam() {
 
 async function toggleScreen() {
   if (isScreenSharing) {
+    sounds.screenOff();
+    
     if (screenStream) {
       screenStream.getTracks().forEach(t => t.stop());
     }
@@ -513,6 +681,7 @@ async function toggleScreen() {
   } else {
     try {
       screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      sounds.screenOn();
       
       const screenTrack = screenStream.getVideoTracks()[0];
       screenTrack.onended = () => toggleScreen();
@@ -539,6 +708,83 @@ async function toggleScreen() {
     } catch (err) {
       console.error('Screen share error:', err);
     }
+  }
+}
+
+// ========== FULLSCREEN SCREEN SHARE ==========
+function openScreenModal() {
+  const container = document.querySelector('.video-container.screen-share');
+  if (!container) return;
+  
+  const video = container.querySelector('video');
+  if (!video) return;
+  
+  // Create modal
+  const modal = document.createElement('div');
+  modal.id = 'screenShareModal';
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #000;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+  `;
+  
+  const header = document.createElement('div');
+  header.style.cssText = `
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+    background: #2f3136;
+    border-bottom: 1px solid #202225;
+  `;
+  header.innerHTML = `
+    <span style="color: #fff; font-weight: 600;">🖥️ Демонстрация экрана</span>
+    <button onclick="closeScreenModal()" style="
+      background: #ed4245;
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    ">✕ Закрыть</button>
+  `;
+  
+  const videoContainer = document.createElement('div');
+  videoContainer.style.cssText = `
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  `;
+  
+  const clonedVideo = document.createElement('video');
+  clonedVideo.srcObject = video.srcObject;
+  clonedVideo.autoplay = true;
+  clonedVideo.playsInline = true;
+  clonedVideo.style.cssText = `
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  `;
+  
+  videoContainer.appendChild(clonedVideo);
+  modal.appendChild(header);
+  modal.appendChild(videoContainer);
+  document.body.appendChild(modal);
+}
+
+function closeScreenModal() {
+  const modal = document.getElementById('screenShareModal');
+  if (modal) {
+    modal.remove();
   }
 }
 
@@ -645,13 +891,30 @@ function uploadAvatar(input) {
     userAvatar = e.target.result;
     localStorage.setItem(`keroschat_avatar_${currentUser.username}`, userAvatar);
     
-    // Update preview
+    // Update preview immediately
     const preview = document.getElementById('avatarPreview');
-    preview.innerHTML = `<img src="${userAvatar}" alt="Avatar">`;
+    if (preview) {
+      preview.innerHTML = `<img src="${userAvatar}" alt="Avatar">`;
+    }
     
-    // Update lobby avatar
+    // Update lobby avatar immediately
     const lobbyAvatar = document.getElementById('lobbyAvatar');
-    lobbyAvatar.innerHTML = `<img src="${userAvatar}" alt="avatar">`;
+    if (lobbyAvatar) {
+      lobbyAvatar.innerHTML = `<img src="${userAvatar}" alt="avatar">`;
+    }
+    
+    // Update room user list if in room
+    const localAvatar = document.getElementById('avatar-local');
+    if (localAvatar && currentRoom) {
+      localAvatar.innerHTML = `<img src="${userAvatar}" alt="avatar">`;
+    }
+    
+    // Update chat avatars
+    document.querySelectorAll('.chat-avatar').forEach(avatar => {
+      if (avatar.textContent === currentUser.username.charAt(0).toUpperCase()) {
+        avatar.innerHTML = `<img src="${userAvatar}" style="width: 100%; height: 100%; object-fit: cover;">`;
+      }
+    });
     
     alert('Аватар загружен!');
   };
