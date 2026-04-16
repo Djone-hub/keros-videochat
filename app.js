@@ -2390,11 +2390,13 @@ function showUserVideo(userId, show) {
 function updateVideoVisibilityForChannel(channelUsers) {
   // Get list of user IDs in this channel
   const userIdsInChannel = new Set(channelUsers.map(u => u.userId));
-  
+
   // Show/hide videos in the main video grid based on channel membership
   document.querySelectorAll('.video-container').forEach(container => {
     const userId = container.id.replace('video-', '');
-    const isInChannel = userIdsInChannel.has(userId) || userId === 'local';
+    // For local user, check if socket.id is in the channel; for others, check userId directly
+    const isLocalUser = userId === 'local';
+    const isInChannel = isLocalUser ? userIdsInChannel.has(socket.id) : userIdsInChannel.has(userId);
     
     if (isInChannel) {
       container.style.display = 'block';
