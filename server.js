@@ -139,9 +139,10 @@ io.on('connection', (socket) => {
       });
       saveRoomsToFile();
       isNewRoom = true;
-      // Broadcast new room to all clients
-      io.emit('rooms-updated');
     }
+    
+    // Broadcast room update to all clients (for lobby sync)
+    io.emit('rooms-updated');
 
     const users = Array.from(room.users).filter(u => u.id !== socket.id);
     

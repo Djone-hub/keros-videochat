@@ -898,6 +898,12 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     container.appendChild(label);
     videoGrid.appendChild(container);
     console.log(`[VIDEO] Created new container for ${id}, appended to grid. Total containers:`, videoGrid.children.length);
+    
+    // Log container dimensions after a short delay
+    setTimeout(() => {
+      const rect = container.getBoundingClientRect();
+      console.log(`[VIDEO] Container ${id} dimensions: ${rect.width}x${rect.height}, visible: ${rect.width > 0 && rect.height > 0}`);
+    }, 500);
   } else {
     const video = container.querySelector('video');
     console.log(`[VIDEO] Updating existing container for ${id}, video found:`, !!video);
@@ -908,7 +914,9 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     if (isScreenShare && !isLocal) {
       console.log(`[VIDEO] Applying screen share styles to existing container`);
       container.classList.add('screen-share');
-      video.style.objectFit = 'contain';
+      // Force inline styles for visibility
+      container.style.cssText = 'display: block !important; visibility: visible !important; opacity: 1 !important; min-width: 640px; min-height: 360px; border: 3px solid #3ba55d;';
+      video.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: contain !important; display: block !important; visibility: visible !important;';
       
       // Add fullscreen button if not exists
       if (!container.querySelector('.fullscreen-btn')) {

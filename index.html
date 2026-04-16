@@ -728,6 +728,19 @@
       aspect-ratio: 16/9;
       border: 3px solid #3ba55d;
       box-shadow: 0 0 10px rgba(59, 165, 93, 0.5);
+      min-width: 640px;
+      min-height: 360px;
+      display: block !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+    }
+    .video-container.screen-share video {
+      object-fit: contain;
+      background: #000;
+      width: 100% !important;
+      height: 100% !important;
+      display: block !important;
+      visibility: visible !important;
     }
     .video-container.screen-share::before {
       content: '🖥️ Демонстрация экрана';
