@@ -221,10 +221,13 @@ io.on('connection', (socket) => {
     if (!room.channels.has('general')) {
       room.channels.set('general', { name: 'Общий', users: new Set() });
     }
-    
-    // Load channels from stored room data
+
+    // ALWAYS load channels from stored room data - for new and existing rooms
+    // This ensures all users see the same channels
     if (storedRoom && storedRoom.channels) {
-      console.log(`[CHANNELS] Loading ${Object.keys(storedRoom.channels).length} channels from stored room`);
+      const channelCount = Object.keys(storedRoom.channels).length;
+      console.log(`[CHANNELS] Loading ${channelCount} channels from stored room ${roomId}`);
+      console.log(`[CHANNELS] Current room.channels size before loading: ${room.channels.size}`);
       Object.entries(storedRoom.channels).forEach(([channelId, channelData]) => {
         if (!room.channels.has(channelId)) {
           room.channels.set(channelId, {
@@ -233,9 +236,14 @@ io.on('connection', (socket) => {
             createdBy: channelData.createdBy,
             createdAt: channelData.createdAt
           });
-          console.log(`[CHANNELS] Loaded channel "${channelData.name}" (${channelId})`);
+          console.log(`[CHANNELS] Loaded channel "${channelData.name}" (${channelId}) into room ${roomId}`);
+        } else {
+          console.log(`[CHANNELS] Channel "${channelData.name}" (${channelId}) already exists in room ${roomId}`);
         }
       });
+      console.log(`[CHANNELS] room.channels size after loading: ${room.channels.size}`);
+    } else {
+      console.log(`[CHANNELS] No stored channels found for room ${roomId} (storedRoom: ${storedRoom ? 'exists' : 'null'})`);
     }
     room.users.add({ id: socket.id, name: userName, avatar: userAvatar });
     
