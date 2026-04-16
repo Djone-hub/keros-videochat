@@ -978,15 +978,24 @@ async function createPeerConnection(userId) {
   
   pc.ontrack = (e) => {
     const stream = e.streams[0];
-    console.log(`[TRACK] Received stream from ${userId}, tracks:`, stream.getTracks().map(t => t.kind));
+    console.log(`[TRACK] Received stream from ${userId}, tracks:`, stream.getTracks().map(t => `${t.kind}:${t.label}`));
+    
+    // Detect screen share by track label (screen tracks usually have 'screen' in label)
+    const videoTrack = stream.getVideoTracks()[0];
+    const isScreenByLabel = videoTrack && (
+      videoTrack.label.toLowerCase().includes('screen') ||
+      videoTrack.label.toLowerCase().includes('display') ||
+      videoTrack.label.toLowerCase().includes('window')
+    );
+    
     socket.emit('get-user-name', userId, (name) => {
       const userName = name || 'Участник';
       if (!activeUsers.has(userId)) {
         activeUsers.set(userId, { id: userId, name: userName });
       }
-      // Check if this user is screen sharing
-      const isScreenShare = screenShareUsers.has(userId);
-      console.log(`[TRACK] screenShareUsers has ${userId}:`, isScreenShare, 'Set size:', screenShareUsers.size);
+      // Check if this user is screen sharing (from socket event OR from track label)
+      const isScreenShare = screenShareUsers.has(userId) || isScreenByLabel;
+      console.log(`[TRACK] screenShareUsers has ${userId}:`, screenShareUsers.has(userId), 'detected by label:', isScreenByLabel);
       addVideoStream(userId, stream, userName, false, isScreenShare);
       updateActiveUsers();
     });
@@ -1160,17 +1169,18 @@ socket.on('screen-share-started', (userId) => {
   // Track this user as screen sharing
   screenShareUsers.add(userId);
   
-  // Check if video container already exists and add fullscreen button
+  // Check if video container already exists and UPDATE it to screen share mode
   const container = document.getElementById(`video-${userId}`);
-  console.log('[SCREEN] Looking for container:', `video-${userId}`, 'found:', !!container);
-  
   if (container) {
+    // Update existing container to screen share style
+    container.classList.add('screen-share');
+    const video = container.querySelector('video');
+    if (video) {
+      video.style.objectFit = 'contain';
+    }
+    
+    // Add fullscreen button if not exists
     if (!container.querySelector('.fullscreen-btn')) {
-      console.log('[SCREEN] Adding fullscreen button to existing container');
-      // Add screen-share class
-      container.classList.add('screen-share');
-      
-      // Add fullscreen button
       const fullscreenBtn = document.createElement('button');
       fullscreenBtn.className = 'fullscreen-btn';
       fullscreenBtn.innerHTML = '🔍';
@@ -1178,18 +1188,16 @@ socket.on('screen-share-started', (userId) => {
       fullscreenBtn.onclick = () => openScreenModal(userId);
       container.appendChild(fullscreenBtn);
       
-      // Add double-click handler to video
-      const video = container.querySelector('video');
       if (video) {
         video.style.cursor = 'pointer';
         video.title = 'Двойной клик для увеличения';
         video.ondblclick = () => openScreenModal(userId);
       }
-    } else {
-      console.log('[SCREEN] Fullscreen button already exists');
     }
+    
+    console.log('[SCREEN] Updated container for screen share:', userId);
   } else {
-    console.log('[SCREEN] Container not found, will add button when video arrives');
+    console.log('[SCREEN] Container not found yet, will be styled when video arrives');
   }
 });
 

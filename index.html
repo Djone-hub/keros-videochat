@@ -90,57 +90,178 @@
     }
     .auth-box button[type="submit"]:hover { background: #4752c4; }
     
-    /* Lobby Screen */
+    /* Lobby Screen - Discord Style */
     .lobby-screen {
       display: none;
       flex: 1;
+      flex-direction: row;
+      overflow: hidden;
+    }
+    
+    /* Left Sidebar - Discord Style */
+    .lobby-sidebar {
+      width: 72px;
+      background: #202225;
+      display: flex;
       flex-direction: column;
+      align-items: center;
+      padding: 12px 0;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .lobby-sidebar .nav-item {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: #36393f;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 20px;
+      position: relative;
+    }
+    .lobby-sidebar .nav-item:hover {
+      border-radius: 16px;
+      background: #5865f2;
+    }
+    .lobby-sidebar .nav-item.active {
+      border-radius: 16px;
+      background: #5865f2;
+    }
+    .lobby-sidebar .nav-item::before {
+      content: '';
+      position: absolute;
+      left: -16px;
+      width: 8px;
+      height: 8px;
+      background: #fff;
+      border-radius: 0 4px 4px 0;
+      transition: height 0.2s;
+    }
+    .lobby-sidebar .nav-item:hover::before,
+    .lobby-sidebar .nav-item.active::before {
+      height: 20px;
+    }
+    .lobby-sidebar .divider {
+      width: 32px;
+      height: 2px;
+      background: #36393f;
+      margin: 4px 0;
+    }
+    
+    /* Main Lobby Area */
+    .lobby-main-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #36393f;
       overflow: hidden;
     }
     .lobby-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 16px 24px;
-      background: #2f3136;
+      padding: 12px 16px;
+      background: #36393f;
       border-bottom: 1px solid #202225;
     }
     .lobby-header h2 { 
       color: #fff; 
-      font-size: 20px; 
+      font-size: 16px; 
+      font-weight: 600;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
-    .user-info {
+    
+    /* Discord-style User Panel */
+    .user-panel {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 8px;
+      background: #292b2f;
+      padding: 8px 12px;
+      border-radius: 8px;
     }
-    .user-info .avatar {
-      width: 40px;
-      height: 40px;
+    .user-avatar-wrapper {
+      position: relative;
+    }
+    .user-panel .avatar {
+      width: 32px;
+      height: 32px;
       border-radius: 50%;
       background: #5865f2;
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 600;
+      font-size: 14px;
       overflow: hidden;
+      cursor: pointer;
+      transition: border-radius 0.2s;
     }
-    .user-info .avatar img {
+    .user-panel .avatar:hover {
+      border-radius: 12px;
+    }
+    .user-panel .avatar img {
       width: 100%;
       height: 100%;
       object-fit: cover;
     }
-    .user-info button {
-      padding: 8px 16px;
+    .user-panel .status-indicator {
+      position: absolute;
+      bottom: -2px;
+      right: -2px;
+      width: 12px;
+      height: 12px;
+      background: #3ba55d;
+      border: 2px solid #292b2f;
+      border-radius: 50%;
+    }
+    .user-panel .user-info-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.2;
+    }
+    .user-panel .username {
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .user-panel .user-badge {
+      color: #b9bbbe;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .user-panel .user-actions {
+      display: flex;
+      gap: 4px;
+      margin-left: 4px;
+    }
+    .user-panel .user-actions button {
+      width: 32px;
+      height: 32px;
       border: none;
       border-radius: 4px;
+      background: transparent;
+      color: #b9bbbe;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .user-panel .user-actions button:hover {
       background: #ed4245;
       color: #fff;
-      cursor: pointer;
-      font-size: 13px;
+    }
+    .user-panel .user-actions button.admin-btn:hover {
+      background: #5865f2;
     }
     
     .lobby-content {
@@ -150,11 +271,16 @@
       min-height: 0;
     }
     
-    /* Room List Sidebar */
+    /* Room List Sidebar - Discord Style */
+    .lobby-content {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      min-height: 0;
+    }
     .rooms-sidebar {
-      width: 300px;
+      width: 240px;
       background: #2f3136;
-      border-right: 1px solid #202225;
       display: flex;
       flex-direction: column;
       height: 100%;
@@ -168,8 +294,25 @@
       font-size: 12px;
       color: #96989d;
       text-transform: uppercase;
-      font-weight: 600;
+      font-weight: 700;
       margin-bottom: 12px;
+      letter-spacing: 0.5px;
+    }
+    .search-box {
+      margin-bottom: 12px;
+    }
+    .search-box input {
+      width: 100%;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 4px;
+      background: #202225;
+      color: #fff;
+      font-size: 13px;
+      outline: none;
+    }
+    .search-box input::placeholder {
+      color: #72767d;
     }
     .create-room-btn {
       width: 100%;
@@ -179,8 +322,13 @@
       background: #3ba55d;
       color: #fff;
       cursor: pointer;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: background 0.2s;
     }
     .create-room-btn:hover { background: #2d7d46; }
     .rooms-list {
@@ -312,22 +460,56 @@
       display: flex;
       flex-direction: column;
       background: #36393f;
-      padding: 24px;
+      padding: 32px;
       overflow-y: auto;
       min-height: 0;
     }
     .welcome-section {
-      text-align: center;
-      margin-bottom: 32px;
+      max-width: 600px;
+      margin: 0 auto;
     }
     .welcome-section h3 {
-      font-size: 24px;
+      font-size: 32px;
       color: #fff;
-      margin-bottom: 8px;
+      margin-bottom: 16px;
+      font-weight: 700;
     }
     .welcome-section p {
+      color: #b9bbbe;
+      font-size: 16px;
+      line-height: 1.5;
+    }
+    .welcome-tips {
+      background: #2f3136;
+      padding: 20px;
+      border-radius: 8px;
+      margin-top: 24px;
+      border-left: 4px solid #5865f2;
+    }
+    .welcome-tips h4 {
+      color: #fff;
+      font-size: 14px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .welcome-tips ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .welcome-tips li {
       color: #96989d;
       font-size: 14px;
+      padding: 6px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .welcome-tips li::before {
+      content: '→';
+      color: #5865f2;
     }
     
     /* Create Room Modal */
@@ -1180,44 +1362,62 @@
   
   <!-- Lobby Screen -->
   <div class="lobby-screen" id="lobbyScreen">
-    <div class="lobby-header">
-      <h2>🏠 Лобби Keros VideoChat</h2>
-      <div class="user-info">
-        <div class="avatar" id="lobbyAvatar">Я</div>
-        <span id="lobbyUsername">Пользователь</span>
-        <button onclick="showAdminPanel()" style="background: #5865f2; margin-right: 8px;">⚙️ Админ</button>
-        <button onclick="logout()">Выйти</button>
-      </div>
+    <!-- Left Sidebar - Discord Style -->
+    <div class="lobby-sidebar">
+      <div class="nav-item active" title="Лобби">🏠</div>
+      <div class="divider"></div>
+      <div class="nav-item" onclick="showAdminPanel()" title="Админ панель">⚙️</div>
+      <div style="flex: 1;"></div>
+      <div class="nav-item" onclick="logout()" title="Выйти">🚪</div>
     </div>
     
-    <div class="lobby-content">
-      <div class="rooms-sidebar">
-        <div class="rooms-header">
-          <h3>💬 Комнаты</h3>
-          <div class="search-box" style="margin-bottom: 12px;">
-            <input type="text" id="roomSearch" placeholder="🔍 Поиск по названию..." 
-                   style="width: 100%; padding: 8px 12px; border: 1px solid #202225; border-radius: 4px; background: #40444b; color: #fff; font-size: 13px;"
-                   oninput="searchRooms(this.value)">
+    <!-- Main Area -->
+    <div class="lobby-main-area">
+      <div class="lobby-header">
+        <h2>💬 Комнаты</h2>
+        <div class="user-panel">
+          <div class="user-avatar-wrapper">
+            <div class="avatar" id="lobbyAvatar">K</div>
+            <div class="status-indicator"></div>
           </div>
-          <button class="create-room-btn" onclick="showCreateRoomModal()">➕ Создать комнату</button>
-        </div>
-        <div class="rooms-list" id="roomsList">
-          <!-- Rooms will be added here -->
+          <div class="user-info-text">
+            <span class="username" id="lobbyUsername">KEROS</span>
+            <span class="user-badge">⚙️ Админ</span>
+          </div>
+          <div class="user-actions">
+            <button class="admin-btn" onclick="showAdminPanel()" title="Админ панель">⚙️</button>
+            <button onclick="logout()" title="Выйти">🚪</button>
+          </div>
         </div>
       </div>
       
-      <div class="lobby-main">
-        <div class="welcome-section">
-          <h3>Добро пожаловать в Keros VideoChat! 👋</h3>
-          <p style="margin-bottom: 16px;">🔥 <b>Комнаты с огоньком</b> — активные, там уже есть люди!<br>⚪ <b>Без огонька</b> — пока пустые, но вы можете быть первыми!</p>
-          <div style="background: #2f3136; padding: 16px; border-radius: 8px; margin-top: 16px;">
-            <p style="color: #b9bbbe; font-size: 13px; margin-bottom: 8px;"><b>💡 Как присоединиться:</b></p>
-            <ul style="color: #96989d; font-size: 13px; text-align: left; padding-left: 20px;">
-              <li>Нажмите на любую комнату слева 🔴</li>
-              <li>Или введите название комнаты в поиске 🔍</li>
-              <li>Или перейдите по ссылке-приглашению 📎</li>
-              <li>Создайте свою комнату кнопкой ➕</li>
-            </ul>
+      <div class="lobby-content">
+        <div class="rooms-sidebar">
+          <div class="rooms-header">
+            <h3>💬 Комнаты</h3>
+            <div class="search-box">
+              <input type="text" id="roomSearch" placeholder="🔍 Поиск по названию..." oninput="searchRooms(this.value)">
+            </div>
+            <button class="create-room-btn" onclick="showCreateRoomModal()">➕ Создать комнату</button>
+          </div>
+          <div class="rooms-list" id="roomsList">
+            <!-- Rooms will be added here -->
+          </div>
+        </div>
+        
+        <div class="lobby-main">
+          <div class="welcome-section">
+            <h3>Добро пожаловать в Keros VideoChat! 👋</h3>
+            <p>🔥 <b>Комнаты с огоньком</b> — активные, там уже есть люди!<br>⚪ <b>Без огонька</b> — пока пустые, но вы можете быть первыми!</p>
+            <div class="welcome-tips">
+              <h4>💡 Как присоединиться:</h4>
+              <ul>
+                <li>Нажмите на любую комнату слева 🔴</li>
+                <li>Или введите название комнаты в поиске 🔍</li>
+                <li>Или перейдите по ссылке-приглашению 📎</li>
+                <li>Создайте свою комнату кнопкой ➕</li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>
@@ -1350,13 +1550,13 @@
   </div>
   
   <!-- Admin Panel Modal -->
-  <div id="adminPanelModal" class="modal">
-    <div class="modal-content admin-panel-content">
-      <div class="modal-header admin-header">
-        <h3>⚙️ Панель управления</h3>
-        <button class="modal-close admin-close" onclick="hideAdminPanel()">✕</button>
+  <div id="adminPanelModal" class="modal-overlay" style="z-index: 2000;">
+    <div class="modal admin-panel-content" style="width: 700px; max-width: 90vw;">
+      <div class="admin-header" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: linear-gradient(135deg, #5865f2 0%, #4752c4 100%); border-radius: 8px 8px 0 0;">
+        <h3 style="color: #fff; font-size: 18px; margin: 0;">⚙️ Панель управления</h3>
+        <button onclick="hideAdminPanel()" style="background: rgba(255,255,255,0.2); border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">✕</button>
       </div>
-      <div class="admin-body">
+      <div class="admin-body" style="display: flex; flex-direction: column; max-height: 70vh;">
         <!-- Tabs -->
         <div class="admin-tabs">
           <button class="admin-tab active" onclick="switchAdminTab('stats')" data-tab="stats">📊 Статистика</button>
@@ -1367,7 +1567,9 @@
         
         <!-- Stats Tab -->
         <div id="adminTab-stats" class="admin-tab-content active">
-          <div id="adminStats" class="admin-stats-grid">Загрузка...</div>
+          <div id="adminStats" class="admin-stats-grid">
+            <div style="text-align: center; padding: 40px; color: #72767d;">⏳ Загрузка...</div>
+          </div>
           <div class="admin-actions-bar">
             <button onclick="forceRefreshRooms()" class="admin-btn primary">🔄 Обновить</button>
             <button onclick="clearGhostRooms()" class="admin-btn warning">👻 Очистить призраки</button>
@@ -1378,10 +1580,12 @@
         <!-- Rooms Tab -->
         <div id="adminTab-rooms" class="admin-tab-content">
           <div class="admin-room-controls">
-            <input type="text" id="adminRoomSearch" placeholder="🔍 Поиск комнаты..." oninput="filterAdminRooms(this.value)">
+            <input type="text" id="adminRoomSearch" placeholder="🔍 Поиск комнаты..." oninput="filterAdminRooms(this.value)" style="flex: 1; padding: 10px 12px; background: #40444b; border: 1px solid #202225; border-radius: 4px; color: #fff; font-size: 14px;">
             <button onclick="showCreateRoomFromAdmin()" class="admin-btn success">➕ Создать комнату</button>
           </div>
-          <div id="adminRoomList" class="admin-room-list">Загрузка...</div>
+          <div id="adminRoomList" class="admin-room-list">
+            <div style="text-align: center; padding: 40px; color: #72767d;">⏳ Загрузка...</div>
+          </div>
         </div>
         
         <!-- Settings Tab -->
@@ -1393,26 +1597,26 @@
                 <button onclick="setTheme('dark')" class="theme-btn dark active">🌙 Тёмная</button>
                 <button onclick="setTheme('blue')" class="theme-btn blue">💙 Синяя</button>
                 <button onclick="setTheme('red')" class="theme-btn red">❤️ Красная</button>
-                <button onclick="setTheme('green')" class="theme-btn green">� Зелёная</button>
+                <button onclick="setTheme('green')" class="theme-btn green">💚 Зелёная</button>
                 <button onclick="setTheme('purple')" class="theme-btn purple">💜 Фиолетовая</button>
               </div>
             </div>
             <div class="admin-setting-card">
               <h4>🔊 Громкость</h4>
               <label>Микрофон: <span id="micVolVal">100</span>%</label>
-              <input type="range" id="micVolume" min="0" max="200" value="100" oninput="updateVolume('mic', this.value)">
+              <input type="range" id="adminMicVolume" min="0" max="200" value="100" oninput="updateVolume('mic', this.value)" style="width: 100%; margin-bottom: 12px;">
               <label>Видео: <span id="vidVolVal">100</span>%</label>
-              <input type="range" id="vidVolume" min="0" max="200" value="100" oninput="updateVolume('vid', this.value)">
+              <input type="range" id="adminVidVolume" min="0" max="200" value="100" oninput="updateVolume('vid', this.value)" style="width: 100%;">
             </div>
             <div class="admin-setting-card">
               <h4>👤 Аватар</h4>
-              <div class="avatar-preview" id="adminAvatarPreview">Я</div>
-              <input type="file" id="adminAvatarUpload" accept="image/*" onchange="updateAdminAvatar(this)">
-              <button onclick="document.getElementById('adminAvatarUpload').click()" class="admin-btn">� Сменить аватар</button>
+              <div id="adminAvatarPreview" style="width: 64px; height: 64px; border-radius: 50%; background: #5865f2; display: flex; align-items: center; justify-content: center; margin: 8px auto; font-size: 24px; overflow: hidden;">Я</div>
+              <input type="file" id="adminAvatarUpload" accept="image/*" onchange="updateAdminAvatar(this)" style="display: none;">
+              <button onclick="document.getElementById('adminAvatarUpload').click()" class="admin-btn" style="width: 100%;">📤 Сменить аватар</button>
             </div>
             <div class="admin-setting-card">
               <h4>📹 Камера</h4>
-              <select id="cameraQuality" onchange="setCameraQuality(this.value)">
+              <select id="cameraQuality" onchange="setCameraQuality(this.value)" style="width: 100%; padding: 8px; background: #40444b; color: #fff; border: 1px solid #202225; border-radius: 4px;">
                 <option value="low">📱 Низкое (экономично)</option>
                 <option value="medium" selected>📷 Среднее</option>
                 <option value="high">🎥 Высокое</option>
@@ -1430,7 +1634,7 @@
           <div id="vipChannelsList" class="admin-vip-list">
             <div class="vip-channel-item">
               <span>🔒 VIP Lounge</span>
-              <button class="admin-btn small">Настроить</button>
+              <button class="admin-btn small" onclick="configureVIPChannel('vip-lounge')">Настроить</button>
             </div>
           </div>
           <button onclick="createVIPChannel()" class="admin-btn success">➕ Создать VIP канал</button>
