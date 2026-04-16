@@ -1507,9 +1507,11 @@ socket.on('user-joined-channel', (data) => {
   if (data.userId !== socket.id) {
     addSystemMessage(`${data.userName} присоединился к каналу "${data.channelName}"`);
     
-    // Show video if user is in same channel
+    // Add to current channel users if in same channel
     if (data.channelId === currentChannel) {
-      showUserVideo(data.userId, true);
+      currentChannelUsers.set(data.userId, { userName: data.userName });
+      // Refresh channel videos
+      refreshChannelVideos();
     }
   }
   updateChannelParticipants();
@@ -1518,11 +1520,34 @@ socket.on('user-joined-channel', (data) => {
 // User left channel
 socket.on('user-left-channel', (data) => {
   if (data.userId !== socket.id) {
-    // Hide video when user leaves this channel
-    showUserVideo(data.userId, false);
+    // Remove from current channel users
+    if (data.channelId === currentChannel) {
+      currentChannelUsers.delete(data.userId);
+      // Remove video from channel container
+      const channelVideo = document.getElementById(`channel-video-${data.userId}`);
+      if (channelVideo) {
+        channelVideo.remove();
+      }
+    }
   }
   updateChannelParticipants();
 });
+
+// Refresh channel videos - re-creates the channel video container
+function refreshChannelVideos() {
+  const channelUsers = Array.from(currentChannelUsers.entries()).map(([userId, user]) => ({
+    userId,
+    userName: user.userName || (activeUsers.get(userId)?.name) || 'Участник'
+  }));
+  
+  // Add current user
+  channelUsers.push({
+    userId: socket.id,
+    userName: currentUser.username
+  });
+  
+  updateVideoVisibilityForChannel(channelUsers);
+}
 
 // Handle remote user screen share started
 socket.on('screen-share-started', (userId) => {
@@ -2257,12 +2282,25 @@ function switchChannel(channelId) {
       
       // Update channel users tracking
       currentChannelUsers.clear();
-      if (response.channelUsers) {
-        response.channelUsers.forEach(u => {
-          currentChannelUsers.set(u.userId, u);
+      console.log('[CHANNEL] Server returned channelUsers:', response.channelUsers);
+      
+      let channelUsers = response.channelUsers || [];
+      
+      // Ensure current user is in the list
+      if (!channelUsers.find(u => u.userId === socket.id)) {
+        channelUsers.push({
+          userId: socket.id,
+          userName: currentUser.username
         });
-        updateVideoVisibilityForChannel(response.channelUsers);
+        console.log('[CHANNEL] Added current user to channelUsers');
       }
+      
+      channelUsers.forEach(u => {
+        currentChannelUsers.set(u.userId, u);
+      });
+      
+      console.log('[CHANNEL] Calling updateVideoVisibilityForChannel with', channelUsers.length, 'users');
+      updateVideoVisibilityForChannel(channelUsers);
       
       // Update participants list
       updateChannelParticipants();
@@ -2338,28 +2376,120 @@ function showUserVideo(userId, show) {
 }
 
 function updateVideoVisibilityForChannel(channelUsers) {
-  // Hide all videos first
-  document.querySelectorAll('.video-container:not(.local)').forEach(container => {
-    const userId = container.id.replace('video-', '');
-    container.style.display = 'none';
-  });
+  const channelVideoContainer = document.getElementById('channelVideos');
+  const mainVideoGrid = document.getElementById('videoGrid');
   
-  // Show only users in this channel
+  if (!channelVideoContainer) {
+    console.log('[CHANNEL] channelVideos container not found');
+    return;
+  }
+  
+  // Clear channel video container
+  channelVideoContainer.innerHTML = '';
+  
+  // Get list of user IDs in this channel
   const userIdsInChannel = new Set(channelUsers.map(u => u.userId));
+  
+  // Move videos of users in this channel to the channel container
   userIdsInChannel.forEach(userId => {
     const container = document.getElementById(`video-${userId}`);
     if (container) {
-      container.style.display = 'block';
+      // Clone the video container for channel view
+      const channelVideo = container.cloneNode(true);
+      channelVideo.id = `channel-video-${userId}`;
+      channelVideo.style.display = 'block';
+      
+      // Add username label
+      const user = activeUsers.get(userId);
+      const userName = user ? user.name : (userId === socket.id ? currentUser.username : 'Участник');
+      
+      // Check if username label exists, if not add it
+      if (!channelVideo.querySelector('.video-username')) {
+        const nameLabel = document.createElement('div');
+        nameLabel.className = 'video-username';
+        nameLabel.textContent = userName;
+        channelVideo.appendChild(nameLabel);
+      }
+      
+      channelVideoContainer.appendChild(channelVideo);
     }
   });
   
-  // Always show local video
+  // Also add local video to channel container
   const localContainer = document.getElementById('video-local');
   if (localContainer) {
-    localContainer.style.display = 'block';
+    const channelLocalVideo = localContainer.cloneNode(true);
+    channelLocalVideo.id = 'channel-video-local';
+    channelLocalVideo.style.display = 'block';
+    
+    if (!channelLocalVideo.querySelector('.video-username')) {
+      const nameLabel = document.createElement('div');
+      nameLabel.className = 'video-username';
+      nameLabel.textContent = currentUser.username + ' (Вы)';
+      channelLocalVideo.appendChild(nameLabel);
+    }
+    
+    channelVideoContainer.appendChild(channelLocalVideo);
   }
   
-  console.log(`[CHANNEL] Showing ${userIdsInChannel.size} users in channel`);
+  // Show/hide the channel video container based on content
+  const channelVideoWrapper = document.getElementById('channelVideoContainer');
+  if (channelVideoWrapper) {
+    channelVideoWrapper.style.display = channelVideoContainer.children.length > 0 ? 'block' : 'none';
+  }
+  
+  console.log(`[CHANNEL] Moved ${channelVideoContainer.children.length} videos to channel container`);
+  
+  // Update channel avatars
+  updateChannelAvatars(channelUsers);
+}
+
+function updateChannelAvatars(channelUsers) {
+  const avatarsContainer = document.getElementById('channelAvatars');
+  const avatarsWrapper = document.getElementById('channelAvatarsContainer');
+  
+  if (!avatarsContainer) return;
+  
+  avatarsContainer.innerHTML = '';
+  
+  // Add current user first
+  const currentUserItem = document.createElement('div');
+  currentUserItem.className = 'channel-avatar-item';
+  const currentAvatarHtml = userAvatar ? 
+    `<img src="${userAvatar}" alt="avatar">` :
+    currentUser.username.charAt(0).toUpperCase();
+  currentUserItem.innerHTML = `
+    <div class="channel-avatar-img you">${currentAvatarHtml}</div>
+    <div class="channel-avatar-name">${currentUser.username} (Вы)</div>
+  `;
+  avatarsContainer.appendChild(currentUserItem);
+  
+  // Add other users in channel
+  channelUsers.forEach(channelUser => {
+    if (channelUser.userId === socket.id) return; // Skip self
+    
+    const user = activeUsers.get(channelUser.userId);
+    const userName = user ? user.name : channelUser.userName;
+    const userAvatarImg = user ? user.avatar : null;
+    
+    const item = document.createElement('div');
+    item.className = 'channel-avatar-item';
+    const avatarHtml = userAvatarImg ? 
+      `<img src="${userAvatarImg}" alt="avatar">` :
+      userName.charAt(0).toUpperCase();
+    item.innerHTML = `
+      <div class="channel-avatar-img">${avatarHtml}</div>
+      <div class="channel-avatar-name">${userName}</div>
+    `;
+    avatarsContainer.appendChild(item);
+  });
+  
+  // Show/hide container based on content
+  if (avatarsWrapper) {
+    avatarsWrapper.style.display = avatarsContainer.children.length > 0 ? 'block' : 'none';
+  }
+  
+  console.log(`[CHANNEL] Showing ${avatarsContainer.children.length} avatars in channel`);
 }
 
 function updateChannelParticipants() {
@@ -2395,6 +2525,9 @@ function updateChannelParticipants() {
     const user = activeUsers.get(userId);
     const userName = user ? user.name : (channelUser.userName || 'Участник');
     const userAvatar = user ? user.avatar : null;
+    
+    // Also skip if same username as current user (prevents duplicates)
+    if (userName.toLowerCase() === currentUser.username.toLowerCase()) return;
     
     const username = userName.toLowerCase();
     if (addedUsernames.has(username)) return;

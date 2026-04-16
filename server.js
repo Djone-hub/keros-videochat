@@ -221,6 +221,22 @@ io.on('connection', (socket) => {
     if (!room.channels.has('general')) {
       room.channels.set('general', { name: 'Общий', users: new Set() });
     }
+    
+    // Load channels from stored room data
+    if (storedRoom && storedRoom.channels) {
+      console.log(`[CHANNELS] Loading ${Object.keys(storedRoom.channels).length} channels from stored room`);
+      Object.entries(storedRoom.channels).forEach(([channelId, channelData]) => {
+        if (!room.channels.has(channelId)) {
+          room.channels.set(channelId, {
+            name: channelData.name,
+            users: new Set(),
+            createdBy: channelData.createdBy,
+            createdAt: channelData.createdAt
+          });
+          console.log(`[CHANNELS] Loaded channel "${channelData.name}" (${channelId})`);
+        }
+      });
+    }
     room.users.add({ id: socket.id, name: userName, avatar: userAvatar });
     
     // Join default channel
@@ -543,6 +559,19 @@ io.on('connection', (socket) => {
       });
       
       console.log(`[CHANNEL] ${socket.userName} created channel "${channelName}" (${channelId}) in room ${socket.roomId}`);
+      
+      // Save channels to roomStore for persistence
+      const storedRoom = roomStore.get(socket.roomId);
+      if (storedRoom) {
+        if (!storedRoom.channels) storedRoom.channels = {};
+        storedRoom.channels[channelId] = {
+          name: channelName,
+          createdBy: socket.userName,
+          createdAt: Date.now()
+        };
+        saveRoomsToFile();
+        console.log(`[CHANNEL] Saved channel "${channelName}" to roomStore`);
+      }
       
       // Notify all users in room about new channel
       io.to(socket.roomId).emit('channel-created', {
