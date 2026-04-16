@@ -183,7 +183,12 @@ io.on('connection', (socket) => {
       // Only create if room exists in persistent store OR roomName is provided (explicit creation)
       if (storedRoom || roomName) {
         const displayName = storedRoom ? storedRoom.name : (roomName || roomId);
-        rooms.set(roomId, { name: displayName, users: new Set(), screenSharingUsers: new Set() });
+        rooms.set(roomId, { 
+          name: displayName, 
+          users: new Set(), 
+          screenSharingUsers: new Set(),
+          channels: new Map([['general', { name: 'Общий', users: new Set() }]]) // Default channel
+        });
       } else {
         // Room doesn't exist anywhere and no name provided - reject join
         socket.emit('room-error', { message: 'Комната не найдена' });
@@ -199,7 +204,22 @@ io.on('connection', (socket) => {
     if (!room.screenSharingUsers) {
       room.screenSharingUsers = new Set();
     }
+    // Ensure channels Map exists - critical for channel system
+    if (!room.channels) {
+      room.channels = new Map();
+    }
+    // Always ensure general channel exists
+    if (!room.channels.has('general')) {
+      room.channels.set('general', { name: 'Общий', users: new Set() });
+    }
     room.users.add({ id: socket.id, name: userName, avatar: userAvatar });
+    
+    // Join default channel
+    socket.currentChannel = 'general';
+    const generalChannel = room.channels.get('general');
+    if (generalChannel) {
+      generalChannel.users.add({ id: socket.id, name: userName });
+    }
     
     // Store room metadata if this is a new room with a proper name
     let isNewRoom = false;
@@ -475,6 +495,139 @@ io.on('connection', (socket) => {
     } else {
       if (callback) callback({ success: false, error: 'User not found' });
     }
+  });
+
+  // ========== CHANNEL/SUBGROUP MANAGEMENT ==========
+  
+  // Create a new channel in the room
+  socket.on('create-channel', (channelName, callback) => {
+    if (!socket.roomId || !rooms.has(socket.roomId)) {
+      if (callback) callback({ success: false, error: 'Not in a room' });
+      return;
+    }
+    
+    const room = rooms.get(socket.roomId);
+    const channelId = 'ch_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    
+    room.channels.set(channelId, {
+      name: channelName,
+      users: new Set(),
+      createdBy: socket.userName,
+      createdAt: Date.now()
+    });
+    
+    console.log(`[CHANNEL] ${socket.userName} created channel "${channelName}" (${channelId}) in room ${socket.roomId}`);
+    
+    // Notify all users in room about new channel
+    io.to(socket.roomId).emit('channel-created', {
+      channelId,
+      channelName,
+      createdBy: socket.userName
+    });
+    
+    if (callback) callback({ success: true, channelId, channelName });
+  });
+  
+  // Join a channel
+  socket.on('join-channel', (channelId, callback) => {
+    if (!socket.roomId || !rooms.has(socket.roomId)) {
+      if (callback) callback({ success: false, error: 'Not in a room' });
+      return;
+    }
+    
+    const room = rooms.get(socket.roomId);
+    if (!room.channels.has(channelId)) {
+      if (callback) callback({ success: false, error: 'Channel not found' });
+      return;
+    }
+    
+    // Leave current channel
+    if (socket.currentChannel && room.channels.has(socket.currentChannel)) {
+      const oldChannel = room.channels.get(socket.currentChannel);
+      const oldUser = Array.from(oldChannel.users).find(u => u.id === socket.id);
+      if (oldUser) oldChannel.users.delete(oldUser);
+    }
+    
+    // Join new channel
+    const channel = room.channels.get(channelId);
+    channel.users.add({ id: socket.id, name: socket.userName });
+    socket.currentChannel = channelId;
+    socket.join(`${socket.roomId}_${channelId}`); // Join channel-specific room
+    
+    console.log(`[CHANNEL] ${socket.userName} joined channel "${channel.name}" (${channelId})`);
+    
+    // Notify channel users
+    io.to(`${socket.roomId}_${channelId}`).emit('user-joined-channel', {
+      userId: socket.id,
+      userName: socket.userName,
+      channelId,
+      channelName: channel.name
+    });
+    
+    if (callback) callback({ success: true, channelName: channel.name });
+  });
+  
+  // Leave a channel
+  socket.on('leave-channel', (channelId, callback) => {
+    if (!socket.roomId || !rooms.has(socket.roomId)) return;
+    
+    const room = rooms.get(socket.roomId);
+    if (!room.channels.has(channelId)) return;
+    
+    const channel = room.channels.get(channelId);
+    const user = Array.from(channel.users).find(u => u.id === socket.id);
+    if (user) {
+      channel.users.delete(user);
+      socket.leave(`${socket.roomId}_${channelId}`);
+    }
+    
+    if (socket.currentChannel === channelId) {
+      socket.currentChannel = 'general';
+      const generalChannel = room.channels.get('general');
+      if (generalChannel) {
+        generalChannel.users.add({ id: socket.id, name: socket.userName });
+        socket.join(`${socket.roomId}_general`);
+      }
+    }
+    
+    if (callback) callback({ success: true });
+  });
+  
+  // Get list of channels in current room
+  socket.on('get-channels', (callback) => {
+    if (!socket.roomId || !rooms.has(socket.roomId)) {
+      if (callback) callback({ success: false, channels: [] });
+      return;
+    }
+    
+    const room = rooms.get(socket.roomId);
+    const channels = Array.from(room.channels.entries()).map(([id, ch]) => ({
+      channelId: id,
+      channelName: ch.name,
+      userCount: ch.users.size,
+      isGeneral: id === 'general'
+    }));
+    
+    if (callback) callback({ success: true, channels, currentChannel: socket.currentChannel || 'general' });
+  });
+  
+  // Channel-specific chat message
+  socket.on('channel-message', (channelId, message) => {
+    if (!socket.roomId || !rooms.has(socket.roomId)) return;
+    if (!socket.currentChannel || socket.currentChannel !== channelId) return;
+    
+    const room = rooms.get(socket.roomId);
+    if (!room.channels.has(channelId)) return;
+    
+    const channel = room.channels.get(channelId);
+    
+    io.to(`${socket.roomId}_${channelId}`).emit('channel-message', {
+      sender: socket.userName,
+      text: message,
+      channelId,
+      channelName: channel.name,
+      time: new Date().toLocaleTimeString()
+    });
   });
 
   socket.on('disconnect', () => {

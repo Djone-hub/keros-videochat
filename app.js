@@ -855,6 +855,19 @@ function showRoomUI() {
   document.getElementById('lobbyScreen').style.display = 'none';
   document.getElementById('roomScreen').style.display = 'flex';
   document.getElementById('roomScreen').style.flexDirection = 'column';
+  
+  // Reset current channel
+  currentChannel = 'general';
+  
+  // Load channels list - wait for socket to be fully connected
+  const checkAndLoad = () => {
+    if (socketConnected && currentRoom) {
+      loadChannels();
+    } else {
+      setTimeout(checkAndLoad, 300);
+    }
+  };
+  setTimeout(checkAndLoad, 500);
   // Always show room name, not ID
   const displayName = currentRoomName && currentRoomName !== currentRoom ? currentRoomName : currentRoom;
   document.getElementById('displayRoomId').textContent = displayName;
@@ -1469,7 +1482,32 @@ socket.on('ice-candidate', async (userId, candidate) => {
 });
 
 socket.on('chat-message', (msg) => {
-  addChatMessage(msg.sender, msg.text, false, msg.time);
+  // Only show room messages if in general channel
+  if (currentChannel === 'general') {
+    addChatMessage(msg.sender, msg.text, false, msg.time);
+  }
+});
+
+// Channel-specific messages
+socket.on('channel-message', (msg) => {
+  // Only show if user is in this channel
+  if (currentChannel === msg.channelId) {
+    addChatMessage(msg.sender, `(${msg.channelName}) ${msg.text}`, false, msg.time);
+  }
+});
+
+// Channel created by another user
+socket.on('channel-created', (data) => {
+  addLogEntry('Канал', `${data.createdBy} создал канал "${data.channelName}"`);
+  // Refresh channel list
+  loadChannels();
+});
+
+// User joined channel
+socket.on('user-joined-channel', (data) => {
+  if (data.userId !== socket.id) {
+    addSystemMessage(`${data.userName} присоединился к каналу "${data.channelName}"`);
+  }
 });
 
 // Handle remote user screen share started
@@ -2110,10 +2148,140 @@ function sendMessage() {
   const input = document.getElementById('chatInput');
   const text = input.value.trim();
   if (text && currentRoom) {
-    socket.emit('chat-message', text);
+    // Send to current channel if in a channel, otherwise to room
+    if (currentChannel && currentChannel !== 'general') {
+      socket.emit('channel-message', currentChannel, text);
+    } else {
+      socket.emit('chat-message', text);
+    }
     addChatMessage(currentUser.username, text, false, new Date().toLocaleTimeString());
     input.value = '';
   }
+}
+
+// ========== CHANNEL/SUBGROUP MANAGEMENT ==========
+let currentChannel = 'general';
+let availableChannels = [];
+
+function createChannel() {
+  console.log('[CHANNEL] Creating channel, currentRoom:', currentRoom, 'socketConnected:', socketConnected);
+  if (!currentRoom) {
+    alert('Сначала войдите в комнату');
+    return;
+  }
+  if (!socketConnected) {
+    alert('Нет подключения к серверу');
+    return;
+  }
+  
+  const name = prompt('Введите название канала:');
+  if (!name || !name.trim()) return;
+  
+  console.log('[CHANNEL] Emitting create-channel with name:', name.trim());
+  socket.emit('create-channel', name.trim(), (response) => {
+    console.log('[CHANNEL] create-channel response:', response);
+    if (response && response.success) {
+      addLogEntry('Канал', `Создан канал "${response.channelName}"`);
+      switchChannel(response.channelId);
+    } else {
+      alert('Ошибка создания канала: ' + (response?.error || 'Неизвестная ошибка'));
+    }
+  });
+}
+
+function switchChannel(channelId) {
+  console.log('[CHANNEL] Switching to channel:', channelId, 'currentRoom:', currentRoom, 'currentChannel:', currentChannel);
+  if (!currentRoom) {
+    alert('Сначала войдите в комнату');
+    return;
+  }
+  if (!socketConnected) {
+    alert('Нет подключения к серверу');
+    return;
+  }
+  if (channelId === currentChannel) {
+    console.log('[CHANNEL] Already in this channel');
+    return;
+  }
+  
+  socket.emit('join-channel', channelId, (response) => {
+    console.log('[CHANNEL] join-channel response:', response);
+    if (response && response.success) {
+      currentChannel = channelId;
+      
+      // Update UI
+      document.querySelectorAll('.channel-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.dataset.channel === channelId) {
+          item.classList.add('active');
+        }
+      });
+      
+      // Update chat header
+      const chatHeader = document.querySelector('.chat-header h3');
+      if (chatHeader) {
+        chatHeader.innerHTML = `&#128172; Чат: ${response.channelName}`;
+      }
+      
+      // Clear chat messages when switching channels
+      const chatMessages = document.getElementById('chatMessages');
+      if (chatMessages) {
+        chatMessages.innerHTML = `<div style="text-align: center; padding: 20px; color: #72767d; font-size: 12px;">Вы перешли в канал "${response.channelName}"</div>`;
+      }
+      
+      addLogEntry('Канал', `Перешли в канал "${response.channelName}"`);
+    } else {
+      alert('Ошибка перехода в канал: ' + (response?.error || 'Неизвестная ошибка'));
+    }
+  });
+}
+
+function updateChannelList(channels) {
+  const listEl = document.getElementById('channelList');
+  if (!listEl) {
+    console.error('[CHANNEL] channelList element not found!');
+    return;
+  }
+  
+  console.log('[CHANNEL] Updating channel list with', channels.length, 'channels');
+  availableChannels = channels;
+  
+  let html = '';
+  channels.forEach(ch => {
+    const isActive = ch.channelId === currentChannel;
+    const icon = ch.isGeneral ? '&#128226;' : '&#128172;';
+    html += `
+      <div class="channel-item ${isActive ? 'active' : ''}" data-channel="${ch.channelId}" onclick="switchChannel('${ch.channelId}')">
+        <span class="channel-name">${icon} ${ch.channelName}</span>
+        <span class="channel-users">${ch.userCount}</span>
+      </div>
+    `;
+  });
+  
+  listEl.innerHTML = html;
+}
+
+function loadChannels() {
+  if (!currentRoom) {
+    console.log('[CHANNELS] Cannot load: not in a room');
+    return;
+  }
+  if (!socketConnected) {
+    console.log('[CHANNELS] Cannot load: socket not connected');
+    return;
+  }
+  
+  console.log('[CHANNELS] Loading channels for room:', currentRoom);
+  
+  socket.emit('get-channels', (response) => {
+    console.log('[CHANNELS] Server response:', response);
+    if (response && response.success) {
+      updateChannelList(response.channels);
+      currentChannel = response.currentChannel || 'general';
+    } else {
+      console.error('[CHANNELS] Failed to load:', response?.error || 'Unknown error');
+    }
+  });
 }
 
 function escapeHtml(text) {
