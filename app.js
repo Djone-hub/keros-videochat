@@ -2391,13 +2391,18 @@ function updateVideoVisibilityForChannel(channelUsers) {
   // Get list of user IDs in this channel
   const userIdsInChannel = new Set(channelUsers.map(u => u.userId));
 
+  console.log(`[CHANNEL DEBUG] updateVideoVisibilityForChannel called with ${channelUsers.length} users:`, channelUsers.map(u => u.userId));
+  console.log(`[CHANNEL DEBUG] socket.id: ${socket.id}, userIdsInChannel has socket.id: ${userIdsInChannel.has(socket.id)}`);
+
   // Show/hide videos in the main video grid based on channel membership
   document.querySelectorAll('.video-container').forEach(container => {
     const userId = container.id.replace('video-', '');
     // For local user, check if socket.id is in the channel; for others, check userId directly
     const isLocalUser = userId === 'local';
     const isInChannel = isLocalUser ? userIdsInChannel.has(socket.id) : userIdsInChannel.has(userId);
-    
+
+    console.log(`[CHANNEL DEBUG] Video container ${container.id}: isLocalUser=${isLocalUser}, isInChannel=${isInChannel}, display will be: ${isInChannel ? 'block' : 'none'}`);
+
     if (isInChannel) {
       container.style.display = 'block';
       container.classList.remove('channel-hidden');
@@ -2406,7 +2411,7 @@ function updateVideoVisibilityForChannel(channelUsers) {
       container.classList.add('channel-hidden');
     }
   });
-  
+
   console.log(`[CHANNEL] Showing ${userIdsInChannel.size} users in main video grid for channel`);
 }
 
