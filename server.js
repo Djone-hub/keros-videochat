@@ -758,20 +758,33 @@ io.on('connection', (socket) => {
     }
     
     const room = rooms.get(socket.roomId);
-    
+
     // Ensure channels exists
     if (!room.channels) {
       console.log(`[CHANNELS] Creating channels Map for room ${socket.roomId}`);
       room.channels = new Map([['general', { name: 'Общий', users: new Set() }]]);
     }
-    
+
+    // DEBUG: Log detailed channel info
+    console.log(`[CHANNELS DEBUG] room.channels size: ${room.channels.size}`);
+    console.log(`[CHANNELS DEBUG] room.channels entries:`, Array.from(room.channels.keys()));
+
+    // Check stored room channels
+    const storedRoom = roomStore.get(socket.roomId);
+    if (storedRoom) {
+      console.log(`[CHANNELS DEBUG] storedRoom exists: true`);
+      console.log(`[CHANNELS DEBUG] storedRoom.channels:`, storedRoom.channels ? Object.keys(storedRoom.channels) : 'undefined');
+    } else {
+      console.log(`[CHANNELS DEBUG] storedRoom exists: false`);
+    }
+
     const channels = Array.from(room.channels.entries()).map(([id, ch]) => ({
       channelId: id,
       channelName: ch.name,
       userCount: ch.users ? ch.users.size : 0,
       isGeneral: id === 'general'
     }));
-    
+
     console.log(`[CHANNELS] Returning ${channels.length} channels for room ${socket.roomId}`);
     if (callback) callback({ success: true, channels, currentChannel: socket.currentChannel || 'general' });
   });

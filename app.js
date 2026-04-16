@@ -2412,6 +2412,14 @@ function updateVideoVisibilityForChannel(channelUsers) {
     }
   });
 
+  // Handle screen share preview - only show if current user is in this channel
+  const screenSharePreview = document.getElementById('screen-share-preview');
+  if (screenSharePreview) {
+    const isLocalInChannel = userIdsInChannel.has(socket.id);
+    screenSharePreview.style.display = isLocalInChannel ? 'block' : 'none';
+    console.log(`[CHANNEL DEBUG] Screen share preview: isLocalInChannel=${isLocalInChannel}, display=${screenSharePreview.style.display}`);
+  }
+
   console.log(`[CHANNEL] Showing ${userIdsInChannel.size} users in main video grid for channel`);
 }
 
