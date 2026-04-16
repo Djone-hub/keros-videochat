@@ -57,6 +57,9 @@ function renderAdminPanel() {
       if (statsEl) statsEl.innerHTML = '<div style="text-align: center; padding: 40px; color: #ed4245;">❌ Ошибка загрузки статистики</div>';
       if (roomsEl) roomsEl.innerHTML = '<div style="text-align: center; padding: 40px; color: #ed4245;">❌ Ошибка загрузки комнат</div>';
     });
+  
+  // Load users list
+  loadAdminUsersList();
 }
 
 function renderAdminStats(rooms) {
@@ -243,28 +246,20 @@ function loadUserSettings() {
 }
 
 function setTheme(themeName) {
-  console.log('[THEME] Setting theme:', themeName);
   const theme = themes[themeName];
-  if (!theme) {
-    console.error('[THEME] Theme not found:', themeName);
-    return;
-  }
+  if (!theme) return;
 
-  console.log('[THEME] Applying colors:', theme);
   Object.entries(theme).forEach(([key, value]) => {
     document.documentElement.style.setProperty(key, value);
-    console.log(`[THEME] ${key} = ${value}`);
   });
 
   localStorage.setItem('keroschat_theme', themeName);
-  console.log('[THEME] Saved to localStorage');
 
   // Update active button state
   document.querySelectorAll('.theme-btn').forEach(btn => {
     btn.classList.remove('active');
     if (btn.classList.contains(themeName)) {
       btn.classList.add('active');
-      console.log('[THEME] Set active button:', btn.textContent);
     }
   });
 }
@@ -353,6 +348,119 @@ function configureVIPChannel(channelId) {
       renderVIPChannelsList();
     }
   }
+}
+
+// ========== USER MANAGEMENT ==========
+
+function loadAdminUsersList() {
+  const listEl = document.getElementById('adminUsersList');
+  const usersTab = document.getElementById('adminTab-users');
+  if (!listEl || !usersTab) return;
+  
+  listEl.innerHTML = '<div style="text-align: center; padding: 40px; color: #72767d;">⏳ Загрузка...</div>';
+  
+  fetch('/api/users')
+    .then(res => res.json())
+    .then(users => {
+      window.allAdminUsers = users;
+      renderAdminUsersList(users);
+    })
+    .catch(err => {
+      console.error('Error loading users:', err);
+      listEl.innerHTML = '<div style="text-align: center; padding: 40px; color: #ed4245;">❌ Ошибка загрузки пользователей</div>';
+    });
+}
+
+function renderAdminUsersList(users) {
+  const listEl = document.getElementById('adminUsersList');
+  if (!listEl) return;
+  
+  if (users.length === 0) {
+    listEl.innerHTML = '<div style="text-align: center; padding: 40px; color: #72767d;">😕 Нет пользователей</div>';
+    return;
+  }
+  
+  // Remove duplicates by username (keep first occurrence, prefer online users)
+  const uniqueUsers = [];
+  const seenNames = new Set();
+  
+  // First pass: add online users
+  users.forEach(user => {
+    if (!seenNames.has(user.name)) {
+      seenNames.add(user.name);
+      uniqueUsers.push(user);
+    }
+  });
+  
+  // Sort: online first, then by name
+  uniqueUsers.sort((a, b) => {
+    if (a.isOnline && !b.isOnline) return -1;
+    if (!a.isOnline && b.isOnline) return 1;
+    return a.name.localeCompare(b.name);
+  });
+  
+  const listHtml = uniqueUsers.map(user => {
+    const statusColor = user.isOnline ? '#3ba55d' : '#72767d';
+    const statusText = user.isOnline ? '🟢 В сети' : '⚪ Не в сети';
+    const avatarHtml = user.avatar ? 
+      `<img src="${user.avatar}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">` :
+      `<div style="width: 32px; height: 32px; border-radius: 50%; background: #5865f2; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 600;">${user.name.charAt(0).toUpperCase()}</div>`;
+    
+    return `
+      <div class="admin-room-item ${user.isOnline ? '' : 'empty'}">
+        <div class="admin-room-info" style="display: flex; align-items: center; gap: 12px;">
+          ${avatarHtml}
+          <div>
+            <div class="admin-room-name">${user.name}</div>
+            <div class="admin-room-meta" style="color: ${statusColor};">${statusText}</div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button onclick="deleteUser('${user.name}')" class="admin-btn danger" title="Удалить пользователя">🗑️ Удалить</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  listEl.innerHTML = `
+    <div style="margin-bottom: 15px; color: #b9bbbe; font-size: 14px;">
+      Всего пользователей: <strong style="color: #fff;">${uniqueUsers.length}</strong> | 
+      Онлайн: <strong style="color: #3ba55d;">${uniqueUsers.filter(u => u.isOnline).length}</strong>
+    </div>
+    ${listHtml}
+  `;
+}
+
+function filterAdminUsers(searchTerm) {
+  if (!window.allAdminUsers) return;
+  const filtered = window.allAdminUsers.filter(u => 
+    u.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+  renderAdminUsersList(filtered);
+}
+
+function deleteUser(username) {
+  if (!confirm(`Удалить пользователя "${username}"?\n\nЭто действие нельзя отменить!`)) return;
+  
+  fetch(`/api/users/${encodeURIComponent(username)}`, {
+    method: 'DELETE',
+    headers: {
+      'X-Username': currentUser?.username || 'unknown'
+    }
+  })
+    .then(res => res.json())
+    .then(result => {
+      if (result.success) {
+        alert(`✅ Пользователь "${username}" удалён`);
+        loadAdminUsersList();
+      } else {
+        alert(`❌ Ошибка: ${result.message}`);
+      }
+    })
+    .catch(err => {
+      console.error('Error deleting user:', err);
+      alert('❌ Ошибка при удалении пользователя');
+    });
 }
 
 // Initialize on DOM ready

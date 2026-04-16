@@ -39,7 +39,6 @@ socket.on('disconnect', () => {
 
 // Listen for user list updates
 socket.on('users-updated', () => {
-  console.log('[USERS] User list updated, refreshing...');
   loadRegisteredUsers();
 });
 
@@ -62,24 +61,18 @@ let screenShareUsers = new Set(); // Track which remote users are screen sharing
 
 // Ping measurement function
 function measurePing() {
-  if (!socketConnected) {
-    console.log('[PING] Socket not connected, skipping');
-    return;
-  }
+  if (!socketConnected) return;
   
   const startTime = Date.now();
-  console.log('[PING] Sending ping...');
   
   socket.timeout(5000).emit('ping-check', (err, serverTime) => {
     if (err) {
-      console.log('[PING] Error or timeout:', err);
       currentPing = 0;
       updatePingDisplay();
       return;
     }
     const endTime = Date.now();
     currentPing = endTime - startTime;
-    console.log('[PING] Received pong, latency:', currentPing, 'ms');
     updatePingDisplay();
   });
 }
@@ -378,7 +371,6 @@ async function loadServerRooms() {
   // Debounce: don't reload if loaded in last 2 seconds
   const now = Date.now();
   if (isLoadingRooms || (now - lastLoadTime < 2000)) {
-    console.log('[ROOMS] Skip reload - already loading or loaded recently');
     return;
   }
   
@@ -818,7 +810,7 @@ async function joinRoomById(roomId) {
   currentRoomName = room ? room.name : roomId;
   const roomAvatar = room ? room.avatar : null;
   
-  addLogEntry('Комната', `Комната "${currentRoomName}" - вы подключились`);
+  addLogEntry('Комната', `"${currentRoomName}" - вы подключились`);
   
   // Request media
   try {
@@ -986,17 +978,11 @@ function copyLink() {
 // ========== VIDEO & PEERS ==========
 
 function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false) {
-  console.log(`[VIDEO] addVideoStream called: id=${id}, isLocal=${isLocal}, isScreenShare=${isScreenShare}`);
-  
   const videoGrid = document.getElementById('videoGrid');
-  if (!videoGrid) {
-    console.error('[VIDEO] videoGrid not found!');
-    return;
-  }
+  if (!videoGrid) return;
   
   let container = document.getElementById(`video-${id}`);
   const isNew = !container;
-  console.log(`[VIDEO] Container for ${id}: isNew=${isNew}`);
   
   if (!container) {
     container = document.createElement('div');
@@ -1011,18 +997,7 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     if (isLocal && !isScreenShare) video.style.transform = 'scaleX(-1)';
     
     // Ensure video plays
-    video.play().catch(e => console.log('[VIDEO] Play error:', e));
-    
-    // Log when video metadata loads (indicates video is ready)
-    video.onloadedmetadata = () => {
-      console.log(`[VIDEO] Metadata loaded for ${id}: ${video.videoWidth}x${video.videoHeight}, duration: ${video.duration}`);
-    };
-    video.onloadeddata = () => {
-      console.log(`[VIDEO] Data loaded for ${id}, readyState: ${video.readyState}`);
-    };
-    video.onplay = () => {
-      console.log(`[VIDEO] Started playing: ${id}`);
-    };
+    video.play().catch(e => {});
     
     const label = document.createElement('div');
     label.className = 'video-label';
@@ -1041,7 +1016,6 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
       video.volume = 0.5;
       // Mute if sound is turned off globally
       video.muted = !isSoundOn;
-      console.log(`[AUDIO] Remote video ${id} - volume: ${video.volume}, muted: ${video.muted}, isSoundOn: ${isSoundOn}`);
     }
     
     // Add fullscreen button for screen share (only for REMOTE users, not local)
@@ -1072,22 +1046,13 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     container.appendChild(video);
     container.appendChild(label);
     videoGrid.appendChild(container);
-    console.log(`[VIDEO] Created new container for ${id}, appended to grid. Total containers:`, videoGrid.children.length);
-    
-    // Log container dimensions after a short delay
-    setTimeout(() => {
-      const rect = container.getBoundingClientRect();
-      console.log(`[VIDEO] Container ${id} dimensions: ${rect.width}x${rect.height}, visible: ${rect.width > 0 && rect.height > 0}`);
-    }, 500);
   } else {
     const video = container.querySelector('video');
-    console.log(`[VIDEO] Updating existing container for ${id}, video found:`, !!video);
     video.srcObject = stream;
-    video.play().catch(e => console.log('[VIDEO] Play error on update:', e));
+    video.play().catch(e => {});
     
     // Update styles if this is a screen share (for replaceTrack case)
     if (isScreenShare && !isLocal) {
-      console.log(`[VIDEO] Applying screen share styles to existing container`);
       container.classList.add('screen-share');
       // Force inline styles for visibility
       container.style.cssText = 'display: block !important; visibility: visible !important; opacity: 1 !important; min-width: 640px; min-height: 360px; border: 3px solid #3ba55d;';
@@ -1152,10 +1117,7 @@ function updateActiveUsers() {
     const username = user.name.toLowerCase();
     
     // Skip if already added (prevents duplicates)
-    if (addedUsernames.has(username)) {
-      console.log('[USERS] Skipping duplicate user:', user.name);
-      return;
-    }
+    if (addedUsernames.has(username)) return;
     
     addedUsernames.add(username);
     
@@ -1242,14 +1204,13 @@ async function createPeerConnection(userId) {
       const params = sender.getParameters();
       if (params.encodings && params.encodings.length > 0) {
         params.encodings[0].ptime = 20; // 20ms packet time for lower latency
-        sender.setParameters(params).catch(e => console.log('[AUDIO] Params error:', e));
+        sender.setParameters(params).catch(e => {});
       }
     }
   });
   
   localStream.getTracks().forEach(track => {
     pc.addTrack(track, localStream);
-    console.log(`[AUDIO] Sending ${track.kind} track to ${userId}: enabled=${track.enabled}, muted=${track.muted}, state=${track.readyState}`);
   });
   
   pc.ontrack = (e) => {
@@ -1347,7 +1308,6 @@ socket.on('room-info', (room) => {
 
 // Listen for theme changes from other users
 socket.on('theme-changed', ({ theme }) => {
-  console.log('[THEME] Received theme change from another user:', theme);
   // Apply theme if setTheme function is available (from admin.js)
   if (typeof setTheme === 'function') {
     setTheme(theme);
@@ -1443,6 +1403,25 @@ socket.on('user-joined', async (user) => {
   updateActiveUsers();
 });
 
+socket.on('user-deleted', (username) => {
+  // Remove user from localStorage if it's the current user
+  const localUsers = JSON.parse(localStorage.getItem('keroschat_users') || '[]');
+  const filteredUsers = localUsers.filter(u => u.username !== username);
+  localStorage.setItem('keroschat_users', JSON.stringify(filteredUsers));
+  
+  // Remove avatar
+  localStorage.removeItem(`keroschat_avatar_${username}`);
+  
+  // Refresh user list in lobby
+  loadRegisteredUsers();
+  
+  // If current user was deleted, log them out
+  if (currentUser && currentUser.username === username) {
+    alert('Ваш аккаунт был удалён администратором');
+    logout();
+  }
+});
+
 socket.on('user-left', (userId) => {
   sounds.userLeave();
   const user = activeUsers.get(userId);
@@ -1495,8 +1474,9 @@ socket.on('chat-message', (msg) => {
 
 // Handle remote user screen share started
 socket.on('screen-share-started', (userId) => {
-  console.log('[SCREEN] Remote user started screen share:', userId);
-  addLogEntry('Демонстрация', 'Пользователь начал демонстрацию экрана');
+  const user = activeUsers.get(userId);
+  const userName = user ? user.name : 'Участник';
+  addLogEntry('Демонстрация', `${userName} начал демонстрацию экрана`);
   
   // Track this user as screen sharing
   screenShareUsers.add(userId);
@@ -1560,18 +1540,31 @@ socket.on('screen-share-started', (userId) => {
 
 // Handle remote user screen share stopped
 socket.on('screen-share-stopped', (userId) => {
-  // Screen share stopped - debug disabled
-  // console.log('[SCREEN] Remote user stopped screen share:', userId);
-  addLogEntry('Демонстрация', 'Пользователь остановил демонстрацию экрана');
+  const user = activeUsers.get(userId);
+  const userName = user ? user.name : 'Участник';
+  addLogEntry('Демонстрация', `${userName} остановил демонстрацию экрана`);
   
   // Remove from screen share tracking
   screenShareUsers.delete(userId);
   
-  // Remove the screen share video container
+  // Revert container to normal video mode (don't remove it!)
   const container = document.getElementById(`video-${userId}`);
-  if (container && container.classList.contains('screen-share')) {
-    container.remove();
-    updateUserCount();
+  if (container) {
+    container.classList.remove('screen-share');
+    container.style.cssText = ''; // Clear forced screen share styles
+    
+    const video = container.querySelector('video');
+    if (video) {
+      video.style.cssText = ''; // Clear forced video styles
+      video.style.transform = 'scaleX(-1)'; // Restore mirror for normal camera
+      video.style.objectFit = 'cover';
+    }
+    
+    // Remove screen share specific buttons
+    const previewBtn = container.querySelector('.preview-toggle-btn');
+    if (previewBtn) previewBtn.remove();
+    const fullscreenBtn = container.querySelector('.fullscreen-btn');
+    if (fullscreenBtn) fullscreenBtn.remove();
   }
 });
 
@@ -1582,7 +1575,9 @@ socket.on('active-screen-shares', (userIds) => {
   userIds.forEach(userId => {
     // Track this user as screen sharing
     screenShareUsers.add(userId);
-    addLogEntry('Демонстрация', 'Пользователь уже демонстрирует экран');
+    const user = activeUsers.get(userId);
+    const userName = user ? user.name : 'Участник';
+    addLogEntry('Демонстрация', `${userName} демонстрирует экран`);
     
     // Check if video container already exists and add buttons
     const container = document.getElementById(`video-${userId}`);
@@ -1728,18 +1723,17 @@ function toggleSound() {
   
   if (isSoundOn) {
     btn.classList.remove('danger');
-    icon.textContent = '🔊';
+    icon.innerHTML = '&#128266;';
     label.textContent = 'Звук';
   } else {
     btn.classList.add('danger');
-    icon.textContent = '🔇';
+    icon.innerHTML = '&#128263;';
     label.textContent = 'Звук выкл';
   }
   
   // Mute/unmute all remote videos
   document.querySelectorAll('.video-container:not(.local) video').forEach(video => {
     video.muted = !isSoundOn;
-    console.log(`[SOUND] Remote video muted: ${!isSoundOn}`);
   });
   
   // Notify other users about sound state

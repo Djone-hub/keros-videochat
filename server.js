@@ -103,6 +103,24 @@ app.get('/api/users', (req, res) => {
   res.json(users);
 });
 
+// REST API endpoint to delete a registered user
+app.delete('/api/users/:username', (req, res) => {
+  const username = req.params.username;
+  const requester = req.headers['x-username'];
+  
+  // Simple authorization: only allow deletion if requester is the same user or an admin
+  // For now, anyone can delete any user (you can add admin check later)
+  if (registeredUsers.has(username)) {
+    registeredUsers.delete(username);
+    console.log(`[DELETE] User ${username} deleted by ${requester || 'unknown'}`);
+    io.emit('user-deleted', username);
+    io.emit('users-updated');
+    res.json({ success: true, message: `User ${username} deleted` });
+  } else {
+    res.status(404).json({ success: false, message: 'User not found' });
+  }
+});
+
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
   console.log('Current rooms in store:', roomStore.size);
@@ -443,6 +461,19 @@ io.on('connection', (socket) => {
       }
     } else {
       callback(null);
+    }
+  });
+
+  // Handle user deletion request
+  socket.on('delete-user', (username, callback) => {
+    if (registeredUsers.has(username)) {
+      registeredUsers.delete(username);
+      console.log(`[DELETE] User ${username} deleted by ${socket.userName}`);
+      io.emit('user-deleted', username);
+      io.emit('users-updated');
+      if (callback) callback({ success: true });
+    } else {
+      if (callback) callback({ success: false, error: 'User not found' });
     }
   });
 
