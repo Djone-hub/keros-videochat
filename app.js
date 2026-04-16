@@ -2376,126 +2376,43 @@ function showUserVideo(userId, show) {
 }
 
 function updateVideoVisibilityForChannel(channelUsers) {
-  const channelVideoContainer = document.getElementById('channelVideos');
-  const mainVideoGrid = document.getElementById('videoGrid');
-  
-  if (!channelVideoContainer) {
-    console.log('[CHANNEL] channelVideos container not found');
-    return;
-  }
-  
-  // Clear channel video container
-  channelVideoContainer.innerHTML = '';
-  
   // Get list of user IDs in this channel
   const userIdsInChannel = new Set(channelUsers.map(u => u.userId));
   
-  // Move videos of users in this channel to the channel container
-  userIdsInChannel.forEach(userId => {
-    const container = document.getElementById(`video-${userId}`);
-    if (container) {
-      // Clone the video container for channel view
-      const channelVideo = container.cloneNode(true);
-      channelVideo.id = `channel-video-${userId}`;
-      channelVideo.style.display = 'block';
-      
-      // Add username label
-      const user = activeUsers.get(userId);
-      const userName = user ? user.name : (userId === socket.id ? currentUser.username : 'Участник');
-      
-      // Check if username label exists, if not add it
-      if (!channelVideo.querySelector('.video-username')) {
-        const nameLabel = document.createElement('div');
-        nameLabel.className = 'video-username';
-        nameLabel.textContent = userName;
-        channelVideo.appendChild(nameLabel);
-      }
-      
-      channelVideoContainer.appendChild(channelVideo);
+  // Show/hide videos in the main video grid based on channel membership
+  document.querySelectorAll('.video-container').forEach(container => {
+    const userId = container.id.replace('video-', '');
+    const isInChannel = userIdsInChannel.has(userId) || userId === 'local';
+    
+    if (isInChannel) {
+      container.style.display = 'block';
+      container.classList.remove('channel-hidden');
+    } else {
+      container.style.display = 'none';
+      container.classList.add('channel-hidden');
     }
   });
   
-  // Also add local video to channel container
-  const localContainer = document.getElementById('video-local');
-  if (localContainer) {
-    const channelLocalVideo = localContainer.cloneNode(true);
-    channelLocalVideo.id = 'channel-video-local';
-    channelLocalVideo.style.display = 'block';
-    
-    if (!channelLocalVideo.querySelector('.video-username')) {
-      const nameLabel = document.createElement('div');
-      nameLabel.className = 'video-username';
-      nameLabel.textContent = currentUser.username + ' (Вы)';
-      channelLocalVideo.appendChild(nameLabel);
-    }
-    
-    channelVideoContainer.appendChild(channelLocalVideo);
-  }
-  
-  // Show/hide the channel video container based on content
-  const channelVideoWrapper = document.getElementById('channelVideoContainer');
-  if (channelVideoWrapper) {
-    channelVideoWrapper.style.display = channelVideoContainer.children.length > 0 ? 'block' : 'none';
-  }
-  
-  console.log(`[CHANNEL] Moved ${channelVideoContainer.children.length} videos to channel container`);
-  
-  // Update channel avatars
-  updateChannelAvatars(channelUsers);
+  console.log(`[CHANNEL] Showing ${userIdsInChannel.size} users in main video grid for channel`);
 }
 
-function updateChannelAvatars(channelUsers) {
-  const avatarsContainer = document.getElementById('channelAvatars');
-  const avatarsWrapper = document.getElementById('channelAvatarsContainer');
-  
-  if (!avatarsContainer) return;
-  
-  avatarsContainer.innerHTML = '';
-  
-  // Add current user first
-  const currentUserItem = document.createElement('div');
-  currentUserItem.className = 'channel-avatar-item';
-  const currentAvatarHtml = userAvatar ? 
-    `<img src="${userAvatar}" alt="avatar">` :
-    currentUser.username.charAt(0).toUpperCase();
-  currentUserItem.innerHTML = `
-    <div class="channel-avatar-img you">${currentAvatarHtml}</div>
-    <div class="channel-avatar-name">${currentUser.username} (Вы)</div>
-  `;
-  avatarsContainer.appendChild(currentUserItem);
-  
-  // Add other users in channel
-  channelUsers.forEach(channelUser => {
-    if (channelUser.userId === socket.id) return; // Skip self
-    
-    const user = activeUsers.get(channelUser.userId);
-    const userName = user ? user.name : channelUser.userName;
-    const userAvatarImg = user ? user.avatar : null;
-    
-    const item = document.createElement('div');
-    item.className = 'channel-avatar-item';
-    const avatarHtml = userAvatarImg ? 
-      `<img src="${userAvatarImg}" alt="avatar">` :
-      userName.charAt(0).toUpperCase();
-    item.innerHTML = `
-      <div class="channel-avatar-img">${avatarHtml}</div>
-      <div class="channel-avatar-name">${userName}</div>
-    `;
-    avatarsContainer.appendChild(item);
-  });
-  
-  // Show/hide container based on content
-  if (avatarsWrapper) {
-    avatarsWrapper.style.display = avatarsContainer.children.length > 0 ? 'block' : 'none';
-  }
-  
-  console.log(`[CHANNEL] Showing ${avatarsContainer.children.length} avatars in channel`);
-}
+let isUpdatingChannelParticipants = false;
 
 function updateChannelParticipants() {
-  const list = document.getElementById('activeUsers');
-  if (!list) return;
+  // Prevent concurrent execution
+  if (isUpdatingChannelParticipants) {
+    console.log('[CHANNEL] Skipping duplicate updateChannelParticipants call');
+    return;
+  }
+  isUpdatingChannelParticipants = true;
   
+  const list = document.getElementById('activeUsers');
+  if (!list) {
+    isUpdatingChannelParticipants = false;
+    return;
+  }
+  
+  // Clear and rebuild the list
   list.innerHTML = '';
   
   // Track unique usernames to prevent duplicates
@@ -2562,6 +2479,9 @@ function updateChannelParticipants() {
   // Update user count
   const userCount = addedUsernames.size;
   document.getElementById('userCount').textContent = userCount;
+  
+  // Reset guard flag
+  isUpdatingChannelParticipants = false;
 }
 
 function escapeHtml(text) {
