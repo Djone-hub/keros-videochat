@@ -336,8 +336,12 @@
     }
     .registered-user-name {
       font-size: 13px;
-      color: var(--text-primary);
+      color: #72767d;
       flex: 1;
+      font-weight: 600;
+    }
+    .registered-user-item.online .registered-user-name {
+      color: #fff;
     }
     .registered-user-status {
       width: 8px;
@@ -345,8 +349,9 @@
       border-radius: 50%;
       background: #72767d;
     }
-    .registered-user-status.online {
+    .registered-user-item.online .registered-user-status {
       background: #3ba55d;
+      box-shadow: 0 0 4px #3ba55d;
     }
     
     /* Room List Sidebar - Discord Style */
@@ -1584,7 +1589,7 @@
         
         <div class="users-sidebar">
           <div class="users-header">
-            <h3>👥 Пользователи</h3>
+            <h3 id="registeredUsersHeader">👥 Пользователи</h3>
           </div>
           <div class="users-list" id="registeredUsersList">
             <!-- Users will be added here -->

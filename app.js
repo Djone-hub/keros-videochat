@@ -9,16 +9,38 @@ socket.on('connect', () => {
     console.log('Connected to server');
   }
   socketConnected = true;
-  // If lobby is already visible, reload rooms
+  
+  // Sync registered users from localStorage to server
+  const localUsers = JSON.parse(localStorage.getItem('keroschat_users') || '[]');
+  const currentUserData = JSON.parse(localStorage.getItem('keroschat_user') || '{}');
+  
+  // Send all registered users to server
+  localUsers.forEach(u => {
+    const avatar = localStorage.getItem(`keroschat_avatar_${u.username}`);
+    socket.emit('user-registered', { 
+      username: u.username, 
+      avatar: avatar,
+      isOnline: currentUserData.username === u.username
+    });
+  });
+  
+  // If lobby is already visible, reload rooms and users
   const lobbyScreen = document.getElementById('lobbyScreen');
   if (lobbyScreen && lobbyScreen.style.display === 'flex') {
     loadServerRooms();
+    loadRegisteredUsers();
   }
 });
 
 socket.on('disconnect', () => {
   console.log('Disconnected from server');
   socketConnected = false;
+});
+
+// Listen for user list updates
+socket.on('users-updated', () => {
+  console.log('[USERS] User list updated, refreshing...');
+  loadRegisteredUsers();
 });
 
 // State
@@ -290,6 +312,10 @@ function handleRegister(e) {
   currentUser = newUser;
   localStorage.setItem('keroschat_user', JSON.stringify(newUser));
   addLogEntry('Авторизация', `Новый пользователь ${username} зарегистрирован`);
+  
+  // Notify server about new user registration
+  socket.emit('user-registered', { username, avatar: null });
+  
   showLobby();
   alert('Регистрация успешна!');
 };
@@ -499,49 +525,93 @@ function loadRoomsList(filter = '') {
 
 // Load and display registered users in lobby
 async function loadRegisteredUsers() {
+  let users = [];
+  
   try {
+    // Try to fetch from API first
     const response = await fetch('/api/users');
-    const users = await response.json();
+    if (response.ok) {
+      const apiUsers = await response.json();
+      users = apiUsers.map(u => ({
+        name: u.name || u.username,
+        avatar: u.avatar,
+        isOnline: u.isOnline
+      }));
+    }
+  } catch (err) {
+    // API failed, use localStorage fallback
+    console.log('API users not available, using localStorage fallback');
+  }
+  
+  // Fallback to localStorage if API failed or returned empty
+  if (users.length === 0) {
+    const localUsers = JSON.parse(localStorage.getItem('keroschat_users') || '[]');
+    const currentUserData = JSON.parse(localStorage.getItem('keroschat_user') || '{}');
     
-    const list = document.getElementById('registeredUsersList');
-    if (!list) return;
+    // Combine and deduplicate users
+    const userMap = new Map();
     
-    list.innerHTML = '';
+    localUsers.forEach(u => {
+      userMap.set(u.username, {
+        name: u.username,
+        avatar: localStorage.getItem(`keroschat_avatar_${u.username}`),
+        isOnline: currentUserData.username === u.username
+      });
+    });
     
-    if (users.length === 0) {
-      list.innerHTML = '<p style="color: #72767d; padding: 16px; text-align: center; font-size: 12px;">Пока нет зарегистрированных пользователей</p>';
-      return;
+    // Add current user if exists and not already in list
+    if (currentUserData.username && !userMap.has(currentUserData.username)) {
+      userMap.set(currentUserData.username, {
+        name: currentUserData.username,
+        avatar: localStorage.getItem(`keroschat_avatar_${currentUserData.username}`),
+        isOnline: true
+      });
     }
     
-    // Sort: online users first, then by name
-    users.sort((a, b) => {
-      if (a.isOnline && !b.isOnline) return -1;
-      if (!a.isOnline && b.isOnline) return 1;
-      return a.name.localeCompare(b.name);
-    });
-    
-    users.forEach(user => {
-      const item = document.createElement('div');
-      item.className = 'registered-user-item';
-      
-      const avatarHtml = user.avatar ? 
-        `<img src="${user.avatar}" alt="${user.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">` :
-        user.name.charAt(0).toUpperCase();
-      
-      const statusClass = user.isOnline ? 'online' : '';
-      const statusTitle = user.isOnline ? 'В сети' : 'Не в сети';
-      
-      item.innerHTML = `
-        <div class="registered-user-avatar">${avatarHtml}</div>
-        <span class="registered-user-name">${user.name}</span>
-        <div class="registered-user-status ${statusClass}" title="${statusTitle}"></div>
-      `;
-      
-      list.appendChild(item);
-    });
-  } catch (err) {
-    console.error('Error loading registered users:', err);
+    users = Array.from(userMap.values());
   }
+  
+  // Update header with count
+  const header = document.getElementById('registeredUsersHeader');
+  if (header) {
+    header.textContent = `${users.length} 👥 Пользователи`;
+  }
+  
+  const list = document.getElementById('registeredUsersList');
+  if (!list) return;
+  
+  list.innerHTML = '';
+  
+  if (users.length === 0) {
+    list.innerHTML = '<p style="color: #72767d; padding: 16px; text-align: center; font-size: 12px;">Пока нет зарегистрированных пользователей</p>';
+    return;
+  }
+  
+  // Sort: online users first, then by name
+  users.sort((a, b) => {
+    if (a.isOnline && !b.isOnline) return -1;
+    if (!a.isOnline && b.isOnline) return 1;
+    return a.name.localeCompare(b.name);
+  });
+  
+  users.forEach(user => {
+    const item = document.createElement('div');
+    item.className = 'registered-user-item' + (user.isOnline ? ' online' : '');
+    
+    const avatarHtml = user.avatar ? 
+      `<img src="${user.avatar}" alt="${user.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">` :
+      user.name.charAt(0).toUpperCase();
+    
+    const statusTitle = user.isOnline ? 'В сети' : 'Не в сети';
+    
+    item.innerHTML = `
+      <div class="registered-user-avatar">${avatarHtml}</div>
+      <span class="registered-user-name">${user.name}</span>
+      <div class="registered-user-status" title="${statusTitle}"></div>
+    `;
+    
+    list.appendChild(item);
+  });
 }
 
 async function searchRooms(query) {

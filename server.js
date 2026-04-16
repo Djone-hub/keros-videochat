@@ -107,6 +107,22 @@ io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
   console.log('Current rooms in store:', roomStore.size);
 
+  // Handle user registration
+  socket.on('user-registered', ({ username, avatar }) => {
+    console.log(`[REGISTER] New user registered: ${username}`);
+    
+    // Add to global registry
+    registeredUsers.set(username, {
+      name: username,
+      avatar: avatar,
+      isOnline: false, // Not online until joins a room
+      lastSeen: Date.now()
+    });
+    
+    // Broadcast to all clients to refresh user list
+    io.emit('users-updated');
+  });
+
   socket.on('join-room', (roomId, userName, userAvatar, roomName, roomAvatar) => {
     socket.join(roomId);
     socket.roomId = roomId;
