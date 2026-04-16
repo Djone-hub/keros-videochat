@@ -48,7 +48,7 @@ function saveRoomsToFile() {
 
 const roomStore = loadRoomsFromFile();
 
-// REST API endpoint for rooms - returns ALL rooms (stored + active)
+// REST API endpoint for rooms - returns ALL rooms (stored + active) with user list
 app.get('/api/rooms', (req, res) => {
   const allRoomsMap = new Map();
   
@@ -56,6 +56,7 @@ app.get('/api/rooms', (req, res) => {
   roomStore.forEach((r, id) => {
     const activeRoom = rooms.get(id);
     const activeUsersCount = activeRoom ? activeRoom.users.size : 0;
+    const userList = activeRoom ? Array.from(activeRoom.users).map(u => u.name) : [];
     allRoomsMap.set(id, {
       id: id,
       name: r.name,
@@ -63,6 +64,7 @@ app.get('/api/rooms', (req, res) => {
       creator: r.creator,
       active: activeUsersCount > 0,
       userCount: activeUsersCount,
+      users: userList,
       created: r.created
     });
   });
@@ -70,6 +72,7 @@ app.get('/api/rooms', (req, res) => {
   // Then add any active rooms not in store (orphaned/active only rooms)
   rooms.forEach((activeRoom, id) => {
     if (!allRoomsMap.has(id)) {
+      const userList = Array.from(activeRoom.users).map(u => u.name);
       allRoomsMap.set(id, {
         id: id,
         name: activeRoom.name || id,
@@ -77,6 +80,7 @@ app.get('/api/rooms', (req, res) => {
         creator: activeRoom.creator || null,
         active: true,
         userCount: activeRoom.users.size,
+        users: userList,
         created: Date.now()
       });
     }
@@ -138,7 +142,7 @@ io.on('connection', (socket) => {
     const users = Array.from(room.users).filter(u => u.id !== socket.id);
     
     console.log(`[DEBUG] Room ${roomId} has ${room.users.size} total users, sending ${users.length} others to ${userName}`);
-    console.log(`[DEBUG] Users in room:`, Array.from(room.users).map(u => ({id: u.id, name: u.name})));
+    console.log(`[DEBUG] Users in room:`, Array.from(room.users).map(u => ({id: u.id, name: u.name, hasAvatar: !!u.avatar})));
     
     // Send room info with name from server (either stored or provided)
     const finalRoomName = storedRoom ? storedRoom.name : room.name;

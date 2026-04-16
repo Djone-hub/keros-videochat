@@ -364,15 +364,22 @@ function renderRoomsList(roomsToRender) {
       `<img src="${room.avatar}" alt="${room.name}">` : 
       '#';
     
-    const statusHtml = room.active ? 
-      `<span style="color: #3ba55d; font-size: 11px;">🔴 ${room.userCount || '?'} в комнате</span>` : 
-      `<span style="color: #72767d; font-size: 11px;">⚪ Нет участников</span>`;
+    // Build users list HTML
+    let usersHtml = '';
+    if (room.active && room.users && room.users.length > 0) {
+      const usersList = room.users.slice(0, 3).join(', '); // Show first 3 users
+      const moreCount = room.users.length > 3 ? ` +${room.users.length - 3}` : '';
+      usersHtml = `<div style="color: #3ba55d; font-size: 11px; margin-top: 4px;">� ${room.userCount}: ${usersList}${moreCount}</div>`;
+    } else {
+      usersHtml = `<div style="color: #72767d; font-size: 11px; margin-top: 4px;">⚪ Нет участников</div>`;
+    }
     
     item.innerHTML = `
       <div class="icon">${iconHtml}</div>
       <div class="info">
         <div class="name">${room.name} ${room.active ? '🔥' : ''}</div>
-        <div class="count">${statusHtml} ${isCreator ? '• Вы создатель' : (room.creator ? `• ${room.creator}` : '')}</div>
+        <div class="count" style="font-size: 11px; color: #96989d;">${isCreator ? '👑 Вы создатель' : (room.creator ? `👤 ${room.creator}` : '')}</div>
+        ${usersHtml}
       </div>
       ${actionsHtml}
     `;
@@ -400,10 +407,9 @@ async function searchRooms(query) {
     return;
   }
   
-  // Search in all rooms
+  // Search by room name only (not by ID)
   const filtered = allRooms.filter(r => 
     r.name.toLowerCase().includes(query.toLowerCase()) ||
-    r.id.toLowerCase().includes(query.toLowerCase()) ||
     (r.creator && r.creator.toLowerCase().includes(query.toLowerCase()))
   );
   
@@ -778,12 +784,14 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
       video.volume = 0.5;
     }
     
-    // Add fullscreen button for screen share
-    if (isScreenShare) {
+    // Add fullscreen button for screen share (only for REMOTE users, not local)
+    // Local user doesn't need fullscreen button for their own screen share
+    // Remote users DO need fullscreen button to enlarge shared screen
+    if (isScreenShare && !isLocal) {
       const fullscreenBtn = document.createElement('button');
       fullscreenBtn.className = 'fullscreen-btn';
       fullscreenBtn.innerHTML = '🔍';
-      fullscreenBtn.title = 'Увеличить';
+      fullscreenBtn.title = 'Увеличить демонстрацию экрана';
       fullscreenBtn.onclick = () => openScreenModal(id);
       container.appendChild(fullscreenBtn);
     }
@@ -1004,10 +1012,11 @@ socket.on('user-joined', async (user) => {
     console.log('User already connected:', user.id);
     return;
   }
+  console.log('[AVATAR] User joined:', user.name, 'has avatar:', !!user.avatar);
   sounds.userJoin();
   activeUsers.set(user.id, user);
   addChatMessage('Система', `${user.name} присоединился`, true);
-  addLogEntry('Пользователи', `${user.name} присоединился к комнате`);
+  addLogEntry('Пользователи', `${user.name} присоединился к комнате (avatar: ${user.avatar ? 'yes' : 'no'})`);
   updateActiveUsers();
 });
 
@@ -1059,6 +1068,26 @@ socket.on('ice-candidate', async (userId, candidate) => {
 
 socket.on('chat-message', (msg) => {
   addChatMessage(msg.sender, msg.text, false, msg.time);
+});
+
+// Handle remote user screen share started
+socket.on('screen-share-started', (userId) => {
+  console.log('[SCREEN] Remote user started screen share:', userId);
+  addLogEntry('Демонстрация', 'Пользователь начал демонстрацию экрана');
+  // The screen share video will come through WebRTC ontrack event
+  // Fullscreen button will be added automatically in addVideoStream when isScreenShare=true and isLocal=false
+});
+
+// Handle remote user screen share stopped
+socket.on('screen-share-stopped', (userId) => {
+  console.log('[SCREEN] Remote user stopped screen share:', userId);
+  addLogEntry('Демонстрация', 'Пользователь остановил демонстрацию экрана');
+  // Remove the screen share video container
+  const container = document.getElementById(`video-${userId}`);
+  if (container && container.classList.contains('screen-share')) {
+    container.remove();
+    updateUserCount();
+  }
 });
 
 // ========== CONTROLS ==========
@@ -1162,7 +1191,20 @@ async function toggleScreen() {
       if (localContainer) {
         localContainer.remove();
       }
+      // Add minimized local screen share preview (to reduce CPU load)
+      // Local user doesn't need to see their own screen in full size
       addVideoStream('local', screenStream, currentUser.username, true, true);
+      // Minimize the local preview after adding
+      setTimeout(() => {
+        const container = document.getElementById('video-local');
+        if (container) {
+          container.style.cssText = 'width: 120px; height: 90px; position: absolute; bottom: 80px; right: 20px; z-index: 100; opacity: 0.7;';
+          container.querySelector('video').style.cssText = 'width: 100%; height: 100%; object-fit: contain;';
+          // Hide label to save space
+          const label = container.querySelector('.video-label');
+          if (label) label.style.display = 'none';
+        }
+      }, 100);
       
       isScreenSharing = true;
       socket.emit('screen-share-started');
