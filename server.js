@@ -231,6 +231,13 @@ io.on('connection', (socket) => {
     socket.to(socket.roomId).emit('screen-share-stopped', socket.id);
   });
 
+  // Ping handler for latency measurement
+  socket.on('ping-check', (callback) => {
+    if (typeof callback === 'function') {
+      callback(Date.now());
+    }
+  });
+
   socket.on('leave-room', (roomId) => {
     socket.leave(roomId);
     if (rooms.has(roomId)) {
@@ -246,6 +253,9 @@ io.on('connection', (socket) => {
         // Don't delete from roomStore so room persists for rejoining
       }
       socket.to(roomId).emit('user-left', socket.id);
+      
+      // Notify all clients to refresh room list (for lobby users)
+      io.emit('rooms-updated');
     }
     console.log(`User left room ${roomId}`);
   });
@@ -306,6 +316,9 @@ io.on('connection', (socket) => {
         rooms.delete(socket.roomId);
       }
       socket.to(socket.roomId).emit('user-left', socket.id);
+      
+      // Notify all clients to refresh room list (for lobby users)
+      io.emit('rooms-updated');
     }
     console.log('User disconnected:', socket.id);
   });

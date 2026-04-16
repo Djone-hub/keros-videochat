@@ -33,6 +33,58 @@ let isMicOn = true;
 let isCamOn = true;
 let isScreenSharing = false;
 let userAvatar = null;
+let pingInterval = null;
+let currentPing = 0;
+let screenShareUsers = new Set(); // Track which remote users are screen sharing
+
+// Ping measurement function
+function measurePing() {
+  if (!socketConnected) return;
+  
+  const startTime = Date.now();
+  socket.emit('ping-check', (serverTime) => {
+    const endTime = Date.now();
+    currentPing = endTime - startTime;
+    updatePingDisplay();
+  });
+}
+
+function startPingMeasurement() {
+  // Measure immediately and then every 2 seconds
+  measurePing();
+  pingInterval = setInterval(measurePing, 2000);
+}
+
+function stopPingMeasurement() {
+  if (pingInterval) {
+    clearInterval(pingInterval);
+    pingInterval = null;
+  }
+  currentPing = 0;
+  updatePingDisplay();
+}
+
+function updatePingDisplay() {
+  const pingEl = document.getElementById('pingDisplay');
+  if (!pingEl) return;
+  
+  if (currentPing === 0) {
+    pingEl.textContent = '-- ms';
+    pingEl.style.color = '#72767d';
+    return;
+  }
+  
+  pingEl.textContent = `${currentPing} ms`;
+  
+  // Color coding: green < 100ms, yellow 100-300ms, red > 300ms
+  if (currentPing < 100) {
+    pingEl.style.color = '#3ba55d'; // Green - good
+  } else if (currentPing < 300) {
+    pingEl.style.color = '#faa81a'; // Yellow - medium
+  } else {
+    pingEl.style.color = '#ed4245'; // Red - bad
+  }
+}
 
 const iceServers = {
   iceServers: [
@@ -673,6 +725,9 @@ function showRoomUI() {
       avatarEl.textContent = '#';
     }
   }
+  
+  // Start ping measurement
+  startPingMeasurement();
 }
 
 function leaveRoom() {
@@ -690,6 +745,10 @@ function leaveRoom() {
   peers.forEach(pc => pc.close());
   peers.clear();
   activeUsers.clear();
+  screenShareUsers.clear(); // Clear screen share tracking
+  
+  // Stop ping measurement
+  stopPingMeasurement();
   
   // Leave socket room
   socket.emit('leave-room', currentRoom);
@@ -733,6 +792,7 @@ function disconnectAndJoinAnother() {
   peers.forEach(pc => pc.close());
   peers.clear();
   activeUsers.clear();
+  screenShareUsers.clear(); // Clear screen share tracking
   
   // Reset state
   currentRoom = null;
@@ -777,6 +837,7 @@ function copyLink() {
 // ========== VIDEO & PEERS ==========
 
 function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false) {
+  console.log(`[VIDEO] addVideoStream called: id=${id}, isLocal=${isLocal}, isScreenShare=${isScreenShare}`);
   let container = document.getElementById(`video-${id}`);
   if (!container) {
     container = document.createElement('div');
@@ -932,12 +993,16 @@ async function createPeerConnection(userId) {
   
   pc.ontrack = (e) => {
     const stream = e.streams[0];
+    console.log(`[TRACK] Received stream from ${userId}, tracks:`, stream.getTracks().map(t => t.kind));
     socket.emit('get-user-name', userId, (name) => {
       const userName = name || 'Участник';
       if (!activeUsers.has(userId)) {
         activeUsers.set(userId, { id: userId, name: userName });
       }
-      addVideoStream(userId, stream, userName);
+      // Check if this user is screen sharing
+      const isScreenShare = screenShareUsers.has(userId);
+      console.log(`[TRACK] screenShareUsers has ${userId}:`, isScreenShare, 'Set size:', screenShareUsers.size);
+      addVideoStream(userId, stream, userName, false, isScreenShare);
       updateActiveUsers();
     });
   };
@@ -1104,11 +1169,43 @@ socket.on('chat-message', (msg) => {
 
 // Handle remote user screen share started
 socket.on('screen-share-started', (userId) => {
-  // Screen share started - debug disabled
-  // console.log('[SCREEN] Remote user started screen share:', userId);
+  console.log('[SCREEN] Remote user started screen share:', userId);
   addLogEntry('Демонстрация', 'Пользователь начал демонстрацию экрана');
-  // The screen share video will come through WebRTC ontrack event
-  // Fullscreen button will be added automatically in addVideoStream when isScreenShare=true and isLocal=false
+  
+  // Track this user as screen sharing
+  screenShareUsers.add(userId);
+  
+  // Check if video container already exists and add fullscreen button
+  const container = document.getElementById(`video-${userId}`);
+  console.log('[SCREEN] Looking for container:', `video-${userId}`, 'found:', !!container);
+  
+  if (container) {
+    if (!container.querySelector('.fullscreen-btn')) {
+      console.log('[SCREEN] Adding fullscreen button to existing container');
+      // Add screen-share class
+      container.classList.add('screen-share');
+      
+      // Add fullscreen button
+      const fullscreenBtn = document.createElement('button');
+      fullscreenBtn.className = 'fullscreen-btn';
+      fullscreenBtn.innerHTML = '🔍';
+      fullscreenBtn.title = 'Увеличить демонстрацию экрана';
+      fullscreenBtn.onclick = () => openScreenModal(userId);
+      container.appendChild(fullscreenBtn);
+      
+      // Add double-click handler to video
+      const video = container.querySelector('video');
+      if (video) {
+        video.style.cursor = 'pointer';
+        video.title = 'Двойной клик для увеличения';
+        video.ondblclick = () => openScreenModal(userId);
+      }
+    } else {
+      console.log('[SCREEN] Fullscreen button already exists');
+    }
+  } else {
+    console.log('[SCREEN] Container not found, will add button when video arrives');
+  }
 });
 
 // Handle remote user screen share stopped
@@ -1116,6 +1213,10 @@ socket.on('screen-share-stopped', (userId) => {
   // Screen share stopped - debug disabled
   // console.log('[SCREEN] Remote user stopped screen share:', userId);
   addLogEntry('Демонстрация', 'Пользователь остановил демонстрацию экрана');
+  
+  // Remove from screen share tracking
+  screenShareUsers.delete(userId);
+  
   // Remove the screen share video container
   const container = document.getElementById(`video-${userId}`);
   if (container && container.classList.contains('screen-share')) {
