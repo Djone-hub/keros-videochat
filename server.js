@@ -108,18 +108,37 @@ io.on('connection', (socket) => {
   console.log('Current rooms in store:', roomStore.size);
 
   // Handle user registration
-  socket.on('user-registered', ({ username, avatar }) => {
-    console.log(`[REGISTER] New user registered: ${username}`);
+  socket.on('user-registered', ({ username, avatar, isOnline }) => {
+    console.log(`[REGISTER] User: ${username}, online: ${isOnline}`);
     
     // Add to global registry
     registeredUsers.set(username, {
       name: username,
       avatar: avatar,
-      isOnline: false, // Not online until joins a room
+      isOnline: isOnline || false,
       lastSeen: Date.now()
     });
     
     // Broadcast to all clients to refresh user list
+    io.emit('users-updated');
+  });
+
+  // Handle user entering lobby (online but not in room)
+  socket.on('user-online', ({ username, avatar }) => {
+    console.log(`[ONLINE] User entered lobby: ${username}`);
+    socket.userName = username;
+    socket.userAvatar = avatar;
+    
+    // Update user status
+    registeredUsers.set(username, {
+      name: username,
+      avatar: avatar,
+      isOnline: true,
+      socketId: socket.id,
+      lastSeen: Date.now()
+    });
+    
+    // Broadcast to all clients
     io.emit('users-updated');
   });
 

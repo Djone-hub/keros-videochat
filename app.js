@@ -156,6 +156,8 @@ const sounds = {
   camOff: () => playSoftTone(300, 0.15, 'triangle', 0.1),
   screenOn: () => playSoftTone(700, 0.2, 'sine', 0.15),
   screenOff: () => playSoftTone(400, 0.2, 'sine', 0.15),
+  soundOn: () => playSoftTone(450, 0.15, 'sine', 0.1),
+  soundOff: () => playSoftTone(280, 0.15, 'sine', 0.1),
   userJoin: () => playSoftTone(550, 0.3, 'sine', 0.1),
   userLeave: () => playSoftTone(380, 0.3, 'sine', 0.1)
 };
@@ -343,6 +345,14 @@ function showLobby() {
     avatarEl.innerHTML = `<img src="${userAvatar}" alt="avatar">`;
   } else {
     avatarEl.textContent = currentUser.username.charAt(0).toUpperCase();
+  }
+  
+  // Notify server that user is online (in lobby)
+  if (socketConnected && currentUser) {
+    socket.emit('user-online', { 
+      username: currentUser.username, 
+      avatar: userAvatar 
+    });
   }
   
   // Load saved theme
@@ -1707,6 +1717,13 @@ function toggleCam() {
 
 function toggleSound() {
   isSoundOn = !isSoundOn;
+  
+  // Play sound effect
+  if (isSoundOn) {
+    sounds.soundOn();
+  } else {
+    sounds.soundOff();
+  }
   
   // Update button UI
   const btn = document.getElementById('soundBtn');
