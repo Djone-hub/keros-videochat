@@ -318,6 +318,11 @@ function showLobby() {
     avatarEl.textContent = currentUser.username.charAt(0).toUpperCase();
   }
   
+  // Load saved theme
+  if (typeof loadUserSettings === 'function') {
+    loadUserSettings();
+  }
+  
   // Load rooms from server
   loadServerRooms();
 }
@@ -731,6 +736,11 @@ function showRoomUI() {
   const displayName = currentRoomName && currentRoomName !== currentRoom ? currentRoomName : currentRoom;
   document.getElementById('displayRoomId').textContent = displayName;
   
+  // Load saved theme
+  if (typeof loadUserSettings === 'function') {
+    loadUserSettings();
+  }
+  
   // Set room avatar in header
   const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
   const room = rooms.find(r => r.id === currentRoom);
@@ -875,12 +885,23 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
       label.appendChild(volumeControl);
       // Set default volume to 50%
       video.volume = 0.5;
+      // Ensure audio is not muted for remote videos
+      video.muted = false;
+      console.log(`[AUDIO] Remote video ${id} - volume: ${video.volume}, muted: ${video.muted}`);
     }
     
     // Add fullscreen button for screen share (only for REMOTE users, not local)
     // Local user doesn't need fullscreen button for their own screen share
     // Remote users DO need fullscreen button to enlarge shared screen
     if (isScreenShare && !isLocal) {
+      // Add preview toggle button
+      const previewToggleBtn = document.createElement('button');
+      previewToggleBtn.className = 'preview-toggle-btn';
+      previewToggleBtn.innerHTML = '👁️ Превью';
+      previewToggleBtn.title = 'Переключить режим превью (экономия ресурсов)';
+      previewToggleBtn.onclick = () => toggleScreenSharePreview(id);
+      container.appendChild(previewToggleBtn);
+      
       const fullscreenBtn = document.createElement('button');
       fullscreenBtn.className = 'fullscreen-btn';
       fullscreenBtn.innerHTML = '🔍';
@@ -951,6 +972,9 @@ function updateActiveUsers() {
   const list = document.getElementById('activeUsers');
   list.innerHTML = '';
   
+  // Track unique usernames to prevent duplicates
+  const addedUsernames = new Set();
+  
   // Local user with speaking indicator
   const localItem = document.createElement('div');
   localItem.className = 'user-item';
@@ -964,27 +988,35 @@ function updateActiveUsers() {
     <div class="user-status" id="status-local"></div>
   `;
   list.appendChild(localItem);
+  addedUsernames.add(currentUser.username.toLowerCase());
   
   // Remote users with speaking indicator and avatar
   peers.forEach((pc, id) => {
     const user = activeUsers.get(id);
-    // Skip if this peer is the current user (shouldn't happen but safety check)
-    if (user && user.name === currentUser?.username) {
-      console.log('[USERS] Skipping duplicate of current user:', id);
+    if (!user) return;
+    
+    const username = user.name.toLowerCase();
+    
+    // Skip if already added (prevents duplicates)
+    if (addedUsernames.has(username)) {
+      console.log('[USERS] Skipping duplicate user:', user.name);
       return;
     }
+    
+    addedUsernames.add(username);
+    
     const item = document.createElement('div');
     item.className = 'user-item';
     item.id = `user-item-${id}`;
     
     // Check if user has avatar
-    const avatarHtml = (user && user.avatar) ? 
+    const avatarHtml = user.avatar ? 
       `<img src="${user.avatar}" alt="avatar">` :
-      (user ? user.name.charAt(0).toUpperCase() : '?');
+      user.name.charAt(0).toUpperCase();
     
     item.innerHTML = `
       <div class="user-avatar" id="avatar-${id}">${avatarHtml}</div>
-      <span class="user-name">${user ? user.name : 'Участник'}</span>
+      <span class="user-name">${user.name}</span>
       <div class="user-status" id="status-${id}"></div>
     `;
     list.appendChild(item);
@@ -1031,24 +1063,51 @@ function startSpeakingDetection() {
 }
 
 async function createPeerConnection(userId) {
-  const pc = new RTCPeerConnection(iceServers);
+  const pc = new RTCPeerConnection({
+    ...iceServers,
+    // Low latency configuration
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require',
+    sdpSemantics: 'unified-plan'
+  });
+  
+  // Enable low latency for audio
+  pc.getSenders().forEach(sender => {
+    if (sender.track && sender.track.kind === 'audio') {
+      const params = sender.getParameters();
+      if (params.encodings && params.encodings.length > 0) {
+        params.encodings[0].ptime = 20; // 20ms packet time for lower latency
+        sender.setParameters(params).catch(e => console.log('[AUDIO] Params error:', e));
+      }
+    }
+  });
   
   localStream.getTracks().forEach(track => {
     pc.addTrack(track, localStream);
+    console.log(`[AUDIO] Sending ${track.kind} track to ${userId}: enabled=${track.enabled}, muted=${track.muted}, state=${track.readyState}`);
   });
   
   pc.ontrack = (e) => {
     const stream = e.streams[0];
     const videoTrack = stream.getVideoTracks()[0];
+    const audioTrack = stream.getAudioTracks()[0];
     
     // Log detailed track info for debugging
     const trackInfo = stream.getTracks().map(t => ({
       kind: t.kind,
       label: t.label,
       readyState: t.readyState,
-      enabled: t.enabled
+      enabled: t.enabled,
+      muted: t.muted
     }));
     console.log(`[TRACK] Received stream from ${userId}:`, JSON.stringify(trackInfo));
+    
+    // Log audio track specifically
+    if (audioTrack) {
+      console.log(`[AUDIO] Received audio from ${userId}: enabled=${audioTrack.enabled}, muted=${audioTrack.muted}, state=${audioTrack.readyState}`);
+    } else {
+      console.warn(`[AUDIO] No audio track received from ${userId}!`);
+    }
     
     // Detect screen share by track label
     const isScreenByLabel = videoTrack && (
@@ -1120,6 +1179,30 @@ socket.on('room-info', (room) => {
     
     // Refresh room list to show updated info
     loadServerRooms();
+  }
+});
+
+// Listen for theme changes from other users
+socket.on('theme-changed', ({ theme }) => {
+  console.log('[THEME] Received theme change from another user:', theme);
+  // Apply theme if setTheme function is available (from admin.js)
+  if (typeof setTheme === 'function') {
+    setTheme(theme);
+  } else {
+    // Fallback: apply theme directly
+    const themes = {
+      dark: { '--bg-primary': '#36393f', '--bg-secondary': '#2f3136', '--bg-tertiary': '#202225', '--text-primary': '#fff', '--text-secondary': '#b9bbbe', '--accent': '#5865f2' },
+      blue: { '--bg-primary': '#1a237e', '--bg-secondary': '#283593', '--bg-tertiary': '#0d47a1', '--text-primary': '#fff', '--text-secondary': '#b3e5fc', '--accent': '#2196f3' },
+      red: { '--bg-primary': '#b71c1c', '--bg-secondary': '#c62828', '--bg-tertiary': '#7f0000', '--text-primary': '#fff', '--text-secondary': '#ffcdd2', '--accent': '#f44336' },
+      green: { '--bg-primary': '#1b5e20', '--bg-secondary': '#2e7d32', '--bg-tertiary': '#004d00', '--text-primary': '#fff', '--text-secondary': '#c8e6c9', '--accent': '#4caf50' },
+      purple: { '--bg-primary': '#4a148c', '--bg-secondary': '#6a1b9a', '--bg-tertiary': '#38006b', '--text-primary': '#fff', '--text-secondary': '#e1bee7', '--accent': '#9c27b0' }
+    };
+    const themeData = themes[theme];
+    if (themeData) {
+      Object.entries(themeData).forEach(([key, value]) => {
+        document.documentElement.style.setProperty(key, value);
+      });
+    }
   }
 });
 
@@ -1272,6 +1355,16 @@ socket.on('screen-share-started', (userId) => {
       video.onresize = checkResolution;
     }
     
+    // Add preview toggle button if not exists
+    if (!container.querySelector('.preview-toggle-btn')) {
+      const previewToggleBtn = document.createElement('button');
+      previewToggleBtn.className = 'preview-toggle-btn';
+      previewToggleBtn.innerHTML = '👁️ Превью';
+      previewToggleBtn.title = 'Переключить режим превью (экономия ресурсов)';
+      previewToggleBtn.onclick = () => toggleScreenSharePreview(userId);
+      container.appendChild(previewToggleBtn);
+    }
+    
     // Add fullscreen button if not exists
     if (!container.querySelector('.fullscreen-btn')) {
       const fullscreenBtn = document.createElement('button');
@@ -1320,19 +1413,31 @@ socket.on('active-screen-shares', (userIds) => {
     screenShareUsers.add(userId);
     addLogEntry('Демонстрация', 'Пользователь уже демонстрирует экран');
     
-    // Check if video container already exists and add fullscreen button
+    // Check if video container already exists and add buttons
     const container = document.getElementById(`video-${userId}`);
-    if (container && !container.querySelector('.fullscreen-btn')) {
+    if (container) {
       // Add screen-share class
       container.classList.add('screen-share');
       
-      // Add fullscreen button
-      const fullscreenBtn = document.createElement('button');
-      fullscreenBtn.className = 'fullscreen-btn';
-      fullscreenBtn.innerHTML = '🔍';
-      fullscreenBtn.title = 'Увеличить демонстрацию экрана';
-      fullscreenBtn.onclick = () => openScreenModal(userId);
-      container.appendChild(fullscreenBtn);
+      // Add preview toggle button if not exists
+      if (!container.querySelector('.preview-toggle-btn')) {
+        const previewToggleBtn = document.createElement('button');
+        previewToggleBtn.className = 'preview-toggle-btn';
+        previewToggleBtn.innerHTML = '👁️ Превью';
+        previewToggleBtn.title = 'Переключить режим превью (экономия ресурсов)';
+        previewToggleBtn.onclick = () => toggleScreenSharePreview(userId);
+        container.appendChild(previewToggleBtn);
+      }
+      
+      // Add fullscreen button if not exists
+      if (!container.querySelector('.fullscreen-btn')) {
+        const fullscreenBtn = document.createElement('button');
+        fullscreenBtn.className = 'fullscreen-btn';
+        fullscreenBtn.innerHTML = '🔍';
+        fullscreenBtn.title = 'Увеличить демонстрацию экрана';
+        fullscreenBtn.onclick = () => openScreenModal(userId);
+        container.appendChild(fullscreenBtn);
+      }
       
       // Add double-click handler to video
       const video = container.querySelector('video');
@@ -1460,11 +1565,13 @@ async function toggleScreen() {
       });
     }
     
-    // Remove screen share preview and restore camera preview
-    const localContainer = document.getElementById('video-local');
-    if (localContainer) {
-      localContainer.remove();
+    // Remove screen share preview window
+    const preview = document.getElementById('screen-share-preview');
+    if (preview) {
+      preview.remove();
     }
+    
+    // Restore camera preview
     if (localStream) {
       addVideoStream('local', localStream, currentUser.username, true, false);
     }
@@ -1521,29 +1628,33 @@ async function toggleScreen() {
         }
       });
       
-      // Update local preview - remove camera, add minimized screen preview
+      // Remove local camera preview - no need to see own screen share
       const localContainer = document.getElementById('video-local');
       if (localContainer) {
         localContainer.remove();
       }
       
-      // Add minimized local screen share preview (to reduce CPU load)
-      addVideoStream('local', screenStream, currentUser.username, true, true);
+      // Add small low-res preview window (160x90) - not CPU intensive
+      const previewContainer = document.createElement('div');
+      previewContainer.id = 'screen-share-preview';
+      previewContainer.style.cssText = 'position: absolute; bottom: 80px; right: 20px; width: 160px; height: 90px; z-index: 100; border-radius: 4px; overflow: hidden; border: 2px solid #3ba55d; background: #000;';
       
-      // Minimize the local preview after adding
-      setTimeout(() => {
-        const container = document.getElementById('video-local');
-        if (container) {
-          container.style.cssText = 'width: 120px; height: 90px; position: absolute; bottom: 80px; right: 20px; z-index: 100; opacity: 0.7;';
-          const video = container.querySelector('video');
-          if (video) {
-            video.style.cssText = 'width: 100%; height: 100%; object-fit: contain;';
-          }
-          // Hide label to save space
-          const label = container.querySelector('.video-label');
-          if (label) label.style.display = 'none';
-        }
-      }, 100);
+      const previewVideo = document.createElement('video');
+      previewVideo.srcObject = screenStream;
+      previewVideo.autoplay = true;
+      previewVideo.muted = true;
+      previewVideo.playsInline = true;
+      previewVideo.style.cssText = 'width: 100%; height: 100%; object-fit: contain;';
+      // Limit to 5fps to reduce CPU usage
+      previewVideo.playbackRate = 0.1;
+      
+      const previewLabel = document.createElement('div');
+      previewLabel.innerHTML = '🖥️ Демонстрация';
+      previewLabel.style.cssText = 'position: absolute; bottom: 0; left: 0; right: 0; background: rgba(59, 165, 93, 0.9); color: white; padding: 2px 4px; font-size: 10px; text-align: center;';
+      
+      previewContainer.appendChild(previewVideo);
+      previewContainer.appendChild(previewLabel);
+      document.getElementById('videoGrid').appendChild(previewContainer);
       
       isScreenSharing = true;
       socket.emit('screen-share-started');
@@ -1565,6 +1676,27 @@ async function toggleScreen() {
 
 // ========== FULLSCREEN SCREEN SHARE ==========
 let currentScreenResolution = '1080p'; // Default resolution
+
+// Toggle screen share between full size and preview/thumbnail mode
+function toggleScreenSharePreview(videoId) {
+  const container = document.getElementById(`video-${videoId}`);
+  if (!container) return;
+  
+  const isPreview = container.classList.contains('preview-mode');
+  const toggleBtn = container.querySelector('.preview-toggle-btn');
+  
+  if (isPreview) {
+    // Switch to full mode
+    container.classList.remove('preview-mode');
+    if (toggleBtn) toggleBtn.innerHTML = '👁️ Превью';
+    console.log('[SCREEN] Switched to full mode for', videoId);
+  } else {
+    // Switch to preview mode (smaller, less CPU usage)
+    container.classList.add('preview-mode');
+    if (toggleBtn) toggleBtn.innerHTML = '🔲 Полный';
+    console.log('[SCREEN] Switched to preview mode for', videoId);
+  }
+}
 
 function openScreenModal(videoId) {
   // Find the screen share video element by id

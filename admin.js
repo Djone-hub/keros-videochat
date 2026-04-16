@@ -243,17 +243,29 @@ function loadUserSettings() {
 }
 
 function setTheme(themeName) {
+  console.log('[THEME] Setting theme:', themeName);
   const theme = themes[themeName];
-  if (!theme) return;
+  if (!theme) {
+    console.error('[THEME] Theme not found:', themeName);
+    return;
+  }
 
+  console.log('[THEME] Applying colors:', theme);
   Object.entries(theme).forEach(([key, value]) => {
     document.documentElement.style.setProperty(key, value);
+    console.log(`[THEME] ${key} = ${value}`);
   });
 
   localStorage.setItem('keroschat_theme', themeName);
+  console.log('[THEME] Saved to localStorage');
 
+  // Update active button state
   document.querySelectorAll('.theme-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.theme === themeName);
+    btn.classList.remove('active');
+    if (btn.classList.contains(themeName)) {
+      btn.classList.add('active');
+      console.log('[THEME] Set active button:', btn.textContent);
+    }
   });
 }
 

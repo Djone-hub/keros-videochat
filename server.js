@@ -271,6 +271,13 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Handle theme changes - broadcast to other users in room
+  socket.on('theme-changed', ({ roomId, theme }) => {
+    console.log(`[THEME] User ${socket.userName} changed theme to ${theme} in room ${roomId}`);
+    // Broadcast to all other users in the room
+    socket.to(roomId).emit('theme-changed', { theme });
+  });
+
   // Ping handler for latency measurement
   socket.on('ping-check', (callback) => {
     if (typeof callback === 'function') {

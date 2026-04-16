@@ -32,11 +32,11 @@
       justify-content: center;
       min-height: 100vh;
       gap: 20px;
-      background: #202225;
+      background: var(--bg-tertiary);
     }
     .auth-screen h1 { font-size: 2.5rem; color: #5865f2; }
     .auth-box {
-      background: #2f3136;
+      background: var(--bg-secondary);
       padding: 40px;
       border-radius: 8px;
       display: flex;
@@ -54,16 +54,16 @@
       flex: 1;
       padding: 10px;
       border: none;
-      background: #40444b;
-      color: #b9bbbe;
+      background: var(--bg-primary);
+      color: var(--text-secondary);
       cursor: pointer;
       border-radius: 4px;
       font-size: 14px;
       font-weight: 500;
     }
     .auth-tab.active {
-      background: #5865f2;
-      color: #fff;
+      background: var(--accent);
+      color: var(--text-primary);
     }
     .auth-form { display: none; }
     .auth-form.active { display: flex; flex-direction: column; gap: 15px; }
@@ -101,7 +101,7 @@
     /* Left Sidebar - Discord Style */
     .lobby-sidebar {
       width: 72px;
-      background: #202225;
+      background: var(--bg-tertiary);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -113,7 +113,7 @@
       width: 48px;
       height: 48px;
       border-radius: 50%;
-      background: #36393f;
+      background: var(--bg-primary);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -124,11 +124,11 @@
     }
     .lobby-sidebar .nav-item:hover {
       border-radius: 16px;
-      background: #5865f2;
+      background: var(--accent);
     }
     .lobby-sidebar .nav-item.active {
       border-radius: 16px;
-      background: #5865f2;
+      background: var(--accent);
     }
     .lobby-sidebar .nav-item::before {
       content: '';
@@ -147,7 +147,7 @@
     .lobby-sidebar .divider {
       width: 32px;
       height: 2px;
-      background: #36393f;
+      background: var(--bg-primary);
       margin: 4px 0;
     }
     
@@ -156,16 +156,24 @@
       flex: 1;
       display: flex;
       flex-direction: column;
-      background: #36393f;
+      background: var(--bg-primary);
       overflow: hidden;
+    }
+    .lobby-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-primary);
+      overflow: hidden;
+      position: relative;
     }
     .lobby-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       padding: 12px 16px;
-      background: #36393f;
-      border-bottom: 1px solid #202225;
+      background: var(--bg-primary);
+      border-bottom: 1px solid var(--bg-tertiary);
     }
     .lobby-header h2 { 
       color: #fff; 
@@ -181,7 +189,7 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      background: #292b2f;
+      background: var(--bg-secondary);
       padding: 8px 12px;
       border-radius: 8px;
     }
@@ -280,7 +288,7 @@
     }
     .rooms-sidebar {
       width: 240px;
-      background: #2f3136;
+      background: var(--bg-secondary);
       display: flex;
       flex-direction: column;
       height: 100%;
@@ -288,11 +296,11 @@
     }
     .rooms-header {
       padding: 16px;
-      border-bottom: 1px solid #202225;
+      border-bottom: 1px solid var(--bg-tertiary);
     }
     .rooms-header h3 {
       font-size: 12px;
-      color: #96989d;
+      color: var(--text-secondary);
       text-transform: uppercase;
       font-weight: 700;
       margin-bottom: 12px;
@@ -301,36 +309,34 @@
     .search-box {
       margin-bottom: 12px;
     }
-    .search-box input {
-      width: 100%;
+    .rooms-header input {
+      flex: 1;
       padding: 8px 12px;
       border: none;
       border-radius: 4px;
-      background: #202225;
-      color: #fff;
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
       font-size: 13px;
       outline: none;
     }
     .search-box input::placeholder {
-      color: #72767d;
+      color: var(--text-secondary);
     }
     .create-room-btn {
-      width: 100%;
       padding: 10px;
       border: none;
       border-radius: 4px;
-      background: #3ba55d;
-      color: #fff;
+      background: var(--accent);
+      color: var(--text-primary);
       cursor: pointer;
       font-size: 13px;
-      font-weight: 500;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 6px;
       transition: background 0.2s;
     }
-    .create-room-btn:hover { background: #2d7d46; }
+    .create-room-btn:hover { background: var(--accent); filter: brightness(0.8); }
     .rooms-list {
       flex: 1;
       overflow-y: auto;
@@ -527,7 +533,7 @@
     }
     .modal-overlay.active { display: flex; }
     .modal {
-      background: #2f3136;
+      background: var(--bg-secondary);
       border-radius: 8px;
       padding: 24px;
       min-width: 400px;
@@ -541,10 +547,10 @@
     .modal input {
       width: 100%;
       padding: 12px;
-      border: 1px solid #202225;
+      border: 1px solid var(--bg-tertiary);
       border-radius: 4px;
-      background: #40444b;
-      color: #fff;
+      background: var(--bg-primary);
+      color: var(--text-primary);
       font-size: 14px;
       margin-bottom: 12px;
     }
@@ -568,6 +574,8 @@
       display: none; 
       flex: 1;
       flex-direction: column;
+      background: var(--bg-primary);
+      color: var(--text-primary);
       overflow-y: auto;
       overflow-x: hidden;
       min-height: 0;
@@ -592,12 +600,12 @@
       justify-content: space-between;
       align-items: center;
       padding: 12px 16px;
-      background: #2f3136;
-      border-bottom: 1px solid #202225;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--bg-tertiary);
       height: 48px;
     }
     .room-header h2 { 
-      color: #fff; 
+      color: var(--text-primary); 
       font-size: 16px; 
       font-weight: 600;
       display: flex;
@@ -606,7 +614,7 @@
     }
     .room-header h2::before {
       content: '#';
-      color: #72767d;
+      color: var(--text-secondary);
     }
     .room-header .actions {
       display: flex;
@@ -616,13 +624,13 @@
       padding: 6px 12px;
       border: none;
       border-radius: 4px;
-      background: #5865f2;
-      color: #fff;
+      background: var(--accent);
+      color: var(--text-primary);
       cursor: pointer;
       font-size: 13px;
     }
     .room-header button.leave { background: #ed4245; }
-    .room-header button.settings { background: #72767d; }
+    .room-header button.settings { background: var(--bg-primary); }
     
     .main-layout {
       display: flex;
@@ -633,8 +641,8 @@
     /* Left Sidebar - Members */
     .left-sidebar {
       width: 240px;
-      background: #2f3136;
-      border-right: 1px solid #202225;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--bg-tertiary);
       display: flex;
       flex-direction: column;
     }
@@ -644,7 +652,7 @@
     }
     .sidebar-header h3 {
       font-size: 12px;
-      color: #96989d;
+      color: var(--text-secondary);
       text-transform: uppercase;
       font-weight: 600;
     }
@@ -682,7 +690,7 @@
     }
     .user-name {
       font-size: 14px;
-      color: #fff;
+      color: var(--text-primary);
     }
     .user-status {
       width: 8px;
@@ -697,22 +705,24 @@
       flex: 1;
       display: flex;
       flex-direction: column;
-      background: #36393f;
+      background: var(--bg-primary);
     }
     .video-grid {
       flex: 1;
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 16px;
-      padding: 16px;
-      overflow-y: auto;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+      padding: 12px;
     }
     .video-container {
       position: relative;
-      background: #202225;
+      background: var(--bg-secondary);
       border-radius: 8px;
       overflow: hidden;
       aspect-ratio: 16/9;
+      min-width: 240px;
+      max-width: 320px;
+      max-height: 180px;
     }
     .video-container video {
       width: 100%;
@@ -754,6 +764,33 @@
       font-size: 12px;
       font-weight: bold;
       z-index: 10;
+    }
+    /* Screen share preview/thumbnail mode */
+    .video-container.screen-share.preview-mode {
+      grid-column: span 1;
+      min-width: 320px;
+      min-height: 180px;
+      max-width: 400px;
+      max-height: 225px;
+    }
+    .video-container.screen-share.preview-mode video {
+      object-fit: contain;
+    }
+    .preview-toggle-btn {
+      position: absolute;
+      top: 8px;
+      right: 40px;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      z-index: 15;
+    }
+    .preview-toggle-btn:hover {
+      background: rgba(59, 165, 93, 0.8);
     }
     .video-label {
       position: absolute;
@@ -1433,17 +1470,16 @@
           </div>
         </div>
         
-        <div class="lobby-main">
-          <div class="welcome-section">
-            <h3>Добро пожаловать в Keros VideoChat! 👋</h3>
-            <p>🔥 <b>Комнаты с огоньком</b> — активные, там уже есть люди!<br>⚪ <b>Без огонька</b> — пока пустые, но вы можете быть первыми!</p>
-            <div class="welcome-tips">
-              <h4>💡 Как присоединиться:</h4>
-              <ul>
-                <li>Нажмите на любую комнату слева 🔴</li>
-                <li>Или введите название комнаты в поиске 🔍</li>
-                <li>Или перейдите по ссылке-приглашению 📎</li>
-                <li>Создайте свою комнату кнопкой ➕</li>
+        <div class="lobby-main" style="position: relative;">
+          <div class="welcome-section" style="position: absolute; top: 16px; right: 16px; width: 320px; max-width: 320px; margin: 0; z-index: 10;">
+            <h3 style="font-size: 16px;">� Добро пожаловать!</h3>
+            <div class="welcome-tips" style="margin-top: 12px; padding: 12px;">
+              <h4 style="font-size: 12px;">💡 Как присоединиться:</h4>
+              <ul style="font-size: 11px;">
+                <li>Нажмите на комнату слева 🔴</li>
+                <li>Введите название в поиске 🔍</li>
+                <li>Перейдите по ссылке 📎</li>
+                <li>Создайте свою комнату ➕</li>
               </ul>
             </div>
           </div>
@@ -1559,15 +1595,6 @@
         <input type="file" id="avatarUpload" accept="image/*" onchange="uploadAvatar(this)" style="display: none;">
         <button onclick="document.getElementById('avatarUpload').click()">📤 Загрузить аватар</button>
         <div id="avatarPreview" style="margin-top: 10px;"></div>
-      </div>
-      <div class="setting-item">
-        <label style="display: flex; justify-content: space-between; align-items: center;">
-          <span>📋 Логи событий</span>
-          <button onclick="clearLogs()" style="padding: 4px 8px; font-size: 11px; background: #72767d;">Очистить</button>
-        </label>
-        <div id="logContainer" style="background: #202225; border-radius: 4px; padding: 8px; max-height: 200px; overflow-y: auto; font-family: monospace;">
-          <p style="color: #72767d; font-size: 12px;">Логи будут отображаться здесь...</p>
-        </div>
       </div>
       <div class="setting-item" style="border-top: 1px solid #40444b; padding-top: 16px; margin-top: 16px;">
         <label>🧹 Очистить кэш</label>
