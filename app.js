@@ -1512,6 +1512,7 @@ socket.on('channel-message', (msg) => {
 
 // Channel created by another user
 socket.on('channel-created', (data) => {
+  console.log('[CHANNEL DEBUG] Received channel-created event:', data);
   addLogEntry('Канал', `${data.createdBy} создал канал "${data.channelName}"`);
   // Refresh channel list
   loadChannels();
