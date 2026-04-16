@@ -551,59 +551,101 @@ io.on('connection', (socket) => {
   
   // Join a channel
   socket.on('join-channel', (channelId, callback) => {
-    if (!socket.roomId || !rooms.has(socket.roomId)) {
-      if (callback) callback({ success: false, error: 'Not in a room' });
-      return;
-    }
+    console.log(`[CHANNEL] join-channel called by ${socket.userName}, roomId: ${socket.roomId}, channelId: ${channelId}`);
     
-    const room = rooms.get(socket.roomId);
-    if (!room.channels.has(channelId)) {
-      if (callback) callback({ success: false, error: 'Channel not found' });
-      return;
-    }
-    
-    // Leave current channel
-    if (socket.currentChannel && room.channels.has(socket.currentChannel)) {
-      const oldChannel = room.channels.get(socket.currentChannel);
-      const oldUser = Array.from(oldChannel.users).find(u => u.id === socket.id);
-      if (oldUser) oldChannel.users.delete(oldUser);
-    }
-    
-    // Join new channel
-    const channel = room.channels.get(channelId);
-    channel.users.add({ id: socket.id, name: socket.userName });
-    
-    // Store old channel for notification
-    const oldChannelId = socket.currentChannel;
-    socket.currentChannel = channelId;
-    socket.join(`${socket.roomId}_${channelId}`); // Join channel-specific room
-    
-    console.log(`[CHANNEL] ${socket.userName} joined channel "${channel.name}" (${channelId})`);
-    
-    // Notify old channel users that user left
-    if (oldChannelId && oldChannelId !== channelId) {
-      io.to(`${socket.roomId}_${oldChannelId}`).emit('user-left-channel', {
+    try {
+      // Try to recover roomId from socket.rooms if socket.roomId is not set
+      if (!socket.roomId && socket.rooms) {
+        for (const room of socket.rooms) {
+          if (room !== socket.id && rooms.has(room)) {
+            socket.roomId = room;
+            console.log(`[CHANNEL] Recovered roomId from socket.rooms: ${room}`);
+            break;
+          }
+        }
+      }
+      
+      if (!socket.roomId) {
+        console.log(`[CHANNEL] Error: socket.roomId is undefined`);
+        if (callback) callback({ success: false, error: 'Not in a room' });
+        return;
+      }
+      
+      if (!rooms.has(socket.roomId)) {
+        console.log(`[CHANNEL] Error: room ${socket.roomId} not found`);
+        if (callback) callback({ success: false, error: 'Room not found' });
+        return;
+      }
+      
+      const room = rooms.get(socket.roomId);
+      
+      // Ensure channels exists
+      if (!room.channels) {
+        console.log(`[CHANNEL] Creating channels Map for room ${socket.roomId}`);
+        room.channels = new Map([['general', { name: 'Общий', users: new Set() }]]);
+      }
+      
+      if (!room.channels.has(channelId)) {
+        console.log(`[CHANNEL] Error: channel ${channelId} not found`);
+        if (callback) callback({ success: false, error: 'Channel not found' });
+        return;
+      }
+      
+      // Leave current channel
+      if (socket.currentChannel && room.channels.has(socket.currentChannel)) {
+        const oldChannel = room.channels.get(socket.currentChannel);
+        const oldUser = Array.from(oldChannel.users).find(u => u.id === socket.id);
+        if (oldUser) oldChannel.users.delete(oldUser);
+      }
+      
+      // Join new channel
+      const channel = room.channels.get(channelId);
+      channel.users.add({ id: socket.id, name: socket.userName });
+      
+      // Store old channel for notification
+      const oldChannelId = socket.currentChannel;
+      socket.currentChannel = channelId;
+      socket.join(`${socket.roomId}_${channelId}`); // Join channel-specific room
+      
+      console.log(`[CHANNEL] ${socket.userName} joined channel "${channel.name}" (${channelId})`);
+      
+      // Notify old channel users that user left
+      if (oldChannelId && oldChannelId !== channelId) {
+        io.to(`${socket.roomId}_${oldChannelId}`).emit('user-left-channel', {
+          userId: socket.id,
+          userName: socket.userName,
+          channelId: oldChannelId
+        });
+      }
+      
+      // Notify new channel users that user joined
+      io.to(`${socket.roomId}_${channelId}`).emit('user-joined-channel', {
         userId: socket.id,
         userName: socket.userName,
-        channelId: oldChannelId
+        channelId,
+        channelName: channel.name
       });
+      
+      // Send list of users in this channel (include current user)
+      const channelUsers = Array.from(channel.users).map(u => ({
+        userId: u.id,
+        userName: u.name
+      }));
+      
+      // Ensure current user is in the list
+      if (!channelUsers.find(u => u.userId === socket.id)) {
+        channelUsers.push({
+          userId: socket.id,
+          userName: socket.userName
+        });
+      }
+      
+      console.log(`[CHANNEL] Sending ${channelUsers.length} users in channel ${channelId}:`, channelUsers.map(u => u.userName));
+      if (callback) callback({ success: true, channelName: channel.name, channelUsers });
+    } catch (err) {
+      console.error(`[CHANNEL] Error in join-channel:`, err);
+      if (callback) callback({ success: false, error: 'Server error: ' + err.message });
     }
-    
-    // Notify new channel users that user joined
-    io.to(`${socket.roomId}_${channelId}`).emit('user-joined-channel', {
-      userId: socket.id,
-      userName: socket.userName,
-      channelId,
-      channelName: channel.name
-    });
-    
-    // Send list of users in this channel
-    const channelUsers = Array.from(channel.users).map(u => ({
-      userId: u.id,
-      userName: u.name
-    }));
-    
-    if (callback) callback({ success: true, channelName: channel.name, channelUsers });
   });
   
   // Leave a channel

@@ -2192,7 +2192,18 @@ function createChannel() {
   if (!name || !name.trim()) return;
   
   console.log('[CHANNEL] Emitting create-channel with name:', name.trim());
+  
+  let hasResponse = false;
+  const timeout = setTimeout(() => {
+    if (!hasResponse) {
+      console.error('[CHANNEL] create-channel timeout - no response from server');
+      alert('Сервер не отвечает. Проверьте консоль сервера.');
+    }
+  }, 5000);
+  
   socket.emit('create-channel', name.trim(), (response) => {
+    hasResponse = true;
+    clearTimeout(timeout);
     console.log('[CHANNEL] create-channel response:', response);
     if (response && response.success) {
       addLogEntry('Канал', `Создан канал "${response.channelName}"`);
@@ -2375,12 +2386,17 @@ function updateChannelParticipants() {
   list.appendChild(localItem);
   addedUsernames.add(currentUser.username.toLowerCase());
   
-  // Show only users in current channel
+  // Show only users in current channel (excluding self)
   currentChannelUsers.forEach((channelUser, userId) => {
-    const user = activeUsers.get(userId);
-    if (!user) return;
+    // Skip self - already added above
+    if (userId === socket.id) return;
     
-    const username = user.name.toLowerCase();
+    // Get user info from activeUsers or use channel data
+    const user = activeUsers.get(userId);
+    const userName = user ? user.name : (channelUser.userName || 'Участник');
+    const userAvatar = user ? user.avatar : null;
+    
+    const username = userName.toLowerCase();
     if (addedUsernames.has(username)) return;
     addedUsernames.add(username);
     
@@ -2388,19 +2404,19 @@ function updateChannelParticipants() {
     item.className = 'user-item';
     item.id = `user-item-${userId}`;
     
-    const avatarHtml = user.avatar ? 
-      `<img src="${user.avatar}" alt="avatar">` :
-      user.name.charAt(0).toUpperCase();
+    const avatarHtml = userAvatar ? 
+      `<img src="${userAvatar}" alt="avatar">` :
+      userName.charAt(0).toUpperCase();
     
-    const isMicMuted = user.isMicMuted || false;
-    const isSoundMuted = user.isSoundMuted || false;
+    const isMicMuted = user ? user.isMicMuted : false;
+    const isSoundMuted = user ? user.isSoundMuted : false;
     
     const micIcon = isMicMuted ? '<span class="user-icon muted" title="Микрофон выключен">🎤❌</span>' : '';
     const soundIcon = isSoundMuted ? '<span class="user-icon muted" title="Звук выключен">🔇</span>' : '';
     
     item.innerHTML = `
       <div class="user-avatar" id="avatar-${userId}">${avatarHtml}</div>
-      <span class="user-name">${user.name}</span>
+      <span class="user-name">${userName}</span>
       <div class="user-icons">
         ${micIcon}
         ${soundIcon}
