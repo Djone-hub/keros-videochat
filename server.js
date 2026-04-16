@@ -180,6 +180,9 @@ io.on('connection', (socket) => {
     
     // Broadcast room update to all clients (for lobby sync)
     io.emit('rooms-updated');
+    
+    // Broadcast user list update (online status changed)
+    io.emit('users-updated');
 
     const users = Array.from(room.users).filter(u => u.id !== socket.id);
     
@@ -374,6 +377,9 @@ io.on('connection', (socket) => {
       
       // Notify all clients to refresh room list (for lobby users)
       io.emit('rooms-updated');
+      
+      // Broadcast user list update (online status changed)
+      io.emit('users-updated');
     }
     console.log(`User left room ${roomId}`);
   });
@@ -450,6 +456,10 @@ io.on('connection', (socket) => {
       // Notify all clients to refresh room list (for lobby users)
       io.emit('rooms-updated');
     }
+    
+    // Broadcast user list update (online status changed)
+    io.emit('users-updated');
+    
     console.log('User disconnected:', socket.id);
   });
 });
