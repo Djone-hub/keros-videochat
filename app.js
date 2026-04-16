@@ -1102,6 +1102,8 @@ function updateUserCount() {
 
 function updateActiveUsers() {
   const list = document.getElementById('activeUsers');
+  if (!list) return;
+  
   list.innerHTML = '';
   
   // Track unique usernames to prevent duplicates
@@ -1122,11 +1124,8 @@ function updateActiveUsers() {
   list.appendChild(localItem);
   addedUsernames.add(currentUser.username.toLowerCase());
   
-  // Remote users with speaking indicator and avatar
-  peers.forEach((pc, id) => {
-    const user = activeUsers.get(id);
-    if (!user) return;
-    
+  // Remote users from activeUsers (only those currently in room)
+  activeUsers.forEach((user, id) => {
     const username = user.name.toLowerCase();
     
     // Skip if already added (prevents duplicates)
