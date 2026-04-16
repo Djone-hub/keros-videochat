@@ -818,7 +818,7 @@ async function joinRoomById(roomId) {
   currentRoomName = room ? room.name : roomId;
   const roomAvatar = room ? room.avatar : null;
   
-  addLogEntry('Комната', `Подключение к комнате: ${currentRoomName} (${roomId})`);
+  addLogEntry('Комната', `Комната "${currentRoomName}" - вы подключились`);
   
   // Request media
   try {
@@ -1000,7 +1000,7 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
   
   if (!container) {
     container = document.createElement('div');
-    container.className = 'video-container' + (isScreenShare ? ' screen-share' : '');
+    container.className = 'video-container' + (isScreenShare ? ' screen-share' : '') + (isLocal ? ' local' : '');
     container.id = `video-${id}`;
     
     const video = document.createElement('video');
@@ -1039,9 +1039,9 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
       label.appendChild(volumeControl);
       // Set default volume to 50%
       video.volume = 0.5;
-      // Ensure audio is not muted for remote videos
-      video.muted = false;
-      console.log(`[AUDIO] Remote video ${id} - volume: ${video.volume}, muted: ${video.muted}`);
+      // Mute if sound is turned off globally
+      video.muted = !isSoundOn;
+      console.log(`[AUDIO] Remote video ${id} - volume: ${video.volume}, muted: ${video.muted}, isSoundOn: ${isSoundOn}`);
     }
     
     // Add fullscreen button for screen share (only for REMOTE users, not local)
@@ -1340,8 +1340,6 @@ socket.on('room-info', (room) => {
       avatarEl.innerHTML = `<img src="${room.avatar}" alt="${room.name}">`;
     }
     
-    addLogEntry('Комната', `Получена информация о комнате: ${room.name}`);
-    
     // Refresh room list to show updated info
     loadServerRooms();
   }
@@ -1441,8 +1439,7 @@ socket.on('user-joined', async (user) => {
   // console.log('[AVATAR] User joined:', user.name, 'has avatar:', !!user.avatar);
   sounds.userJoin();
   activeUsers.set(user.id, user);
-  addChatMessage('Система', `${user.name} присоединился`, true);
-  addLogEntry('Пользователи', `${user.name} присоединился к комнате (avatar: ${user.avatar ? 'yes' : 'no'})`);
+  addChatMessage('Система', `Комната "${currentRoomName}" - подключился ${user.name}`, true);
   updateActiveUsers();
 });
 
@@ -1456,8 +1453,7 @@ socket.on('user-left', (userId) => {
   }
   activeUsers.delete(userId);
   const userName = user ? user.name : 'Участник';
-  addChatMessage('Система', `${userName} вышел`, true);
-  addLogEntry('Пользователи', `${userName} покинул комнату`);
+  addChatMessage('Система', `Комната "${currentRoomName}" - отключился ${userName}`, true);
   updateActiveUsers();
 });
 
@@ -1739,6 +1735,12 @@ function toggleSound() {
     icon.textContent = '🔇';
     label.textContent = 'Звук выкл';
   }
+  
+  // Mute/unmute all remote videos
+  document.querySelectorAll('.video-container:not(.local) video').forEach(video => {
+    video.muted = !isSoundOn;
+    console.log(`[SOUND] Remote video muted: ${!isSoundOn}`);
+  });
   
   // Notify other users about sound state
   if (currentRoom) {
