@@ -726,6 +726,21 @@
     .video-container.screen-share {
       grid-column: span 2;
       aspect-ratio: 16/9;
+      border: 3px solid #3ba55d;
+      box-shadow: 0 0 10px rgba(59, 165, 93, 0.5);
+    }
+    .video-container.screen-share::before {
+      content: '🖥️ Демонстрация экрана';
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      background: #3ba55d;
+      color: white;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+      z-index: 10;
     }
     .video-label {
       position: absolute;

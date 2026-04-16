@@ -260,6 +260,16 @@ io.on('connection', (socket) => {
     socket.to(socket.roomId).emit('screen-share-stopped', socket.id);
   });
 
+  // Handle request for fresh screen stream (when new user joins and others are sharing)
+  socket.on('request-screen-stream', (targetUserId) => {
+    console.log(`[SCREEN] User ${socket.userName} requested stream from ${targetUserId}`);
+    // Notify the target user to re-offer their screen stream
+    socket.to(socket.roomId).emit('refresh-screen-offer', {
+      requesterId: socket.id,
+      targetId: targetUserId
+    });
+  });
+
   // Ping handler for latency measurement
   socket.on('ping-check', (callback) => {
     if (typeof callback === 'function') {

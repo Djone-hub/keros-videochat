@@ -823,7 +823,17 @@ function copyLink() {
 
 function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false) {
   console.log(`[VIDEO] addVideoStream called: id=${id}, isLocal=${isLocal}, isScreenShare=${isScreenShare}`);
+  
+  const videoGrid = document.getElementById('videoGrid');
+  if (!videoGrid) {
+    console.error('[VIDEO] videoGrid not found!');
+    return;
+  }
+  
   let container = document.getElementById(`video-${id}`);
+  const isNew = !container;
+  console.log(`[VIDEO] Container for ${id}: isNew=${isNew}`);
+  
   if (!container) {
     container = document.createElement('div');
     container.className = 'video-container' + (isScreenShare ? ' screen-share' : '');
@@ -835,6 +845,20 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     video.playsInline = true;
     video.muted = isLocal;
     if (isLocal && !isScreenShare) video.style.transform = 'scaleX(-1)';
+    
+    // Ensure video plays
+    video.play().catch(e => console.log('[VIDEO] Play error:', e));
+    
+    // Log when video metadata loads (indicates video is ready)
+    video.onloadedmetadata = () => {
+      console.log(`[VIDEO] Metadata loaded for ${id}: ${video.videoWidth}x${video.videoHeight}, duration: ${video.duration}`);
+    };
+    video.onloadeddata = () => {
+      console.log(`[VIDEO] Data loaded for ${id}, readyState: ${video.readyState}`);
+    };
+    video.onplay = () => {
+      console.log(`[VIDEO] Started playing: ${id}`);
+    };
     
     const label = document.createElement('div');
     label.className = 'video-label';
@@ -872,10 +896,34 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     
     container.appendChild(video);
     container.appendChild(label);
-    document.getElementById('videoGrid').appendChild(container);
+    videoGrid.appendChild(container);
+    console.log(`[VIDEO] Created new container for ${id}, appended to grid. Total containers:`, videoGrid.children.length);
   } else {
     const video = container.querySelector('video');
+    console.log(`[VIDEO] Updating existing container for ${id}, video found:`, !!video);
     video.srcObject = stream;
+    video.play().catch(e => console.log('[VIDEO] Play error on update:', e));
+    
+    // Update styles if this is a screen share (for replaceTrack case)
+    if (isScreenShare && !isLocal) {
+      console.log(`[VIDEO] Applying screen share styles to existing container`);
+      container.classList.add('screen-share');
+      video.style.objectFit = 'contain';
+      
+      // Add fullscreen button if not exists
+      if (!container.querySelector('.fullscreen-btn')) {
+        const fullscreenBtn = document.createElement('button');
+        fullscreenBtn.className = 'fullscreen-btn';
+        fullscreenBtn.innerHTML = '🔍';
+        fullscreenBtn.title = 'Увеличить демонстрацию экрана';
+        fullscreenBtn.onclick = () => openScreenModal(id);
+        container.appendChild(fullscreenBtn);
+        
+        video.style.cursor = 'pointer';
+        video.title = 'Двойной клик для увеличения';
+        video.ondblclick = () => openScreenModal(id);
+      }
+    }
   }
   updateUserCount();
 }
@@ -912,6 +960,11 @@ function updateActiveUsers() {
   // Remote users with speaking indicator and avatar
   peers.forEach((pc, id) => {
     const user = activeUsers.get(id);
+    // Skip if this peer is the current user (shouldn't happen but safety check)
+    if (user && user.name === currentUser?.username) {
+      console.log('[USERS] Skipping duplicate of current user:', id);
+      return;
+    }
     const item = document.createElement('div');
     item.className = 'user-item';
     item.id = `user-item-${id}`;
@@ -978,24 +1031,41 @@ async function createPeerConnection(userId) {
   
   pc.ontrack = (e) => {
     const stream = e.streams[0];
-    console.log(`[TRACK] Received stream from ${userId}, tracks:`, stream.getTracks().map(t => `${t.kind}:${t.label}`));
-    
-    // Detect screen share by track label (screen tracks usually have 'screen' in label)
     const videoTrack = stream.getVideoTracks()[0];
+    
+    // Log detailed track info for debugging
+    const trackInfo = stream.getTracks().map(t => ({
+      kind: t.kind,
+      label: t.label,
+      readyState: t.readyState,
+      enabled: t.enabled
+    }));
+    console.log(`[TRACK] Received stream from ${userId}:`, JSON.stringify(trackInfo));
+    
+    // Detect screen share by track label
     const isScreenByLabel = videoTrack && (
       videoTrack.label.toLowerCase().includes('screen') ||
       videoTrack.label.toLowerCase().includes('display') ||
       videoTrack.label.toLowerCase().includes('window')
     );
     
+    // Detect screen share by settings (screen share usually has higher resolution)
+    const settings = videoTrack?.getSettings();
+    const width = settings?.width || 0;
+    const height = settings?.height || 0;
+    // Screen share typically has resolution matching monitor (>1920x1080 common)
+    const isScreenByResolution = width > 1920 || height > 1080 || (width > 0 && width/height > 2.5);
+    
+    console.log(`[TRACK] Video settings for ${userId}:`, width, 'x', height, 'aspect:', width/height);
+    
     socket.emit('get-user-name', userId, (name) => {
       const userName = name || 'Участник';
       if (!activeUsers.has(userId)) {
         activeUsers.set(userId, { id: userId, name: userName });
       }
-      // Check if this user is screen sharing (from socket event OR from track label)
-      const isScreenShare = screenShareUsers.has(userId) || isScreenByLabel;
-      console.log(`[TRACK] screenShareUsers has ${userId}:`, screenShareUsers.has(userId), 'detected by label:', isScreenByLabel);
+      // Check if this user is screen sharing (socket event OR label OR resolution)
+      const isScreenShare = screenShareUsers.has(userId) || isScreenByLabel || isScreenByResolution;
+      console.log(`[TRACK] Screen detection for ${userId}: socket=${screenShareUsers.has(userId)}, label=${isScreenByLabel}, resolution=${isScreenByResolution}, FINAL=${isScreenShare}`);
       addVideoStream(userId, stream, userName, false, isScreenShare);
       updateActiveUsers();
     });
@@ -1177,6 +1247,21 @@ socket.on('screen-share-started', (userId) => {
     const video = container.querySelector('video');
     if (video) {
       video.style.objectFit = 'contain';
+      
+      // Log resolution for debugging (screen share styling already applied above)
+      const checkResolution = () => {
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+        const isLarge = w > 1920 || h > 1080 || (w > 0 && w/h > 2.5);
+        console.log(`[SCREEN] Video resolution for ${userId}: ${w}x${h}, aspect: ${(w/h).toFixed(2)}, largeRes: ${isLarge}`);
+      };
+      
+      // Check now and on metadata loaded (resolution may change with replaceTrack)
+      if (video.readyState >= 2) {
+        checkResolution();
+      }
+      video.onloadedmetadata = checkResolution;
+      video.onresize = checkResolution;
     }
     
     // Add fullscreen button if not exists
@@ -1247,9 +1332,40 @@ socket.on('active-screen-shares', (userIds) => {
         video.style.cursor = 'pointer';
         video.title = 'Двойной клик для увеличения';
         video.ondblclick = () => openScreenModal(userId);
+        // Refresh video stream by re-setting srcObject
+        const currentStream = video.srcObject;
+        if (currentStream) {
+          video.srcObject = null;
+          setTimeout(() => {
+            video.srcObject = currentStream;
+            video.play().catch(e => console.log('[SCREEN] Refresh play error:', e));
+          }, 100);
+        }
       }
     }
+    
+    // Request fresh video stream from server for this user
+    console.log(`[SCREEN] Requesting fresh stream from user: ${userId}`);
+    socket.emit('request-screen-stream', userId);
   });
+});
+
+// Handle request to refresh screen offer (when new user joins and needs stream)
+socket.on('refresh-screen-offer', async ({ requesterId, targetId }) => {
+  console.log(`[SCREEN] Received refresh request from ${requesterId}, target: ${targetId}`);
+  // Only respond if we are the target and we're screen sharing
+  if (targetId === socket.id && isScreenSharing) {
+    console.log(`[SCREEN] Re-sending screen stream to ${requesterId}`);
+    // Re-create peer connection or re-offer to this specific user
+    const pc = peers.get(requesterId);
+    if (pc) {
+      // Create new offer to trigger renegotiation
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit('offer', requesterId, offer);
+      console.log(`[SCREEN] Re-sent offer to ${requesterId}`);
+    }
+  }
 });
 
 // ========== CONTROLS ==========
@@ -1361,10 +1477,12 @@ async function toggleScreen() {
     try {
       console.log('[SCREEN] Starting screen share...');
       
-      // Request screen share with constraints
+      // Request screen share with constraints - allow maximum resolution
       const constraints = {
         video: {
-          cursor: 'always'
+          cursor: 'always',
+          width: { ideal: 3840, max: 3840 }, // Up to 4K
+          height: { ideal: 2160, max: 2160 }
         },
         audio: false // Disable audio to reduce bandwidth
       };
