@@ -109,7 +109,7 @@ io.on('connection', (socket) => {
       // Only create if room exists in persistent store OR roomName is provided (explicit creation)
       if (storedRoom || roomName) {
         const displayName = storedRoom ? storedRoom.name : (roomName || roomId);
-        rooms.set(roomId, { name: displayName, users: new Set() });
+        rooms.set(roomId, { name: displayName, users: new Set(), screenSharingUsers: new Set() });
       } else {
         // Room doesn't exist anywhere and no name provided - reject join
         socket.emit('room-error', { message: 'Комната не найдена' });
@@ -121,6 +121,10 @@ io.on('connection', (socket) => {
     }
     
     const room = rooms.get(roomId);
+    // Ensure screenSharingUsers Set exists
+    if (!room.screenSharingUsers) {
+      room.screenSharingUsers = new Set();
+    }
     room.users.add({ id: socket.id, name: userName, avatar: userAvatar });
     
     // Store room metadata if this is a new room with a proper name
@@ -148,6 +152,14 @@ io.on('connection', (socket) => {
     const finalRoomName = storedRoom ? storedRoom.name : room.name;
     socket.emit('room-info', { id: roomId, name: finalRoomName, avatar: storedRoom?.avatar });
     socket.emit('users-in-room', users);
+    
+    // Send list of users who are currently screen sharing
+    const screenSharingUsers = Array.from(room.screenSharingUsers || []);
+    if (screenSharingUsers.length > 0) {
+      console.log(`[SCREEN] Sending ${screenSharingUsers.length} active screen shares to new user`);
+      socket.emit('active-screen-shares', screenSharingUsers);
+    }
+    
     socket.to(roomId).emit('user-joined', { id: socket.id, name: userName, avatar: userAvatar });
 
     console.log(`${userName} joined room ${roomId} (${finalRoomName})`);
@@ -224,10 +236,27 @@ io.on('connection', (socket) => {
   });
 
   socket.on('screen-share-started', () => {
+    // Track this user as screen sharing
+    if (socket.roomId && rooms.has(socket.roomId)) {
+      const room = rooms.get(socket.roomId);
+      if (!room.screenSharingUsers) {
+        room.screenSharingUsers = new Set();
+      }
+      room.screenSharingUsers.add(socket.id);
+      console.log(`[SCREEN] User ${socket.userName} started screen share in room ${socket.roomId}`);
+    }
     socket.to(socket.roomId).emit('screen-share-started', socket.id);
   });
 
   socket.on('screen-share-stopped', () => {
+    // Remove user from screen sharing tracking
+    if (socket.roomId && rooms.has(socket.roomId)) {
+      const room = rooms.get(socket.roomId);
+      if (room.screenSharingUsers) {
+        room.screenSharingUsers.delete(socket.id);
+      }
+      console.log(`[SCREEN] User ${socket.userName} stopped screen share in room ${socket.roomId}`);
+    }
     socket.to(socket.roomId).emit('screen-share-stopped', socket.id);
   });
 
@@ -311,6 +340,10 @@ io.on('connection', (socket) => {
       if (userToRemove) {
         room.users.delete(userToRemove);
         console.log(`User ${socket.userName} removed from room ${socket.roomId} on disconnect`);
+      }
+      // Remove from screen sharing tracking
+      if (room.screenSharingUsers) {
+        room.screenSharingUsers.delete(socket.id);
       }
       if (room.users.size === 0) {
         rooms.delete(socket.roomId);

@@ -1242,6 +1242,40 @@ socket.on('screen-share-stopped', (userId) => {
   }
 });
 
+// Handle active screen shares when joining room (users already sharing)
+socket.on('active-screen-shares', (userIds) => {
+  console.log('[SCREEN] Received active screen shares on join:', userIds);
+  
+  userIds.forEach(userId => {
+    // Track this user as screen sharing
+    screenShareUsers.add(userId);
+    addLogEntry('Демонстрация', 'Пользователь уже демонстрирует экран');
+    
+    // Check if video container already exists and add fullscreen button
+    const container = document.getElementById(`video-${userId}`);
+    if (container && !container.querySelector('.fullscreen-btn')) {
+      // Add screen-share class
+      container.classList.add('screen-share');
+      
+      // Add fullscreen button
+      const fullscreenBtn = document.createElement('button');
+      fullscreenBtn.className = 'fullscreen-btn';
+      fullscreenBtn.innerHTML = '🔍';
+      fullscreenBtn.title = 'Увеличить демонстрацию экрана';
+      fullscreenBtn.onclick = () => openScreenModal(userId);
+      container.appendChild(fullscreenBtn);
+      
+      // Add double-click handler to video
+      const video = container.querySelector('video');
+      if (video) {
+        video.style.cursor = 'pointer';
+        video.title = 'Двойной клик для увеличения';
+        video.ondblclick = () => openScreenModal(userId);
+      }
+    }
+  });
+});
+
 // ========== CONTROLS ==========
 
 function toggleMic() {
@@ -1297,61 +1331,112 @@ function toggleCam() {
 }
 
 async function toggleScreen() {
+  console.log('[SCREEN] Toggle called, isScreenSharing:', isScreenSharing);
+  
   if (isScreenSharing) {
+    // Stop screen sharing
     sounds.screenOff();
     
     if (screenStream) {
-      screenStream.getTracks().forEach(t => t.stop());
+      // Remove onended handler before stopping to prevent double toggle
+      screenStream.getVideoTracks().forEach(track => {
+        track.onended = null;
+        track.stop();
+      });
+      screenStream.getAudioTracks().forEach(track => track.stop());
+      screenStream = null;
     }
     
-    const videoTrack = localStream.getVideoTracks()[0];
-    peers.forEach(pc => {
-      const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-      if (sender && videoTrack) {
-        sender.replaceTrack(videoTrack);
-      }
-    });
+    // Replace with camera track
+    const videoTrack = localStream ? localStream.getVideoTracks()[0] : null;
+    if (videoTrack) {
+      peers.forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender && videoTrack) {
+          sender.replaceTrack(videoTrack).catch(err => {
+            console.error('[SCREEN] Error replacing track:', err);
+          });
+        }
+      });
+    }
     
+    // Remove screen share preview and restore camera preview
     const localContainer = document.getElementById('video-local');
     if (localContainer) {
       localContainer.remove();
     }
-    addVideoStream('local', localStream, currentUser.username, true, false);
+    if (localStream) {
+      addVideoStream('local', localStream, currentUser.username, true, false);
+    }
     
     isScreenSharing = false;
     socket.emit('screen-share-stopped');
     
     const btn = document.getElementById('screenBtn');
-    btn.classList.remove('active');
-    btn.querySelector('.label').textContent = 'Экран';
+    if (btn) {
+      btn.classList.remove('active');
+      const label = btn.querySelector('.label');
+      if (label) label.textContent = 'Экран';
+    }
+    
+    console.log('[SCREEN] Screen sharing stopped');
   } else {
+    // Start screen sharing
     try {
-      screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      console.log('[SCREEN] Starting screen share...');
+      
+      // Request screen share with constraints
+      const constraints = {
+        video: {
+          cursor: 'always'
+        },
+        audio: false // Disable audio to reduce bandwidth
+      };
+      
+      screenStream = await navigator.mediaDevices.getDisplayMedia(constraints);
       sounds.screenOn();
       
       const screenTrack = screenStream.getVideoTracks()[0];
-      screenTrack.onended = () => toggleScreen();
+      if (!screenTrack) {
+        throw new Error('No video track in screen share');
+      }
       
+      // Handle when user stops sharing via browser UI
+      screenTrack.onended = () => {
+        console.log('[SCREEN] Track ended via browser');
+        if (isScreenSharing) {
+          toggleScreen();
+        }
+      };
+      
+      // Replace camera track with screen track in all peer connections
       peers.forEach(pc => {
         const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
         if (sender) {
-          sender.replaceTrack(screenTrack);
+          sender.replaceTrack(screenTrack).catch(err => {
+            console.error('[SCREEN] Error replacing track:', err);
+          });
         }
       });
       
+      // Update local preview - remove camera, add minimized screen preview
       const localContainer = document.getElementById('video-local');
       if (localContainer) {
         localContainer.remove();
       }
+      
       // Add minimized local screen share preview (to reduce CPU load)
-      // Local user doesn't need to see their own screen in full size
       addVideoStream('local', screenStream, currentUser.username, true, true);
+      
       // Minimize the local preview after adding
       setTimeout(() => {
         const container = document.getElementById('video-local');
         if (container) {
           container.style.cssText = 'width: 120px; height: 90px; position: absolute; bottom: 80px; right: 20px; z-index: 100; opacity: 0.7;';
-          container.querySelector('video').style.cssText = 'width: 100%; height: 100%; object-fit: contain;';
+          const video = container.querySelector('video');
+          if (video) {
+            video.style.cssText = 'width: 100%; height: 100%; object-fit: contain;';
+          }
           // Hide label to save space
           const label = container.querySelector('.video-label');
           if (label) label.style.display = 'none';
@@ -1362,15 +1447,23 @@ async function toggleScreen() {
       socket.emit('screen-share-started');
       
       const btn = document.getElementById('screenBtn');
-      btn.classList.add('active');
-      btn.querySelector('.label').textContent = 'Экран вкл';
+      if (btn) {
+        btn.classList.add('active');
+        const label = btn.querySelector('.label');
+        if (label) label.textContent = 'Экран вкл';
+      }
+      
+      console.log('[SCREEN] Screen sharing started');
     } catch (err) {
-      console.error('Screen share error:', err);
+      console.error('[SCREEN] Error starting screen share:', err);
+      alert('Ошибка при запуске демонстрации: ' + err.message);
     }
   }
 }
 
 // ========== FULLSCREEN SCREEN SHARE ==========
+let currentScreenResolution = '1080p'; // Default resolution
+
 function openScreenModal(videoId) {
   // Find the screen share video element by id
   const container = document.getElementById(`video-${videoId}`);
@@ -1403,6 +1496,13 @@ function openScreenModal(videoId) {
     flex-direction: column;
   `;
   
+  // Resolution options
+  const resolutions = {
+    '720p': { width: 1280, height: 720, label: 'HD 720p' },
+    '1080p': { width: 1920, height: 1080, label: 'Full HD 1080p' },
+    '1440p': { width: 2560, height: 1440, label: '2K 1440p' }
+  };
+  
   const header = document.createElement('div');
   header.style.cssText = `
     display: flex;
@@ -1413,7 +1513,22 @@ function openScreenModal(videoId) {
     border-bottom: 1px solid #202225;
   `;
   header.innerHTML = `
-    <span style="color: #fff; font-weight: 600;">🖥️ Демонстрация экрана — ${userName}</span>
+    <div style="display: flex; align-items: center; gap: 15px;">
+      <span style="color: #fff; font-weight: 600;">🖥️ Демонстрация — ${userName}</span>
+      <select id="resolutionSelector" onchange="changeScreenResolution(this.value)" style="
+        background: #40444b;
+        color: #fff;
+        border: 1px solid #202225;
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-size: 13px;
+        cursor: pointer;
+      ">
+        <option value="720p" ${currentScreenResolution === '720p' ? 'selected' : ''}>📺 HD 720p (экономично)</option>
+        <option value="1080p" ${currentScreenResolution === '1080p' ? 'selected' : ''}>📺 Full HD 1080p</option>
+        <option value="1440p" ${currentScreenResolution === '1440p' ? 'selected' : ''}>📺 2K 1440p (макс)</option>
+      </select>
+    </div>
     <button onclick="closeScreenModal()" style="
       background: #ed4245;
       color: #fff;
@@ -1426,19 +1541,27 @@ function openScreenModal(videoId) {
   `;
   
   const videoContainer = document.createElement('div');
+  videoContainer.id = 'screenShareVideoContainer';
   videoContainer.style.cssText = `
     flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 20px;
+    overflow: hidden;
   `;
   
   const clonedVideo = document.createElement('video');
+  clonedVideo.id = 'screenShareClonedVideo';
   clonedVideo.srcObject = video.srcObject;
   clonedVideo.autoplay = true;
   clonedVideo.playsInline = true;
+  
+  // Apply resolution constraint
+  const res = resolutions[currentScreenResolution];
   clonedVideo.style.cssText = `
+    max-width: ${res.width}px;
+    max-height: ${res.height}px;
     width: 100%;
     height: 100%;
     object-fit: contain;
@@ -1464,6 +1587,25 @@ function openScreenModal(videoId) {
   modal.appendChild(header);
   modal.appendChild(videoContainer);
   document.body.appendChild(modal);
+}
+
+function changeScreenResolution(resolution) {
+  currentScreenResolution = resolution;
+  const resolutions = {
+    '720p': { width: 1280, height: 720 },
+    '1080p': { width: 1920, height: 1080 },
+    '1440p': { width: 2560, height: 1440 }
+  };
+  
+  const video = document.getElementById('screenShareClonedVideo');
+  const container = document.getElementById('screenShareVideoContainer');
+  
+  if (video && container) {
+    const res = resolutions[resolution];
+    video.style.maxWidth = res.width + 'px';
+    video.style.maxHeight = res.height + 'px';
+    console.log('[SCREEN] Resolution changed to:', resolution);
+  }
 }
 
 function closeScreenModal() {
