@@ -279,13 +279,77 @@
       min-height: 0;
     }
     
-    /* Room List Sidebar - Discord Style */
-    .lobby-content {
-      display: flex;
+    .lobby-center {
       flex: 1;
-      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-primary);
+      padding: 32px;
+      overflow-y: auto;
       min-height: 0;
     }
+    
+    .users-sidebar {
+      width: 240px;
+      background: var(--bg-secondary);
+      border-left: 1px solid var(--bg-tertiary);
+      display: flex;
+      flex-direction: column;
+    }
+    .users-header {
+      padding: 16px;
+      border-bottom: 1px solid var(--bg-tertiary);
+    }
+    .users-header h3 {
+      font-size: 12px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .users-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+    .registered-user-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      border-radius: 4px;
+      margin-bottom: 4px;
+    }
+    .registered-user-item:hover {
+      background: rgba(79,84,92,0.4);
+    }
+    .registered-user-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: var(--text-primary);
+    }
+    .registered-user-name {
+      font-size: 13px;
+      color: var(--text-primary);
+      flex: 1;
+    }
+    .registered-user-status {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #72767d;
+    }
+    .registered-user-status.online {
+      background: #3ba55d;
+    }
+    
+    /* Room List Sidebar - Discord Style */
     .rooms-sidebar {
       width: 240px;
       background: var(--bg-secondary);
@@ -699,6 +763,20 @@
       background: #3ba55d;
       margin-left: auto;
     }
+    .user-icons {
+      display: flex;
+      gap: 6px;
+      margin-left: auto;
+      align-items: center;
+    }
+    .user-icon {
+      font-size: 14px;
+      opacity: 0.7;
+    }
+    .user-icon.muted {
+      opacity: 1;
+      color: #ed4245;
+    }
     
     /* Center - Video Grid */
     .center-area {
@@ -740,6 +818,8 @@
       box-shadow: 0 0 10px rgba(59, 165, 93, 0.5);
       min-width: 640px;
       min-height: 360px;
+      max-width: none;
+      max-height: none;
       display: block !important;
       visibility: visible !important;
       opacity: 1 !important;
@@ -908,6 +988,22 @@
       font-size: 14px;
       color: #dcddde;
       line-height: 1.4;
+    }
+    .system-messages {
+      max-height: 120px;
+      overflow-y: auto;
+      padding: 8px 16px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--bg-tertiary);
+    }
+    .system-message {
+      font-size: 11px;
+      color: var(--text-secondary);
+      padding: 2px 0;
+      border-bottom: 1px dotted var(--bg-tertiary);
+    }
+    .system-message:last-child {
+      border-bottom: none;
     }
     .chat-input-area {
       padding: 16px;
@@ -1470,18 +1566,28 @@
           </div>
         </div>
         
-        <div class="lobby-main" style="position: relative;">
-          <div class="welcome-section" style="position: absolute; top: 16px; right: 16px; width: 320px; max-width: 320px; margin: 0; z-index: 10;">
-            <h3 style="font-size: 16px;">� Добро пожаловать!</h3>
-            <div class="welcome-tips" style="margin-top: 12px; padding: 12px;">
-              <h4 style="font-size: 12px;">💡 Как присоединиться:</h4>
-              <ul style="font-size: 11px;">
-                <li>Нажмите на комнату слева 🔴</li>
-                <li>Введите название в поиске 🔍</li>
-                <li>Перейдите по ссылке 📎</li>
-                <li>Создайте свою комнату ➕</li>
+        <div class="lobby-center">
+          <div class="welcome-section">
+            <h3>👋 Добро пожаловать в Keros VideoChat!</h3>
+            <p>🔥 <b>Комнаты с огоньком</b> — активные, там уже есть люди!<br>⚪ <b>Без огонька</b> — пока пустые, но вы можете быть первыми!</p>
+            <div class="welcome-tips">
+              <h4>💡 Как присоединиться:</h4>
+              <ul>
+                <li>Нажмите на любую комнату слева 🔴</li>
+                <li>Или введите название комнаты в поиске 🔍</li>
+                <li>Или перейдите по ссылке-приглашению 📎</li>
+                <li>Создайте свою комнату кнопкой ➕</li>
               </ul>
             </div>
+          </div>
+        </div>
+        
+        <div class="users-sidebar">
+          <div class="users-header">
+            <h3>👥 Пользователи</h3>
+          </div>
+          <div class="users-list" id="registeredUsersList">
+            <!-- Users will be added here -->
           </div>
         </div>
       </div>
@@ -1538,6 +1644,7 @@
           <div class="chat-header">
             <h3>💬 Чат</h3>
           </div>
+          <div class="system-messages" id="systemMessages"></div>
           <div class="chat-messages" id="chatMessages"></div>
           <div class="chat-input-area">
             <div class="chat-input">
@@ -1562,9 +1669,17 @@
         <span class="icon">🖥️</span>
         <span class="label">Экран</span>
       </button>
+      <button class="control-btn" id="soundBtn" onclick="toggleSound()">
+        <span class="icon" id="soundIcon">🔊</span>
+        <span class="label" id="soundLabel">Звук</span>
+      </button>
       <button class="control-btn disconnect" id="disconnectBtn" onclick="disconnectAndJoinAnother()">
         <span class="icon">🔌</span>
         <span class="label">Откл.</span>
+      </button>
+      <button class="control-btn" id="exitToLobbyBtn" onclick="disconnectAndShowLobby()" style="background: #ed4245; color: #fff;">
+        <span class="icon">📞</span>
+        <span class="label">В лобби</span>
       </button>
     </div>
   </div>

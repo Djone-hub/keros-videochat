@@ -31,6 +31,7 @@ let peers = new Map();
 let activeUsers = new Map();
 let isMicOn = true;
 let isCamOn = true;
+let isSoundOn = true;
 let isScreenSharing = false;
 let userAvatar = null;
 let pingInterval = null;
@@ -325,6 +326,9 @@ function showLobby() {
   
   // Load rooms from server
   loadServerRooms();
+  
+  // Load registered users
+  loadRegisteredUsers();
 }
 
 // Store server rooms
@@ -491,6 +495,53 @@ function loadRoomsList(filter = '') {
     : allRooms;
   
   renderRoomsList(rooms);
+}
+
+// Load and display registered users in lobby
+async function loadRegisteredUsers() {
+  try {
+    const response = await fetch('/api/users');
+    const users = await response.json();
+    
+    const list = document.getElementById('registeredUsersList');
+    if (!list) return;
+    
+    list.innerHTML = '';
+    
+    if (users.length === 0) {
+      list.innerHTML = '<p style="color: #72767d; padding: 16px; text-align: center; font-size: 12px;">Пока нет зарегистрированных пользователей</p>';
+      return;
+    }
+    
+    // Sort: online users first, then by name
+    users.sort((a, b) => {
+      if (a.isOnline && !b.isOnline) return -1;
+      if (!a.isOnline && b.isOnline) return 1;
+      return a.name.localeCompare(b.name);
+    });
+    
+    users.forEach(user => {
+      const item = document.createElement('div');
+      item.className = 'registered-user-item';
+      
+      const avatarHtml = user.avatar ? 
+        `<img src="${user.avatar}" alt="${user.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">` :
+        user.name.charAt(0).toUpperCase();
+      
+      const statusClass = user.isOnline ? 'online' : '';
+      const statusTitle = user.isOnline ? 'В сети' : 'Не в сети';
+      
+      item.innerHTML = `
+        <div class="registered-user-avatar">${avatarHtml}</div>
+        <span class="registered-user-name">${user.name}</span>
+        <div class="registered-user-status ${statusClass}" title="${statusTitle}"></div>
+      `;
+      
+      list.appendChild(item);
+    });
+  } catch (err) {
+    console.error('Error loading registered users:', err);
+  }
 }
 
 async function searchRooms(query) {
@@ -741,6 +792,15 @@ function showRoomUI() {
     loadUserSettings();
   }
   
+  // Load chat history
+  if (currentRoom) {
+    socket.emit('get-room-messages', currentRoom, (messages) => {
+      messages.forEach(msg => {
+        addChatMessage(msg.sender, msg.text, false, msg.time);
+      });
+    });
+  }
+  
   // Set room avatar in header
   const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
   const room = rooms.find(r => r.id === currentRoom);
@@ -768,6 +828,7 @@ function resetRoomStateAndUI() {
   currentRoom = null;
   isMicOn = true;
   isCamOn = true;
+  isSoundOn = true;
   isScreenSharing = false;
 
   // Clear UI
@@ -820,6 +881,19 @@ function disconnectAndJoinAnother() {
   
   // Show message to select another room
   alert('Вы отключены от комнаты. Выберите другую комнату из списка или создайте новую.');
+}
+
+function disconnectAndShowLobby() {
+  // Leave socket room
+  socket.emit('leave-room', currentRoom);
+  
+  resetRoomStateAndUI();
+  
+  // Show settings panel if open
+  document.getElementById('settingsPanel').classList.remove('active');
+  
+  // Back to lobby
+  showLobby();
 }
 
 function copyLink() {
@@ -1014,10 +1088,21 @@ function updateActiveUsers() {
       `<img src="${user.avatar}" alt="avatar">` :
       user.name.charAt(0).toUpperCase();
     
+    // Check if user has muted mic or sound
+    const isMicMuted = user.isMicMuted || false;
+    const isSoundMuted = user.isSoundMuted || false;
+    
+    const micIcon = isMicMuted ? '<span class="user-icon muted" title="Микрофон выключен">🎤❌</span>' : '';
+    const soundIcon = isSoundMuted ? '<span class="user-icon muted" title="Звук выключен">🔇</span>' : '';
+    
     item.innerHTML = `
       <div class="user-avatar" id="avatar-${id}">${avatarHtml}</div>
       <span class="user-name">${user.name}</span>
-      <div class="user-status" id="status-${id}"></div>
+      <div class="user-icons">
+        ${micIcon}
+        ${soundIcon}
+        <div class="user-status" id="status-${id}"></div>
+      </div>
     `;
     list.appendChild(item);
   });
@@ -1203,6 +1288,16 @@ socket.on('theme-changed', ({ theme }) => {
         document.documentElement.style.setProperty(key, value);
       });
     }
+  }
+});
+
+// Listen for user mute state changes
+socket.on('user-mute-state', ({ userId, isMicMuted, isSoundMuted }) => {
+  const user = activeUsers.get(userId);
+  if (user) {
+    user.isMicMuted = isMicMuted;
+    user.isSoundMuted = isSoundMuted;
+    updateActiveUsers(); // Refresh the user list to show icons
   }
 });
 
@@ -1505,6 +1600,11 @@ function toggleMic() {
         btn.classList.add('danger');
         btn.querySelector('.label').textContent = 'Мик выкл';
       }
+      
+      // Notify other users about mic state
+      if (currentRoom) {
+        socket.emit('user-mute-state', { roomId: currentRoom, isMicMuted: !isMicOn });
+      }
     }
   }
 }
@@ -1532,6 +1632,30 @@ function toggleCam() {
         btn.querySelector('.label').textContent = 'Камера выкл';
       }
     }
+  }
+}
+
+function toggleSound() {
+  isSoundOn = !isSoundOn;
+  
+  // Update button UI
+  const btn = document.getElementById('soundBtn');
+  const icon = document.getElementById('soundIcon');
+  const label = document.getElementById('soundLabel');
+  
+  if (isSoundOn) {
+    btn.classList.remove('danger');
+    icon.textContent = '🔊';
+    label.textContent = 'Звук';
+  } else {
+    btn.classList.add('danger');
+    icon.textContent = '🔇';
+    label.textContent = 'Звук выкл';
+  }
+  
+  // Notify other users about sound state
+  if (currentRoom) {
+    socket.emit('user-mute-state', { roomId: currentRoom, isMicMuted: !isMicOn, isSoundMuted: !isSoundOn });
   }
 }
 
@@ -1791,13 +1915,13 @@ function openScreenModal(videoId) {
   clonedVideo.autoplay = true;
   clonedVideo.playsInline = true;
   
-  // Apply resolution constraint
+  // Apply resolution constraint - use contain to preserve aspect ratio without cropping
   const res = resolutions[currentScreenResolution];
   clonedVideo.style.cssText = `
-    max-width: ${res.width}px;
-    max-height: ${res.height}px;
-    width: 100%;
-    height: 100%;
+    max-width: calc(100vw - 40px);
+    max-height: calc(100vh - 80px);
+    width: auto;
+    height: auto;
     object-fit: contain;
   `;
   
@@ -1852,6 +1976,12 @@ function closeScreenModal() {
 // ========== CHAT ==========
 
 function addChatMessage(sender, text, isSystem = false, time = null) {
+  // System messages go to system messages area
+  if (isSystem || sender === 'Система') {
+    addSystemMessage(text, time);
+    return;
+  }
+  
   const messages = document.getElementById('chatMessages');
   const msgDiv = document.createElement('div');
   msgDiv.className = 'chat-message';
@@ -1872,6 +2002,25 @@ function addChatMessage(sender, text, isSystem = false, time = null) {
   
   messages.appendChild(msgDiv);
   messages.scrollTop = messages.scrollHeight;
+}
+
+function addSystemMessage(text, time = null) {
+  const systemMessages = document.getElementById('systemMessages');
+  if (!systemMessages) return;
+  
+  const msgDiv = document.createElement('div');
+  msgDiv.className = 'system-message';
+  msgDiv.innerHTML = `
+    <span class="system-time">${time || new Date().toLocaleTimeString()}</span> — ${escapeHtml(text)}
+  `;
+  
+  systemMessages.appendChild(msgDiv);
+  systemMessages.scrollTop = systemMessages.scrollHeight;
+  
+  // Keep only last 20 system messages
+  while (systemMessages.children.length > 20) {
+    systemMessages.removeChild(systemMessages.firstChild);
+  }
 }
 
 function sendMessage() {
@@ -2007,6 +2156,11 @@ function addLogEntry(category, message) {
   // Keep only last 100 entries
   if (logs.length > 100) {
     logs.shift();
+  }
+  
+  // Show in room system messages if in a room
+  if (currentRoom) {
+    addSystemMessage(`[${category}] ${message}`, timestamp);
   }
   
   // Update log display if settings panel is open

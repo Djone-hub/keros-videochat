@@ -17,6 +17,7 @@ app.use(express.static(path.join(__dirname)));
 app.use(express.json());
 
 const rooms = new Map();
+const registeredUsers = new Map(); // Track all registered users with online status
 
 // File-based persistence for rooms
 const ROOMS_FILE = path.join(__dirname, 'rooms.json');
@@ -91,6 +92,17 @@ app.get('/api/rooms', (req, res) => {
   res.json(availableRooms);
 });
 
+// REST API endpoint for registered users with online status
+app.get('/api/users', (req, res) => {
+  const users = Array.from(registeredUsers.values()).map(u => ({
+    name: u.name,
+    avatar: u.avatar,
+    isOnline: u.isOnline,
+    lastSeen: u.lastSeen
+  }));
+  res.json(users);
+});
+
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
   console.log('Current rooms in store:', roomStore.size);
@@ -100,6 +112,15 @@ io.on('connection', (socket) => {
     socket.roomId = roomId;
     socket.userName = userName;
     socket.userAvatar = userAvatar;
+    
+    // Register/update user in global registry
+    registeredUsers.set(userName, {
+      name: userName,
+      avatar: userAvatar,
+      isOnline: true,
+      socketId: socket.id,
+      lastSeen: Date.now()
+    });
 
     // Check if room exists in persistent store
     let storedRoom = roomStore.get(roomId);
@@ -229,11 +250,35 @@ io.on('connection', (socket) => {
   });
 
   socket.on('chat-message', (message) => {
-    socket.to(socket.roomId).emit('chat-message', {
+    const messageData = {
       sender: socket.userName,
       text: message,
-      time: new Date().toLocaleTimeString()
-    });
+      time: new Date().toLocaleTimeString(),
+      timestamp: Date.now()
+    };
+    
+    // Save to room message history
+    if (socket.roomId && rooms.has(socket.roomId)) {
+      const room = rooms.get(socket.roomId);
+      if (!room.messages) room.messages = [];
+      room.messages.push(messageData);
+      // Keep only last 100 messages
+      if (room.messages.length > 100) {
+        room.messages.shift();
+      }
+    }
+    
+    socket.to(socket.roomId).emit('chat-message', messageData);
+  });
+  
+  // Handle request for room message history
+  socket.on('get-room-messages', (roomId, callback) => {
+    if (rooms.has(roomId)) {
+      const room = rooms.get(roomId);
+      callback(room.messages || []);
+    } else {
+      callback([]);
+    }
   });
 
   socket.on('screen-share-started', () => {
@@ -276,6 +321,16 @@ io.on('connection', (socket) => {
     console.log(`[THEME] User ${socket.userName} changed theme to ${theme} in room ${roomId}`);
     // Broadcast to all other users in the room
     socket.to(roomId).emit('theme-changed', { theme });
+  });
+
+  // Handle user mute state changes
+  socket.on('user-mute-state', ({ roomId, isMicMuted, isSoundMuted }) => {
+    // Broadcast to other users in room
+    socket.to(roomId).emit('user-mute-state', {
+      userId: socket.id,
+      isMicMuted: isMicMuted,
+      isSoundMuted: isSoundMuted
+    });
   });
 
   // Ping handler for latency measurement
@@ -351,6 +406,14 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    // Mark user as offline in registered users
+    if (socket.userName && registeredUsers.has(socket.userName)) {
+      const user = registeredUsers.get(socket.userName);
+      user.isOnline = false;
+      user.lastSeen = Date.now();
+      registeredUsers.set(socket.userName, user);
+    }
+    
     if (socket.roomId && rooms.has(socket.roomId)) {
       const room = rooms.get(socket.roomId);
       // Find and remove user from Set
