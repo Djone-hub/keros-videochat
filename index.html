@@ -6,11 +6,20 @@
   <title>Keros VideoChat</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎥</text></svg>">
   <style>
+    :root {
+      --bg-primary: #36393f;
+      --bg-secondary: #2f3136;
+      --bg-tertiary: #202225;
+      --text-primary: #fff;
+      --text-secondary: #b9bbbe;
+      --accent: #5865f2;
+    }
+    
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #36393f;
-      color: #fff;
+      background: var(--bg-primary);
+      color: var(--text-primary);
       min-height: 100vh;
       overflow: hidden;
     }
@@ -887,6 +896,254 @@
       flex-direction: column;
       min-height: 0;
     }
+    
+    /* Admin Panel Styles */
+    .admin-panel-content {
+      max-width: 900px;
+      width: 95%;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+    }
+    .admin-header {
+      background: linear-gradient(135deg, #5865f2 0%, #4752c4 100%);
+      border-radius: 8px 8px 0 0;
+      padding: 15px 20px;
+    }
+    .admin-header h3 {
+      color: #fff;
+      font-size: 18px;
+    }
+    .admin-close {
+      background: rgba(255,255,255,0.2);
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      transition: all 0.2s;
+    }
+    .admin-close:hover {
+      background: rgba(255,255,255,0.3);
+      transform: rotate(90deg);
+    }
+    .admin-body {
+      padding: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .admin-tabs {
+      display: flex;
+      background: #2f3136;
+      border-bottom: 1px solid #202225;
+    }
+    .admin-tab {
+      flex: 1;
+      padding: 12px 8px;
+      background: none;
+      border: none;
+      color: #b9bbbe;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-bottom: 2px solid transparent;
+    }
+    .admin-tab:hover {
+      color: #fff;
+      background: rgba(255,255,255,0.05);
+    }
+    .admin-tab.active {
+      color: #fff;
+      border-bottom-color: #5865f2;
+      background: rgba(88,101,242,0.1);
+    }
+    .admin-tab-content {
+      display: none;
+      padding: 20px;
+      overflow-y: auto;
+      max-height: 60vh;
+    }
+    .admin-tab-content.active {
+      display: block;
+    }
+    .admin-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    .admin-stat-card {
+      background: linear-gradient(135deg, #40444b 0%, #36393f 100%);
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+      border: 1px solid #202225;
+    }
+    .admin-stat-card .number {
+      font-size: 32px;
+      font-weight: bold;
+      color: #5865f2;
+    }
+    .admin-stat-card .label {
+      font-size: 12px;
+      color: #b9bbbe;
+      margin-top: 5px;
+    }
+    .admin-actions-bar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding-top: 15px;
+      border-top: 1px solid #202225;
+    }
+    .admin-btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    .admin-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .admin-btn.primary { background: #5865f2; color: #fff; }
+    .admin-btn.warning { background: #faa81a; color: #000; }
+    .admin-btn.danger { background: #ed4245; color: #fff; }
+    .admin-btn.success { background: #3ba55d; color: #fff; }
+    .admin-btn.small { padding: 6px 12px; font-size: 12px; }
+    .admin-room-controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    .admin-room-controls input {
+      flex: 1;
+      padding: 10px 12px;
+      background: #40444b;
+      border: 1px solid #202225;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 14px;
+    }
+    .admin-room-list {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .admin-room-item {
+      background: #40444b;
+      padding: 12px 15px;
+      margin-bottom: 8px;
+      border-radius: 6px;
+      border-left: 3px solid #5865f2;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .admin-room-item.ghost {
+      border-left-color: #ed4245;
+      background: #3a1c1c;
+    }
+    .admin-room-item.empty {
+      border-left-color: #72767d;
+      opacity: 0.7;
+    }
+    .admin-room-info {
+      flex: 1;
+    }
+    .admin-room-name {
+      color: #fff;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .admin-room-meta {
+      color: #b9bbbe;
+      font-size: 12px;
+      margin-top: 3px;
+    }
+    .admin-settings-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px;
+    }
+    .admin-setting-card {
+      background: #40444b;
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px solid #202225;
+    }
+    .admin-setting-card h4 {
+      color: #fff;
+      margin-bottom: 12px;
+      font-size: 14px;
+    }
+    .admin-setting-card label {
+      display: block;
+      color: #b9bbbe;
+      font-size: 12px;
+      margin-bottom: 5px;
+    }
+    .admin-setting-card input[type="range"] {
+      width: 100%;
+      margin-bottom: 12px;
+    }
+    .theme-selector {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .theme-btn {
+      padding: 8px 12px;
+      border: 2px solid transparent;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+    .theme-btn:hover { transform: scale(1.05); }
+    .theme-btn.active { border-color: #fff; }
+    .theme-btn.dark { background: #36393f; color: #fff; }
+    .theme-btn.blue { background: #5865f2; color: #fff; }
+    .theme-btn.red { background: #ed4245; color: #fff; }
+    .theme-btn.green { background: #3ba55d; color: #fff; }
+    .theme-btn.purple { background: #9b59b6; color: #fff; }
+    .admin-vip-info {
+      background: linear-gradient(135deg, #ffd700 0%, #faa81a 100%);
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      color: #000;
+    }
+    .admin-vip-info h4 {
+      margin-bottom: 5px;
+    }
+    .admin-vip-list {
+      margin-bottom: 15px;
+    }
+    .vip-channel-item {
+      background: #40444b;
+      padding: 12px 15px;
+      margin-bottom: 8px;
+      border-radius: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-left: 3px solid #ffd700;
+    }
+    @media (max-width: 768px) {
+      .admin-settings-grid {
+        grid-template-columns: 1fr;
+      }
+      .admin-stats-grid {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1094,28 +1351,89 @@
   
   <!-- Admin Panel Modal -->
   <div id="adminPanelModal" class="modal">
-    <div class="modal-content" style="max-width: 800px; width: 90%;">
-      <div class="modal-header">
-        <h3>⚙️ Панель администратора</h3>
-        <button class="modal-close" onclick="hideAdminPanel()">&times;</button>
+    <div class="modal-content admin-panel-content">
+      <div class="modal-header admin-header">
+        <h3>⚙️ Панель управления</h3>
+        <button class="modal-close admin-close" onclick="hideAdminPanel()">✕</button>
       </div>
-      <div style="padding: 20px;">
-        <div style="margin-bottom: 20px;">
-          <h4 style="color: #fff; margin-bottom: 10px;">📊 Статистика</h4>
-          <div id="adminStats" style="color: #b9bbbe; font-size: 14px;">
-            Загрузка...
+      <div class="admin-body">
+        <!-- Tabs -->
+        <div class="admin-tabs">
+          <button class="admin-tab active" onclick="switchAdminTab('stats')" data-tab="stats">📊 Статистика</button>
+          <button class="admin-tab" onclick="switchAdminTab('rooms')" data-tab="rooms">🏠 Комнаты</button>
+          <button class="admin-tab" onclick="switchAdminTab('settings')" data-tab="settings">🎨 Настройки</button>
+          <button class="admin-tab" onclick="switchAdminTab('vip')" data-tab="vip">👑 VIP</button>
+        </div>
+        
+        <!-- Stats Tab -->
+        <div id="adminTab-stats" class="admin-tab-content active">
+          <div id="adminStats" class="admin-stats-grid">Загрузка...</div>
+          <div class="admin-actions-bar">
+            <button onclick="forceRefreshRooms()" class="admin-btn primary">🔄 Обновить</button>
+            <button onclick="clearGhostRooms()" class="admin-btn warning">👻 Очистить призраки</button>
+            <button onclick="deleteAllEmptyRooms()" class="admin-btn danger">🗑️ Удалить пустые</button>
           </div>
         </div>
-        <div>
-          <h4 style="color: #fff; margin-bottom: 10px;">🏠 Все комнаты</h4>
-          <div id="adminRoomList" style="max-height: 400px; overflow-y: auto;">
-            Загрузка...
+        
+        <!-- Rooms Tab -->
+        <div id="adminTab-rooms" class="admin-tab-content">
+          <div class="admin-room-controls">
+            <input type="text" id="adminRoomSearch" placeholder="🔍 Поиск комнаты..." oninput="filterAdminRooms(this.value)">
+            <button onclick="showCreateRoomFromAdmin()" class="admin-btn success">➕ Создать комнату</button>
+          </div>
+          <div id="adminRoomList" class="admin-room-list">Загрузка...</div>
+        </div>
+        
+        <!-- Settings Tab -->
+        <div id="adminTab-settings" class="admin-tab-content">
+          <div class="admin-settings-grid">
+            <div class="admin-setting-card">
+              <h4>🎨 Тема сайта</h4>
+              <div class="theme-selector">
+                <button onclick="setTheme('dark')" class="theme-btn dark active">🌙 Тёмная</button>
+                <button onclick="setTheme('blue')" class="theme-btn blue">💙 Синяя</button>
+                <button onclick="setTheme('red')" class="theme-btn red">❤️ Красная</button>
+                <button onclick="setTheme('green')" class="theme-btn green">� Зелёная</button>
+                <button onclick="setTheme('purple')" class="theme-btn purple">💜 Фиолетовая</button>
+              </div>
+            </div>
+            <div class="admin-setting-card">
+              <h4>🔊 Громкость</h4>
+              <label>Микрофон: <span id="micVolVal">100</span>%</label>
+              <input type="range" id="micVolume" min="0" max="200" value="100" oninput="updateVolume('mic', this.value)">
+              <label>Видео: <span id="vidVolVal">100</span>%</label>
+              <input type="range" id="vidVolume" min="0" max="200" value="100" oninput="updateVolume('vid', this.value)">
+            </div>
+            <div class="admin-setting-card">
+              <h4>👤 Аватар</h4>
+              <div class="avatar-preview" id="adminAvatarPreview">Я</div>
+              <input type="file" id="adminAvatarUpload" accept="image/*" onchange="updateAdminAvatar(this)">
+              <button onclick="document.getElementById('adminAvatarUpload').click()" class="admin-btn">� Сменить аватар</button>
+            </div>
+            <div class="admin-setting-card">
+              <h4>📹 Камера</h4>
+              <select id="cameraQuality" onchange="setCameraQuality(this.value)">
+                <option value="low">📱 Низкое (экономично)</option>
+                <option value="medium" selected>📷 Среднее</option>
+                <option value="high">🎥 Высокое</option>
+              </select>
+            </div>
           </div>
         </div>
-        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #202225;">
-          <button onclick="forceRefreshRooms()" style="padding: 8px 16px; background: #5865f2; color: #fff; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">🔄 Обновить список</button>
-          <button onclick="clearGhostRooms()" style="padding: 8px 16px; background: #faa81a; color: #000; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">👻 Очистить призраки</button>
-          <button onclick="deleteAllEmptyRooms()" style="padding: 8px 16px; background: #ed4245; color: #fff; border: none; border-radius: 4px; cursor: pointer;">🗑️ Удалить пустые</button>
+        
+        <!-- VIP Tab -->
+        <div id="adminTab-vip" class="admin-tab-content">
+          <div class="admin-vip-info">
+            <h4>👑 VIP Каналы</h4>
+            <p>Создавайте приватные каналы с ограниченным доступом</p>
+          </div>
+          <div id="vipChannelsList" class="admin-vip-list">
+            <div class="vip-channel-item">
+              <span>🔒 VIP Lounge</span>
+              <button class="admin-btn small">Настроить</button>
+            </div>
+          </div>
+          <button onclick="createVIPChannel()" class="admin-btn success">➕ Создать VIP канал</button>
         </div>
       </div>
     </div>
@@ -1123,5 +1441,6 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="app.js"></script>
+  <script src="admin.js"></script>
 </body>
 </html>
