@@ -501,31 +501,52 @@ io.on('connection', (socket) => {
   
   // Create a new channel in the room
   socket.on('create-channel', (channelName, callback) => {
-    if (!socket.roomId || !rooms.has(socket.roomId)) {
-      if (callback) callback({ success: false, error: 'Not in a room' });
-      return;
+    console.log(`[CHANNEL] create-channel called by ${socket.userName}, roomId: ${socket.roomId}, name: ${channelName}`);
+    
+    try {
+      if (!socket.roomId) {
+        console.log(`[CHANNEL] Error: socket.roomId is undefined`);
+        if (callback) callback({ success: false, error: 'Not in a room' });
+        return;
+      }
+      
+      if (!rooms.has(socket.roomId)) {
+        console.log(`[CHANNEL] Error: room ${socket.roomId} not found`);
+        if (callback) callback({ success: false, error: 'Room not found' });
+        return;
+      }
+      
+      const room = rooms.get(socket.roomId);
+      
+      // Ensure channels exists
+      if (!room.channels) {
+        console.log(`[CHANNEL] Creating channels Map for room ${socket.roomId}`);
+        room.channels = new Map([['general', { name: 'Общий', users: new Set() }]]);
+      }
+      
+      const channelId = 'ch_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+      
+      room.channels.set(channelId, {
+        name: channelName,
+        users: new Set(),
+        createdBy: socket.userName,
+        createdAt: Date.now()
+      });
+      
+      console.log(`[CHANNEL] ${socket.userName} created channel "${channelName}" (${channelId}) in room ${socket.roomId}`);
+      
+      // Notify all users in room about new channel
+      io.to(socket.roomId).emit('channel-created', {
+        channelId,
+        channelName,
+        createdBy: socket.userName
+      });
+      
+      if (callback) callback({ success: true, channelId, channelName });
+    } catch (err) {
+      console.error(`[CHANNEL] Error creating channel:`, err);
+      if (callback) callback({ success: false, error: 'Server error: ' + err.message });
     }
-    
-    const room = rooms.get(socket.roomId);
-    const channelId = 'ch_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-    
-    room.channels.set(channelId, {
-      name: channelName,
-      users: new Set(),
-      createdBy: socket.userName,
-      createdAt: Date.now()
-    });
-    
-    console.log(`[CHANNEL] ${socket.userName} created channel "${channelName}" (${channelId}) in room ${socket.roomId}`);
-    
-    // Notify all users in room about new channel
-    io.to(socket.roomId).emit('channel-created', {
-      channelId,
-      channelName,
-      createdBy: socket.userName
-    });
-    
-    if (callback) callback({ success: true, channelId, channelName });
   });
   
   // Join a channel
@@ -551,12 +572,24 @@ io.on('connection', (socket) => {
     // Join new channel
     const channel = room.channels.get(channelId);
     channel.users.add({ id: socket.id, name: socket.userName });
+    
+    // Store old channel for notification
+    const oldChannelId = socket.currentChannel;
     socket.currentChannel = channelId;
     socket.join(`${socket.roomId}_${channelId}`); // Join channel-specific room
     
     console.log(`[CHANNEL] ${socket.userName} joined channel "${channel.name}" (${channelId})`);
     
-    // Notify channel users
+    // Notify old channel users that user left
+    if (oldChannelId && oldChannelId !== channelId) {
+      io.to(`${socket.roomId}_${oldChannelId}`).emit('user-left-channel', {
+        userId: socket.id,
+        userName: socket.userName,
+        channelId: oldChannelId
+      });
+    }
+    
+    // Notify new channel users that user joined
     io.to(`${socket.roomId}_${channelId}`).emit('user-joined-channel', {
       userId: socket.id,
       userName: socket.userName,
@@ -564,7 +597,13 @@ io.on('connection', (socket) => {
       channelName: channel.name
     });
     
-    if (callback) callback({ success: true, channelName: channel.name });
+    // Send list of users in this channel
+    const channelUsers = Array.from(channel.users).map(u => ({
+      userId: u.id,
+      userName: u.name
+    }));
+    
+    if (callback) callback({ success: true, channelName: channel.name, channelUsers });
   });
   
   // Leave a channel
@@ -595,19 +634,47 @@ io.on('connection', (socket) => {
   
   // Get list of channels in current room
   socket.on('get-channels', (callback) => {
-    if (!socket.roomId || !rooms.has(socket.roomId)) {
-      if (callback) callback({ success: false, channels: [] });
+    console.log(`[CHANNELS] get-channels called by ${socket.userName}, roomId: ${socket.roomId}, socket.rooms:`, socket.rooms ? Array.from(socket.rooms) : 'undefined');
+    
+    // Try to recover roomId from socket.rooms if socket.roomId is not set
+    if (!socket.roomId && socket.rooms) {
+      for (const room of socket.rooms) {
+        if (room !== socket.id) { // Skip default room (socket.id)
+          socket.roomId = room;
+          console.log(`[CHANNELS] Recovered roomId from socket.rooms: ${room}`);
+          break;
+        }
+      }
+    }
+    
+    if (!socket.roomId) {
+      console.log(`[CHANNELS] Error: socket.roomId is undefined`);
+      if (callback) callback({ success: false, error: 'Not in a room', channels: [] });
+      return;
+    }
+    
+    if (!rooms.has(socket.roomId)) {
+      console.log(`[CHANNELS] Error: room ${socket.roomId} not found`);
+      if (callback) callback({ success: false, error: 'Room not found', channels: [] });
       return;
     }
     
     const room = rooms.get(socket.roomId);
+    
+    // Ensure channels exists
+    if (!room.channels) {
+      console.log(`[CHANNELS] Creating channels Map for room ${socket.roomId}`);
+      room.channels = new Map([['general', { name: 'Общий', users: new Set() }]]);
+    }
+    
     const channels = Array.from(room.channels.entries()).map(([id, ch]) => ({
       channelId: id,
       channelName: ch.name,
-      userCount: ch.users.size,
+      userCount: ch.users ? ch.users.size : 0,
       isGeneral: id === 'general'
     }));
     
+    console.log(`[CHANNELS] Returning ${channels.length} channels for room ${socket.roomId}`);
     if (callback) callback({ success: true, channels, currentChannel: socket.currentChannel || 'general' });
   });
   

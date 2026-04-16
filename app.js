@@ -1506,7 +1506,22 @@ socket.on('channel-created', (data) => {
 socket.on('user-joined-channel', (data) => {
   if (data.userId !== socket.id) {
     addSystemMessage(`${data.userName} присоединился к каналу "${data.channelName}"`);
+    
+    // Show video if user is in same channel
+    if (data.channelId === currentChannel) {
+      showUserVideo(data.userId, true);
+    }
   }
+  updateChannelParticipants();
+});
+
+// User left channel
+socket.on('user-left-channel', (data) => {
+  if (data.userId !== socket.id) {
+    // Hide video when user leaves this channel
+    showUserVideo(data.userId, false);
+  }
+  updateChannelParticipants();
 });
 
 // Handle remote user screen share started
@@ -2206,6 +2221,7 @@ function switchChannel(channelId) {
   socket.emit('join-channel', channelId, (response) => {
     console.log('[CHANNEL] join-channel response:', response);
     if (response && response.success) {
+      const oldChannel = currentChannel;
       currentChannel = channelId;
       
       // Update UI
@@ -2227,6 +2243,18 @@ function switchChannel(channelId) {
       if (chatMessages) {
         chatMessages.innerHTML = `<div style="text-align: center; padding: 20px; color: #72767d; font-size: 12px;">Вы перешли в канал "${response.channelName}"</div>`;
       }
+      
+      // Update channel users tracking
+      currentChannelUsers.clear();
+      if (response.channelUsers) {
+        response.channelUsers.forEach(u => {
+          currentChannelUsers.set(u.userId, u);
+        });
+        updateVideoVisibilityForChannel(response.channelUsers);
+      }
+      
+      // Update participants list
+      updateChannelParticipants();
       
       addLogEntry('Канал', `Перешли в канал "${response.channelName}"`);
     } else {
@@ -2277,10 +2305,114 @@ function loadChannels() {
     if (response && response.success) {
       updateChannelList(response.channels);
       currentChannel = response.currentChannel || 'general';
+      console.log('[CHANNELS] Loaded successfully, currentChannel:', currentChannel);
     } else {
       console.error('[CHANNELS] Failed to load:', response?.error || 'Unknown error');
+      // Show default channel even if server fails
+      updateChannelList([{ channelId: 'general', channelName: 'Общий', userCount: 0, isGeneral: true }]);
     }
   });
+}
+
+// ========== CHANNEL ISOLATION FUNCTIONS ==========
+
+let currentChannelUsers = new Map(); // Track which users are in current channel
+
+function showUserVideo(userId, show) {
+  const videoContainer = document.getElementById(`video-${userId}`);
+  if (videoContainer) {
+    videoContainer.style.display = show ? 'block' : 'none';
+    console.log(`[CHANNEL] Video for ${userId}: ${show ? 'shown' : 'hidden'}`);
+  }
+}
+
+function updateVideoVisibilityForChannel(channelUsers) {
+  // Hide all videos first
+  document.querySelectorAll('.video-container:not(.local)').forEach(container => {
+    const userId = container.id.replace('video-', '');
+    container.style.display = 'none';
+  });
+  
+  // Show only users in this channel
+  const userIdsInChannel = new Set(channelUsers.map(u => u.userId));
+  userIdsInChannel.forEach(userId => {
+    const container = document.getElementById(`video-${userId}`);
+    if (container) {
+      container.style.display = 'block';
+    }
+  });
+  
+  // Always show local video
+  const localContainer = document.getElementById('video-local');
+  if (localContainer) {
+    localContainer.style.display = 'block';
+  }
+  
+  console.log(`[CHANNEL] Showing ${userIdsInChannel.size} users in channel`);
+}
+
+function updateChannelParticipants() {
+  const list = document.getElementById('activeUsers');
+  if (!list) return;
+  
+  list.innerHTML = '';
+  
+  // Track unique usernames to prevent duplicates
+  const addedUsernames = new Set();
+  
+  // Local user - always show in participants
+  const localItem = document.createElement('div');
+  localItem.className = 'user-item';
+  localItem.id = 'user-local-item';
+  const avatarHtml = userAvatar ? 
+    `<img src="${userAvatar}" alt="avatar">` :
+    currentUser.username.charAt(0).toUpperCase();
+  localItem.innerHTML = `
+    <div class="user-avatar" id="avatar-local">${avatarHtml}</div>
+    <span class="user-name">${currentUser.username} (Вы)</span>
+    <div class="user-status" id="status-local"></div>
+  `;
+  list.appendChild(localItem);
+  addedUsernames.add(currentUser.username.toLowerCase());
+  
+  // Show only users in current channel
+  currentChannelUsers.forEach((channelUser, userId) => {
+    const user = activeUsers.get(userId);
+    if (!user) return;
+    
+    const username = user.name.toLowerCase();
+    if (addedUsernames.has(username)) return;
+    addedUsernames.add(username);
+    
+    const item = document.createElement('div');
+    item.className = 'user-item';
+    item.id = `user-item-${userId}`;
+    
+    const avatarHtml = user.avatar ? 
+      `<img src="${user.avatar}" alt="avatar">` :
+      user.name.charAt(0).toUpperCase();
+    
+    const isMicMuted = user.isMicMuted || false;
+    const isSoundMuted = user.isSoundMuted || false;
+    
+    const micIcon = isMicMuted ? '<span class="user-icon muted" title="Микрофон выключен">🎤❌</span>' : '';
+    const soundIcon = isSoundMuted ? '<span class="user-icon muted" title="Звук выключен">🔇</span>' : '';
+    
+    item.innerHTML = `
+      <div class="user-avatar" id="avatar-${userId}">${avatarHtml}</div>
+      <span class="user-name">${user.name}</span>
+      <div class="user-icons">
+        ${micIcon}
+        ${soundIcon}
+        <div class="user-status" id="status-${userId}"></div>
+      </div>
+    `;
+    list.appendChild(item);
+  });
+  
+  // Update user count
+  const userCount = addedUsernames.size;
+  document.getElementById('userCount').textContent = userCount;
 }
 
 function escapeHtml(text) {
