@@ -4,6 +4,15 @@ const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs');
 
+// Global error handlers to prevent server crashes
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[FATAL] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
