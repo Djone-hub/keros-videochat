@@ -1502,6 +1502,12 @@ socket.on('channel-created', (data) => {
   loadChannels();
 });
 
+// Channels updated (counts changed)
+socket.on('channels-updated', (channels) => {
+  console.log('[CHANNEL] Received updated channel counts:', channels);
+  updateChannelList(channels);
+});
+
 // User joined channel
 socket.on('user-joined-channel', (data) => {
   if (data.userId !== socket.id) {
@@ -2274,11 +2280,17 @@ function switchChannel(channelId) {
         chatHeader.innerHTML = `&#128172; Чат: ${response.channelName}`;
       }
       
+      // Refresh channel list to update user counts
+      loadChannels();
+      
       // Clear chat messages when switching channels
       const chatMessages = document.getElementById('chatMessages');
       if (chatMessages) {
-        chatMessages.innerHTML = `<div style="text-align: center; padding: 20px; color: #72767d; font-size: 12px;">Вы перешли в канал "${response.channelName}"</div>`;
+        chatMessages.innerHTML = '';
       }
+      
+      // Add system message
+      addSystemMessage(`Вы перешли в канал "${response.channelName}"`);
       
       // Update channel users tracking
       currentChannelUsers.clear();

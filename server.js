@@ -680,6 +680,15 @@ io.on('connection', (socket) => {
       
       console.log(`[CHANNEL] Sending ${channelUsers.length} users in channel ${channelId}:`, channelUsers.map(u => u.userName));
       if (callback) callback({ success: true, channelName: channel.name, channelUsers });
+      
+      // Broadcast updated channel counts to all users in room
+      const updatedChannels = Array.from(room.channels.entries()).map(([id, ch]) => ({
+        channelId: id,
+        channelName: ch.name,
+        userCount: ch.users ? ch.users.size : 0,
+        isGeneral: id === 'general'
+      }));
+      io.to(socket.roomId).emit('channels-updated', updatedChannels);
     } catch (err) {
       console.error(`[CHANNEL] Error in join-channel:`, err);
       if (callback) callback({ success: false, error: 'Server error: ' + err.message });
@@ -710,6 +719,15 @@ io.on('connection', (socket) => {
     }
     
     if (callback) callback({ success: true });
+    
+    // Broadcast updated channel counts to all users in room
+    const updatedChannels = Array.from(room.channels.entries()).map(([id, ch]) => ({
+      channelId: id,
+      channelName: ch.name,
+      userCount: ch.users ? ch.users.size : 0,
+      isGeneral: id === 'general'
+    }));
+    io.to(socket.roomId).emit('channels-updated', updatedChannels);
   });
   
   // Get list of channels in current room
