@@ -2311,9 +2311,19 @@ function switchChannel(channelId) {
       // Update channel users tracking
       currentChannelUsers.clear();
       console.log('[CHANNEL] Server returned channelUsers:', response.channelUsers);
-      
+
       let channelUsers = response.channelUsers || [];
-      
+
+      // Deduplicate by username (server may send duplicates)
+      const seenUsernames = new Set();
+      channelUsers = channelUsers.filter(u => {
+        const username = u.userName?.toLowerCase();
+        if (!username || seenUsernames.has(username)) return false;
+        seenUsernames.add(username);
+        return true;
+      });
+      console.log('[CHANNEL] Deduplicated channelUsers:', channelUsers);
+
       // Ensure current user is in the list
       if (!channelUsers.find(u => u.userId === socket.id)) {
         channelUsers.push({
@@ -2322,7 +2332,7 @@ function switchChannel(channelId) {
         });
         console.log('[CHANNEL] Added current user to channelUsers');
       }
-      
+
       channelUsers.forEach(u => {
         currentChannelUsers.set(u.userId, u);
       });
