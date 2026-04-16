@@ -4,18 +4,42 @@ let socketConnected = false;
 
 // Socket connection event
 socket.on('connect', () => {
-  console.log('Connected to server');
+  // Connected - only log on localhost
+  if (window.location.hostname === 'localhost') {
+    console.log('Connected to server');
+  }
   socketConnected = true;
-  // If lobby is already visible, reload rooms
+  
+  // Sync registered users from localStorage to server
+  const localUsers = JSON.parse(localStorage.getItem('keroschat_users') || '[]');
+  const currentUserData = JSON.parse(localStorage.getItem('keroschat_user') || '{}');
+  
+  // Send all registered users to server
+  localUsers.forEach(u => {
+    const avatar = localStorage.getItem(`keroschat_avatar_${u.username}`);
+    socket.emit('user-registered', { 
+      username: u.username, 
+      avatar: avatar,
+      isOnline: currentUserData.username === u.username
+    });
+  });
+  
+  // If lobby is already visible, reload rooms and users
   const lobbyScreen = document.getElementById('lobbyScreen');
   if (lobbyScreen && lobbyScreen.style.display === 'flex') {
     loadServerRooms();
+    loadRegisteredUsers();
   }
 });
 
 socket.on('disconnect', () => {
   console.log('Disconnected from server');
   socketConnected = false;
+});
+
+// Listen for user list updates
+socket.on('users-updated', () => {
+  loadRegisteredUsers();
 });
 
 // State
@@ -28,8 +52,67 @@ let peers = new Map();
 let activeUsers = new Map();
 let isMicOn = true;
 let isCamOn = true;
+let isSoundOn = true;
 let isScreenSharing = false;
 let userAvatar = null;
+let pingInterval = null;
+let currentPing = 0;
+let screenShareUsers = new Set(); // Track which remote users are screen sharing
+
+// Ping measurement function
+function measurePing() {
+  if (!socketConnected) return;
+  
+  const startTime = Date.now();
+  
+  socket.timeout(5000).emit('ping-check', (err, serverTime) => {
+    if (err) {
+      currentPing = 0;
+      updatePingDisplay();
+      return;
+    }
+    const endTime = Date.now();
+    currentPing = endTime - startTime;
+    updatePingDisplay();
+  });
+}
+
+function startPingMeasurement() {
+  // Measure immediately and then every 2 seconds
+  measurePing();
+  pingInterval = setInterval(measurePing, 2000);
+}
+
+function stopPingMeasurement() {
+  if (pingInterval) {
+    clearInterval(pingInterval);
+    pingInterval = null;
+  }
+  currentPing = 0;
+  updatePingDisplay();
+}
+
+function updatePingDisplay() {
+  const pingEl = document.getElementById('pingDisplay');
+  if (!pingEl) return;
+  
+  if (currentPing === 0) {
+    pingEl.textContent = '-- ms';
+    pingEl.style.color = '#72767d';
+    return;
+  }
+  
+  pingEl.textContent = `${currentPing} ms`;
+  
+  // Color coding: green < 100ms, yellow 100-300ms, red > 300ms
+  if (currentPing < 100) {
+    pingEl.style.color = '#3ba55d'; // Green - good
+  } else if (currentPing < 300) {
+    pingEl.style.color = '#faa81a'; // Yellow - medium
+  } else {
+    pingEl.style.color = '#ed4245'; // Red - bad
+  }
+}
 
 const iceServers = {
   iceServers: [
@@ -66,6 +149,8 @@ const sounds = {
   camOff: () => playSoftTone(300, 0.15, 'triangle', 0.1),
   screenOn: () => playSoftTone(700, 0.2, 'sine', 0.15),
   screenOff: () => playSoftTone(400, 0.2, 'sine', 0.15),
+  soundOn: () => playSoftTone(450, 0.15, 'sine', 0.1),
+  soundOff: () => playSoftTone(280, 0.15, 'sine', 0.1),
   userJoin: () => playSoftTone(550, 0.3, 'sine', 0.1),
   userLeave: () => playSoftTone(380, 0.3, 'sine', 0.1)
 };
@@ -76,13 +161,40 @@ const sounds = {
 const urlParams = new URLSearchParams(window.location.search);
 const inviteRoomId = urlParams.get('room');
 
+// AGGRESSIVE CLEANUP: Remove all ghost rooms from localStorage immediately
+(function cleanupGhostRooms() {
+  const localRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+  const ghostRooms = [];
+  const isGhostRoom = (room) => {
+    // Ghost room: name equals ID, or name is empty, or ID looks like random (8 uppercase chars)
+    if (!room.name || room.name === room.id) return true;
+    if (/^[A-Z0-9]{8}$/.test(room.id) && room.name === room.id) return true;
+    return false;
+  };
+  const cleanedRooms = localRooms.filter(r => {
+    if (isGhostRoom(r)) {
+      ghostRooms.push(r.id);
+      return false;
+    }
+    return true;
+  });
+  if (cleanedRooms.length !== localRooms.length) {
+    localStorage.setItem('keroschat_rooms', JSON.stringify(cleanedRooms));
+    console.log('[STARTUP] Removed', localRooms.length - cleanedRooms.length, 'ghost rooms:', ghostRooms);
+  }
+})();
+
 // Check if user is already logged in
+// Clear any pending invites from previous session - user should stay in lobby
+sessionStorage.removeItem('pendingRoomInvite');
+
 window.addEventListener('load', () => {
   const savedUser = localStorage.getItem('keroschat_user');
   if (savedUser) {
     currentUser = JSON.parse(savedUser);
     userAvatar = localStorage.getItem(`keroschat_avatar_${currentUser.username}`);
     
+    // Only auto-join if explicit invite in URL (not from sessionStorage)
     if (inviteRoomId) {
       // Store invite for auto-join after lobby loads
       sessionStorage.setItem('pendingRoomInvite', inviteRoomId);
@@ -113,15 +225,17 @@ window.addEventListener('load', () => {
                   addLogEntry('Приглашение', `Найдена комната на сервере: ${foundRoom.name}`);
                   joinRoomById(pendingRoom);
                 } else {
-                  // Room doesn't exist, try to join anyway (server will handle)
-                  addLogEntry('Приглашение', `Комната ${pendingRoom} не найдена в списке, пробуем присоединиться...`);
-                  joinRoomById(pendingRoom);
+                  // Room doesn't exist - stay in lobby, show error
+                  addLogEntry('Ошибка', `Комната ${pendingRoom} не найдена на сервере`);
+                  alert(`Комната ${pendingRoom} не найдена. Возможно, она была удалена.`);
+                  // Stay in lobby, don't auto-create room
                 }
               })
               .catch(err => {
                 console.error('Error checking room:', err);
-                // Try to join anyway
-                joinRoomById(pendingRoom);
+                // On error, stay in lobby
+                addLogEntry('Ошибка', 'Не удалось проверить комнату на сервере');
+                alert('Ошибка подключения к серверу. Остаёмся в лобби.');
               });
           }
         }
@@ -193,6 +307,10 @@ function handleRegister(e) {
   currentUser = newUser;
   localStorage.setItem('keroschat_user', JSON.stringify(newUser));
   addLogEntry('Авторизация', `Новый пользователь ${username} зарегистрирован`);
+  
+  // Notify server about new user registration
+  socket.emit('user-registered', { username, avatar: null });
+  
   showLobby();
   alert('Регистрация успешна!');
 };
@@ -222,14 +340,41 @@ function showLobby() {
     avatarEl.textContent = currentUser.username.charAt(0).toUpperCase();
   }
   
+  // Notify server that user is online (in lobby)
+  if (socketConnected && currentUser) {
+    socket.emit('user-online', { 
+      username: currentUser.username, 
+      avatar: userAvatar 
+    });
+  }
+  
+  // Load saved theme
+  if (typeof loadUserSettings === 'function') {
+    loadUserSettings();
+  }
+  
   // Load rooms from server
   loadServerRooms();
+  
+  // Load registered users
+  loadRegisteredUsers();
 }
 
 // Store server rooms
 let serverRooms = [];
 
+// Prevent multiple simultaneous loads
+let isLoadingRooms = false;
+let lastLoadTime = 0;
+
 async function loadServerRooms() {
+  // Debounce: don't reload if loaded in last 2 seconds
+  const now = Date.now();
+  if (isLoadingRooms || (now - lastLoadTime < 2000)) {
+    return;
+  }
+  
+  isLoadingRooms = true;
   const list = document.getElementById('roomsList');
   list.innerHTML = '<p style="color: #72767d; padding: 16px; text-align: center;">⏳ Загрузка комнат...</p>';
   
@@ -238,20 +383,42 @@ async function loadServerRooms() {
     const response = await fetch('/api/rooms');
     if (!response.ok) throw new Error('Failed to fetch rooms');
     serverRooms = await response.json();
-    console.log('Loaded rooms from server:', serverRooms.length);
+    // Only log in development
+    if (window.location.hostname === 'localhost') {
+      console.log('Loaded rooms from server:', serverRooms.length);
+    }
   } catch (err) {
     console.error('Error loading rooms:', err);
     serverRooms = [];
+    isLoadingRooms = false; // Reset on error
   }
   
   // Get local rooms and clean up those not on server (old/deleted)
   let localRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
   const serverRoomIds = new Set(serverRooms.map(r => r.id));
   
-  // Keep only local rooms that exist on server OR were created by current user
-  const cleanedLocalRooms = localRooms.filter(r => 
-    serverRoomIds.has(r.id) || r.creator === currentUser?.username
-  );
+  // Filter out "ghost" rooms - rooms where name looks like an ID (uppercase letters+numbers, 8 chars)
+  // These are auto-generated rooms that shouldn't exist
+  const isGhostRoom = (room) => {
+    // If name is same as ID and looks like random ID (8 uppercase chars/numbers)
+    if (room.name === room.id && /^[A-Z0-9]{8}$/.test(room.id)) {
+      return true;
+    }
+    // If name is empty or just the ID
+    if (!room.name || room.name === room.id) {
+      return true;
+    }
+    return false;
+  };
+  
+  // AGGRESSIVE: Remove ALL ghost rooms regardless of creator!
+  const cleanedLocalRooms = localRooms.filter(r => {
+    if (isGhostRoom(r)) {
+      console.log('[GHOST] DELETING ghost room:', r.id, 'creator:', r.creator);
+      return false;
+    }
+    return serverRoomIds.has(r.id) || r.creator === currentUser?.username;
+  });
   
   // Save cleaned list back
   if (cleanedLocalRooms.length !== localRooms.length) {
@@ -274,6 +441,10 @@ async function loadServerRooms() {
   });
   
   renderRoomsList(allRooms);
+  
+  // Reset loading state
+  isLoadingRooms = false;
+  lastLoadTime = Date.now();
 }
 
 function renderRoomsList(roomsToRender) {
@@ -317,15 +488,22 @@ function renderRoomsList(roomsToRender) {
       `<img src="${room.avatar}" alt="${room.name}">` : 
       '#';
     
-    const statusHtml = room.active ? 
-      `<span style="color: #3ba55d; font-size: 11px;">🔴 ${room.userCount || '?'} в комнате</span>` : 
-      `<span style="color: #72767d; font-size: 11px;">⚪ Нет участников</span>`;
+    // Build users list HTML
+    let usersHtml = '';
+    if (room.active && room.users && room.users.length > 0) {
+      const usersList = room.users.slice(0, 3).join(', '); // Show first 3 users
+      const moreCount = room.users.length > 3 ? ` +${room.users.length - 3}` : '';
+      usersHtml = `<div style="color: #3ba55d; font-size: 11px; margin-top: 4px;">� ${room.userCount}: ${usersList}${moreCount}</div>`;
+    } else {
+      usersHtml = `<div style="color: #72767d; font-size: 11px; margin-top: 4px;">⚪ Нет участников</div>`;
+    }
     
     item.innerHTML = `
       <div class="icon">${iconHtml}</div>
       <div class="info">
         <div class="name">${room.name} ${room.active ? '🔥' : ''}</div>
-        <div class="count">${statusHtml} • ID: ${room.id} ${isCreator ? '• (Вы создатель)' : `• ${room.creator || ''}`}</div>
+        <div class="count" style="font-size: 11px; color: #96989d;">${isCreator ? '👑 Вы создатель' : (room.creator ? `👤 ${room.creator}` : '')}</div>
+        ${usersHtml}
       </div>
       ${actionsHtml}
     `;
@@ -347,18 +525,124 @@ function loadRoomsList(filter = '') {
   renderRoomsList(rooms);
 }
 
+// Load and display registered users in lobby
+async function loadRegisteredUsers() {
+  let users = [];
+  
+  try {
+    // Try to fetch from API first
+    const response = await fetch('/api/users');
+    if (response.ok) {
+      const apiUsers = await response.json();
+      users = apiUsers.map(u => ({
+        name: u.name || u.username,
+        avatar: u.avatar,
+        isOnline: u.isOnline
+      }));
+    }
+  } catch (err) {
+    // API failed, use localStorage fallback
+    console.log('API users not available, using localStorage fallback');
+  }
+  
+  // Fallback to localStorage if API failed or returned empty
+  if (users.length === 0) {
+    const localUsers = JSON.parse(localStorage.getItem('keroschat_users') || '[]');
+    const currentUserData = JSON.parse(localStorage.getItem('keroschat_user') || '{}');
+    
+    // Combine and deduplicate users
+    const userMap = new Map();
+    
+    localUsers.forEach(u => {
+      userMap.set(u.username, {
+        name: u.username,
+        avatar: localStorage.getItem(`keroschat_avatar_${u.username}`),
+        isOnline: currentUserData.username === u.username
+      });
+    });
+    
+    // Add current user if exists and not already in list
+    if (currentUserData.username && !userMap.has(currentUserData.username)) {
+      userMap.set(currentUserData.username, {
+        name: currentUserData.username,
+        avatar: localStorage.getItem(`keroschat_avatar_${currentUserData.username}`),
+        isOnline: true
+      });
+    }
+    
+    users = Array.from(userMap.values());
+  }
+  
+  // Update header with count
+  const header = document.getElementById('registeredUsersHeader');
+  if (header) {
+    header.textContent = `${users.length} 👥 Пользователи`;
+  }
+  
+  const list = document.getElementById('registeredUsersList');
+  if (!list) return;
+  
+  list.innerHTML = '';
+  
+  if (users.length === 0) {
+    list.innerHTML = '<p style="color: #72767d; padding: 16px; text-align: center; font-size: 12px;">Пока нет зарегистрированных пользователей</p>';
+    return;
+  }
+  
+  // Sort: online users first, then by name
+  users.sort((a, b) => {
+    if (a.isOnline && !b.isOnline) return -1;
+    if (!a.isOnline && b.isOnline) return 1;
+    return a.name.localeCompare(b.name);
+  });
+  
+  users.forEach(user => {
+    const item = document.createElement('div');
+    item.className = 'registered-user-item' + (user.isOnline ? ' online' : '');
+    
+    const avatarHtml = user.avatar ? 
+      `<img src="${user.avatar}" alt="${user.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">` :
+      user.name.charAt(0).toUpperCase();
+    
+    const statusTitle = user.isOnline ? 'В сети' : 'Не в сети';
+    
+    item.innerHTML = `
+      <div class="registered-user-avatar">${avatarHtml}</div>
+      <span class="registered-user-name">${user.name}</span>
+      <div class="registered-user-status" title="${statusTitle}"></div>
+    `;
+    
+    list.appendChild(item);
+  });
+}
+
 async function searchRooms(query) {
   if (!query) {
     loadRoomsList();
     return;
   }
   
-  // Search locally first
+  // Search by room name only (not by ID)
   const filtered = allRooms.filter(r => 
     r.name.toLowerCase().includes(query.toLowerCase()) ||
-    r.id.toLowerCase().includes(query.toLowerCase()) ||
     (r.creator && r.creator.toLowerCase().includes(query.toLowerCase()))
   );
+  
+  // If nothing found, show "no results" message
+  if (filtered.length === 0) {
+    const list = document.getElementById('roomsList');
+    list.innerHTML = `
+      <div style="text-align: center; padding: 20px; color: #72767d;">
+        <p style="margin-bottom: 8px;">🔍 Ничего не найдено</p>
+        <p style="font-size: 13px;">По запросу "${query}" нет комнат</p>
+        <button onclick="document.getElementById('roomSearch').value=''; loadRoomsList()" 
+                style="margin-top: 12px; padding: 6px 12px; background: #5865f2; color: #fff; border: none; border-radius: 4px; cursor: pointer;">
+          🔄 Показать все комнаты
+        </button>
+      </div>
+    `;
+    return;
+  }
   
   renderRoomsList(filtered);
 }
@@ -434,14 +718,19 @@ function deleteRoom(roomId) {
   const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
   const filteredRooms = rooms.filter(r => r.id !== roomId);
   
+  // Always update localStorage if room was found
   if (filteredRooms.length !== rooms.length) {
     localStorage.setItem('keroschat_rooms', JSON.stringify(filteredRooms));
-    // Notify server to delete room
-    socket.emit('delete-room', roomId);
-    loadServerRooms();
-    addLogEntry('Комната', `Комната ${roomId} удалена`);
-    alert('Комната удалена!');
+    console.log(`[DELETE] Room ${roomId} removed from localStorage`);
   }
+  
+  // Always notify server to delete (even if not in localStorage, might be on server)
+  socket.emit('delete-room', roomId);
+  
+  // Reload room list immediately
+  loadServerRooms();
+  addLogEntry('Комната', `Комната ${roomId} удалена`);
+  alert('Комната удалена!');
 }
 
 function showCreateRoomModal() {
@@ -484,9 +773,16 @@ function createRoom() {
     return;
   }
   
+  // Prevent creating ghost rooms (name that looks like ID)
+  if (/^[A-Z0-9]{8}$/.test(name)) {
+    alert('Название комнаты не должно выглядеть как ID (8 заглавных букв/цифр)! Придумайте нормальное название.');
+    return;
+  }
+  
   const roomId = generateRoomId();
   const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
-  rooms.push({ id: roomId, name, created: Date.now(), creator: currentUser.username, avatar: newRoomAvatar });
+  const newRoom = { id: roomId, name, created: Date.now(), creator: currentUser.username, avatar: newRoomAvatar };
+  rooms.push(newRoom);
   localStorage.setItem('keroschat_rooms', JSON.stringify(rooms));
   
   // Also store room info for server-side search
@@ -514,7 +810,7 @@ async function joinRoomById(roomId) {
   currentRoomName = room ? room.name : roomId;
   const roomAvatar = room ? room.avatar : null;
   
-  addLogEntry('Комната', `Подключение к комнате: ${currentRoomName} (${roomId})`);
+  addLogEntry('Комната', `"${currentRoomName}" - вы подключились`);
   
   // Request media
   try {
@@ -541,6 +837,9 @@ async function joinRoomById(roomId) {
   // Join socket room with avatar, room name and room avatar
   socket.emit('join-room', roomId, currentUser.username, userAvatar, currentRoomName, roomAvatar);
   
+  // Play sound for local user entering room
+  sounds.userJoin();
+  
   // Show room UI
   showRoomUI();
   
@@ -556,9 +855,36 @@ function showRoomUI() {
   document.getElementById('lobbyScreen').style.display = 'none';
   document.getElementById('roomScreen').style.display = 'flex';
   document.getElementById('roomScreen').style.flexDirection = 'column';
+  
+  // Reset current channel
+  currentChannel = 'general';
+  
+  // Load channels list - wait for socket to be fully connected
+  const checkAndLoad = () => {
+    if (socketConnected && currentRoom) {
+      loadChannels();
+    } else {
+      setTimeout(checkAndLoad, 300);
+    }
+  };
+  setTimeout(checkAndLoad, 500);
   // Always show room name, not ID
   const displayName = currentRoomName && currentRoomName !== currentRoom ? currentRoomName : currentRoom;
   document.getElementById('displayRoomId').textContent = displayName;
+  
+  // Load saved theme
+  if (typeof loadUserSettings === 'function') {
+    loadUserSettings();
+  }
+  
+  // Load chat history
+  if (currentRoom) {
+    socket.emit('get-room-messages', currentRoom, (messages) => {
+      messages.forEach(msg => {
+        addChatMessage(msg.sender, msg.text, false, msg.time);
+      });
+    });
+  }
   
   // Set room avatar in header
   const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
@@ -571,6 +897,33 @@ function showRoomUI() {
       avatarEl.textContent = '#';
     }
   }
+  
+  // Start ping measurement
+  startPingMeasurement();
+}
+
+function resetRoomStateAndUI() {
+  // Close peer connections
+  peers.forEach(pc => pc.close());
+  peers.clear();
+  activeUsers.clear();
+  screenShareUsers.clear(); // Clear screen share tracking
+
+  // Reset state
+  currentRoom = null;
+  isMicOn = true;
+  isCamOn = true;
+  isSoundOn = true;
+  isScreenSharing = false;
+
+  // Clear UI
+  document.getElementById('videoGrid').innerHTML = '';
+  document.getElementById('chatMessages').innerHTML = '';
+
+  // Reset buttons
+  document.getElementById('micBtn').classList.remove('danger');
+  document.getElementById('camBtn').classList.remove('danger');
+  document.getElementById('screenBtn').classList.remove('active');
 }
 
 function leaveRoom() {
@@ -584,36 +937,12 @@ function leaveRoom() {
     screenStream = null;
   }
   
-  // Close peer connections
-  peers.forEach(pc => pc.close());
-  peers.clear();
-  activeUsers.clear();
+  // Stop ping measurement
+  stopPingMeasurement();
   
   // Leave socket room
   socket.emit('leave-room', currentRoom);
-  
-  // Reset state
-  currentRoom = null;
-  isMicOn = true;
-  isCamOn = true;
-  isScreenSharing = false;
-  
-  // Clear UI
-  document.getElementById('videoGrid').innerHTML = '';
-  document.getElementById('chatMessages').innerHTML = '';
-  
-  // Reset buttons
-  const micBtn = document.getElementById('micBtn');
-  micBtn.classList.remove('danger');
-  micBtn.querySelector('.label').textContent = 'Мик';
-  
-  const camBtn = document.getElementById('camBtn');
-  camBtn.classList.remove('danger');
-  camBtn.querySelector('.label').textContent = 'Камера';
-  
-  const screenBtn = document.getElementById('screenBtn');
-  screenBtn.classList.remove('active');
-  screenBtn.querySelector('.label').textContent = 'Экран';
+  resetRoomStateAndUI();
   
   // Show settings panel if open
   document.getElementById('settingsPanel').classList.remove('active');
@@ -627,33 +956,7 @@ function disconnectAndJoinAnother() {
   // Leave socket room
   socket.emit('leave-room', currentRoom);
   
-  // Close peer connections but keep streams
-  peers.forEach(pc => pc.close());
-  peers.clear();
-  activeUsers.clear();
-  
-  // Reset state
-  currentRoom = null;
-  isMicOn = true;
-  isCamOn = true;
-  isScreenSharing = false;
-  
-  // Clear UI
-  document.getElementById('videoGrid').innerHTML = '';
-  document.getElementById('chatMessages').innerHTML = '';
-  
-  // Reset buttons
-  const micBtn = document.getElementById('micBtn');
-  micBtn.classList.remove('danger');
-  micBtn.querySelector('.label').textContent = 'Мик';
-  
-  const camBtn = document.getElementById('camBtn');
-  camBtn.classList.remove('danger');
-  camBtn.querySelector('.label').textContent = 'Камера';
-  
-  const screenBtn = document.getElementById('screenBtn');
-  screenBtn.classList.remove('active');
-  screenBtn.querySelector('.label').textContent = 'Экран';
+  resetRoomStateAndUI();
   
   // Show settings panel if open
   document.getElementById('settingsPanel').classList.remove('active');
@@ -663,6 +966,19 @@ function disconnectAndJoinAnother() {
   
   // Show message to select another room
   alert('Вы отключены от комнаты. Выберите другую комнату из списка или создайте новую.');
+}
+
+function disconnectAndShowLobby() {
+  // Leave socket room
+  socket.emit('leave-room', currentRoom);
+  
+  resetRoomStateAndUI();
+  
+  // Show settings panel if open
+  document.getElementById('settingsPanel').classList.remove('active');
+  
+  // Back to lobby
+  showLobby();
 }
 
 function copyLink() {
@@ -675,10 +991,15 @@ function copyLink() {
 // ========== VIDEO & PEERS ==========
 
 function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false) {
+  const videoGrid = document.getElementById('videoGrid');
+  if (!videoGrid) return;
+  
   let container = document.getElementById(`video-${id}`);
+  const isNew = !container;
+  
   if (!container) {
     container = document.createElement('div');
-    container.className = 'video-container' + (isScreenShare ? ' screen-share' : '');
+    container.className = 'video-container' + (isScreenShare ? ' screen-share' : '') + (isLocal ? ' local' : '');
     container.id = `video-${id}`;
     
     const video = document.createElement('video');
@@ -687,6 +1008,9 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     video.playsInline = true;
     video.muted = isLocal;
     if (isLocal && !isScreenShare) video.style.transform = 'scaleX(-1)';
+    
+    // Ensure video plays
+    video.play().catch(e => {});
     
     const label = document.createElement('div');
     label.className = 'video-label';
@@ -703,24 +1027,64 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
       label.appendChild(volumeControl);
       // Set default volume to 50%
       video.volume = 0.5;
+      // Mute if sound is turned off globally
+      video.muted = !isSoundOn;
     }
     
-    // Add fullscreen button for screen share
-    if (isScreenShare) {
+    // Add fullscreen button for screen share (only for REMOTE users, not local)
+    // Local user doesn't need fullscreen button for their own screen share
+    // Remote users DO need fullscreen button to enlarge shared screen
+    if (isScreenShare && !isLocal) {
+      // Add preview toggle button
+      const previewToggleBtn = document.createElement('button');
+      previewToggleBtn.className = 'preview-toggle-btn';
+      previewToggleBtn.innerHTML = '👁️ Превью';
+      previewToggleBtn.title = 'Переключить режим превью (экономия ресурсов)';
+      previewToggleBtn.onclick = () => toggleScreenSharePreview(id);
+      container.appendChild(previewToggleBtn);
+      
       const fullscreenBtn = document.createElement('button');
       fullscreenBtn.className = 'fullscreen-btn';
       fullscreenBtn.innerHTML = '🔍';
-      fullscreenBtn.title = 'Увеличить';
+      fullscreenBtn.title = 'Увеличить демонстрацию экрана';
       fullscreenBtn.onclick = () => openScreenModal(id);
       container.appendChild(fullscreenBtn);
+      
+      // Double-click on video to enlarge screen share
+      video.style.cursor = 'pointer';
+      video.title = 'Двойной клик для увеличения';
+      video.ondblclick = () => openScreenModal(id);
     }
     
     container.appendChild(video);
     container.appendChild(label);
-    document.getElementById('videoGrid').appendChild(container);
+    videoGrid.appendChild(container);
   } else {
     const video = container.querySelector('video');
     video.srcObject = stream;
+    video.play().catch(e => {});
+    
+    // Update styles if this is a screen share (for replaceTrack case)
+    if (isScreenShare && !isLocal) {
+      container.classList.add('screen-share');
+      // Force inline styles for visibility
+      container.style.cssText = 'display: block !important; visibility: visible !important; opacity: 1 !important; min-width: 640px; min-height: 360px; border: 3px solid #3ba55d;';
+      video.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: contain !important; display: block !important; visibility: visible !important;';
+      
+      // Add fullscreen button if not exists
+      if (!container.querySelector('.fullscreen-btn')) {
+        const fullscreenBtn = document.createElement('button');
+        fullscreenBtn.className = 'fullscreen-btn';
+        fullscreenBtn.innerHTML = '🔍';
+        fullscreenBtn.title = 'Увеличить демонстрацию экрана';
+        fullscreenBtn.onclick = () => openScreenModal(id);
+        container.appendChild(fullscreenBtn);
+        
+        video.style.cursor = 'pointer';
+        video.title = 'Двойной клик для увеличения';
+        video.ondblclick = () => openScreenModal(id);
+      }
+    }
   }
   updateUserCount();
 }
@@ -738,7 +1102,12 @@ function updateUserCount() {
 
 function updateActiveUsers() {
   const list = document.getElementById('activeUsers');
+  if (!list) return;
+  
   list.innerHTML = '';
+  
+  // Track unique usernames to prevent duplicates
+  const addedUsernames = new Set();
   
   // Local user with speaking indicator
   const localItem = document.createElement('div');
@@ -753,23 +1122,41 @@ function updateActiveUsers() {
     <div class="user-status" id="status-local"></div>
   `;
   list.appendChild(localItem);
+  addedUsernames.add(currentUser.username.toLowerCase());
   
-  // Remote users with speaking indicator and avatar
-  peers.forEach((pc, id) => {
-    const user = activeUsers.get(id);
+  // Remote users from activeUsers (only those currently in room)
+  activeUsers.forEach((user, id) => {
+    const username = user.name.toLowerCase();
+    
+    // Skip if already added (prevents duplicates)
+    if (addedUsernames.has(username)) return;
+    
+    addedUsernames.add(username);
+    
     const item = document.createElement('div');
     item.className = 'user-item';
     item.id = `user-item-${id}`;
     
     // Check if user has avatar
-    const avatarHtml = (user && user.avatar) ? 
+    const avatarHtml = user.avatar ? 
       `<img src="${user.avatar}" alt="avatar">` :
-      (user ? user.name.charAt(0).toUpperCase() : '?');
+      user.name.charAt(0).toUpperCase();
+    
+    // Check if user has muted mic or sound
+    const isMicMuted = user.isMicMuted || false;
+    const isSoundMuted = user.isSoundMuted || false;
+    
+    const micIcon = isMicMuted ? '<span class="user-icon muted" title="Микрофон выключен">🎤❌</span>' : '';
+    const soundIcon = isSoundMuted ? '<span class="user-icon muted" title="Звук выключен">🔇</span>' : '';
     
     item.innerHTML = `
       <div class="user-avatar" id="avatar-${id}">${avatarHtml}</div>
-      <span class="user-name">${user ? user.name : 'Участник'}</span>
-      <div class="user-status" id="status-${id}"></div>
+      <span class="user-name">${user.name}</span>
+      <div class="user-icons">
+        ${micIcon}
+        ${soundIcon}
+        <div class="user-status" id="status-${id}"></div>
+      </div>
     `;
     list.appendChild(item);
   });
@@ -815,7 +1202,24 @@ function startSpeakingDetection() {
 }
 
 async function createPeerConnection(userId) {
-  const pc = new RTCPeerConnection(iceServers);
+  const pc = new RTCPeerConnection({
+    ...iceServers,
+    // Low latency configuration
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require',
+    sdpSemantics: 'unified-plan'
+  });
+  
+  // Enable low latency for audio
+  pc.getSenders().forEach(sender => {
+    if (sender.track && sender.track.kind === 'audio') {
+      const params = sender.getParameters();
+      if (params.encodings && params.encodings.length > 0) {
+        params.encodings[0].ptime = 20; // 20ms packet time for lower latency
+        sender.setParameters(params).catch(e => {});
+      }
+    }
+  });
   
   localStream.getTracks().forEach(track => {
     pc.addTrack(track, localStream);
@@ -823,12 +1227,51 @@ async function createPeerConnection(userId) {
   
   pc.ontrack = (e) => {
     const stream = e.streams[0];
+    const videoTrack = stream.getVideoTracks()[0];
+    const audioTrack = stream.getAudioTracks()[0];
+    
+    // Log detailed track info for debugging
+    const trackInfo = stream.getTracks().map(t => ({
+      kind: t.kind,
+      label: t.label,
+      readyState: t.readyState,
+      enabled: t.enabled,
+      muted: t.muted
+    }));
+    console.log(`[TRACK] Received stream from ${userId}:`, JSON.stringify(trackInfo));
+    
+    // Log audio track specifically
+    if (audioTrack) {
+      console.log(`[AUDIO] Received audio from ${userId}: enabled=${audioTrack.enabled}, muted=${audioTrack.muted}, state=${audioTrack.readyState}`);
+    } else {
+      console.warn(`[AUDIO] No audio track received from ${userId}!`);
+    }
+    
+    // Detect screen share by track label
+    const isScreenByLabel = videoTrack && (
+      videoTrack.label.toLowerCase().includes('screen') ||
+      videoTrack.label.toLowerCase().includes('display') ||
+      videoTrack.label.toLowerCase().includes('window')
+    );
+    
+    // Detect screen share by settings (screen share usually has higher resolution)
+    const settings = videoTrack?.getSettings();
+    const width = settings?.width || 0;
+    const height = settings?.height || 0;
+    // Screen share typically has resolution matching monitor (>1920x1080 common)
+    const isScreenByResolution = width > 1920 || height > 1080 || (width > 0 && width/height > 2.5);
+    
+    console.log(`[TRACK] Video settings for ${userId}:`, width, 'x', height, 'aspect:', width/height);
+    
     socket.emit('get-user-name', userId, (name) => {
       const userName = name || 'Участник';
       if (!activeUsers.has(userId)) {
         activeUsers.set(userId, { id: userId, name: userName });
       }
-      addVideoStream(userId, stream, userName);
+      // Check if this user is screen sharing (socket event OR label OR resolution)
+      const isScreenShare = screenShareUsers.has(userId) || isScreenByLabel || isScreenByResolution;
+      console.log(`[TRACK] Screen detection for ${userId}: socket=${screenShareUsers.has(userId)}, label=${isScreenByLabel}, resolution=${isScreenByResolution}, FINAL=${isScreenShare}`);
+      addVideoStream(userId, stream, userName, false, isScreenShare);
       updateActiveUsers();
     });
   };
@@ -870,23 +1313,61 @@ socket.on('room-info', (room) => {
       avatarEl.innerHTML = `<img src="${room.avatar}" alt="${room.name}">`;
     }
     
-    addLogEntry('Комната', `Получена информация о комнате: ${room.name}`);
-    
     // Refresh room list to show updated info
     loadServerRooms();
   }
 });
 
+// Listen for theme changes from other users
+socket.on('theme-changed', ({ theme }) => {
+  // Apply theme if setTheme function is available (from admin.js)
+  if (typeof setTheme === 'function') {
+    setTheme(theme);
+  } else {
+    // Fallback: apply theme directly
+    const themes = {
+      dark: { '--bg-primary': '#36393f', '--bg-secondary': '#2f3136', '--bg-tertiary': '#202225', '--text-primary': '#fff', '--text-secondary': '#b9bbbe', '--accent': '#5865f2' },
+      blue: { '--bg-primary': '#1a237e', '--bg-secondary': '#283593', '--bg-tertiary': '#0d47a1', '--text-primary': '#fff', '--text-secondary': '#b3e5fc', '--accent': '#2196f3' },
+      red: { '--bg-primary': '#b71c1c', '--bg-secondary': '#c62828', '--bg-tertiary': '#7f0000', '--text-primary': '#fff', '--text-secondary': '#ffcdd2', '--accent': '#f44336' },
+      green: { '--bg-primary': '#1b5e20', '--bg-secondary': '#2e7d32', '--bg-tertiary': '#004d00', '--text-primary': '#fff', '--text-secondary': '#c8e6c9', '--accent': '#4caf50' },
+      purple: { '--bg-primary': '#4a148c', '--bg-secondary': '#6a1b9a', '--bg-tertiary': '#38006b', '--text-primary': '#fff', '--text-secondary': '#e1bee7', '--accent': '#9c27b0' }
+    };
+    const themeData = themes[theme];
+    if (themeData) {
+      Object.entries(themeData).forEach(([key, value]) => {
+        document.documentElement.style.setProperty(key, value);
+      });
+    }
+  }
+});
+
+// Listen for user mute state changes
+socket.on('user-mute-state', ({ userId, isMicMuted, isSoundMuted }) => {
+  const user = activeUsers.get(userId);
+  if (user) {
+    user.isMicMuted = isMicMuted;
+    user.isSoundMuted = isSoundMuted;
+    updateActiveUsers(); // Refresh the user list to show icons
+  }
+});
+
 socket.on('users-in-room', async (users) => {
-  console.log('Users in room:', users.length, users);
-  addLogEntry('Отладка', `Получен список пользователей: ${users.length}`);
+  // Users list received - debug minimized
+  // console.log('Users in room:', users.length);
   for (const user of users) {
-    console.log('Creating peer connection for user:', user.id);
+    // Skip if already connected to this user
+    if (activeUsers.has(user.id) || peers.has(user.id)) {
+      // Already connected, skip
+      continue;
+    }
+    // Debug disabled for performance
+  // console.log('Creating peer connection for user:', user.id);
     activeUsers.set(user.id, user);
     const pc = await createPeerConnection(user.id);
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    console.log('Sending offer to:', user.id);
+    // Debug disabled
+    // console.log('Sending offer to:', user.id);
     socket.emit('offer', user.id, offer);
   }
   updateActiveUsers();
@@ -894,7 +1375,7 @@ socket.on('users-in-room', async (users) => {
 
 // Listen for room list updates from server
 socket.on('rooms-updated', () => {
-  console.log('Rooms updated, refreshing list...');
+  // Rooms updated - refresh quietly
   // Refresh room list if in lobby
   const lobbyScreen = document.getElementById('lobbyScreen');
   if (lobbyScreen && lobbyScreen.style.display === 'flex') {
@@ -911,12 +1392,46 @@ socket.on('room-deleted', (roomId) => {
   }
 });
 
+socket.on('room-error', (error) => {
+  addLogEntry('Ошибка', error.message);
+  alert(error.message);
+  // If in room, go back to lobby
+  if (currentRoom) {
+    leaveRoom();
+  }
+});
+
 socket.on('user-joined', async (user) => {
+  // Skip if already connected to this user (prevent duplicates)
+  if (activeUsers.has(user.id) || peers.has(user.id)) {
+    console.log('User already connected:', user.id);
+    return;
+  }
+  // Avatar sync debug - disabled for production performance
+  // console.log('[AVATAR] User joined:', user.name, 'has avatar:', !!user.avatar);
   sounds.userJoin();
   activeUsers.set(user.id, user);
-  addChatMessage('Система', `${user.name} присоединился`, true);
-  addLogEntry('Пользователи', `${user.name} присоединился к комнате`);
+  addChatMessage('Система', `Комната "${currentRoomName}" - подключился ${user.name}`, true);
   updateActiveUsers();
+});
+
+socket.on('user-deleted', (username) => {
+  // Remove user from localStorage if it's the current user
+  const localUsers = JSON.parse(localStorage.getItem('keroschat_users') || '[]');
+  const filteredUsers = localUsers.filter(u => u.username !== username);
+  localStorage.setItem('keroschat_users', JSON.stringify(filteredUsers));
+  
+  // Remove avatar
+  localStorage.removeItem(`keroschat_avatar_${username}`);
+  
+  // Refresh user list in lobby
+  loadRegisteredUsers();
+  
+  // If current user was deleted, log them out
+  if (currentUser && currentUser.username === username) {
+    alert('Ваш аккаунт был удалён администратором');
+    logout();
+  }
 });
 
 socket.on('user-left', (userId) => {
@@ -928,45 +1443,285 @@ socket.on('user-left', (userId) => {
     peers.delete(userId);
   }
   activeUsers.delete(userId);
-  addChatMessage('Система', 'Участник вышел', true);
-  addLogEntry('Пользователи', `${user ? user.name : 'Участник'} покинул комнату`);
+  const userName = user ? user.name : 'Участник';
+  addChatMessage('Система', `Комната "${currentRoomName}" - отключился ${userName}`, true);
   updateActiveUsers();
 });
 
 socket.on('offer', async (userId, offer) => {
-  console.log('Received offer from:', userId);
-  addLogEntry('Отладка', `Получен offer от ${userId}`);
+  // Offer received - debug disabled
+  // console.log('Received offer from:', userId);
   const pc = await createPeerConnection(userId);
   await pc.setRemoteDescription(offer);
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
-  console.log('Sending answer to:', userId);
+  // Answer sent
   socket.emit('answer', userId, answer);
   updateActiveUsers();
 });
 
 socket.on('answer', async (userId, answer) => {
-  console.log('Received answer from:', userId);
-  addLogEntry('Отладка', `Получен answer от ${userId}`);
+  // Answer received - debug disabled
+  // console.log('Received answer from:', userId);
   if (peers.has(userId)) {
     await peers.get(userId).setRemoteDescription(answer);
-    console.log('Set remote description for:', userId);
+    // Remote description set
   } else {
-    console.warn('No peer connection for answer from:', userId);
+    // No peer for answer
   }
 });
 
 socket.on('ice-candidate', async (userId, candidate) => {
-  console.log('Received ICE candidate from:', userId);
+  // ICE candidate received - too verbose, disabled
   if (peers.has(userId)) {
     await peers.get(userId).addIceCandidate(new RTCIceCandidate(candidate));
   } else {
-    console.warn('No peer connection for ICE from:', userId);
+    // No peer for ICE
   }
 });
 
 socket.on('chat-message', (msg) => {
-  addChatMessage(msg.sender, msg.text, false, msg.time);
+  // Only show room messages if in general channel
+  if (currentChannel === 'general') {
+    addChatMessage(msg.sender, msg.text, false, msg.time);
+  }
+});
+
+// Channel-specific messages
+socket.on('channel-message', (msg) => {
+  // Only show if user is in this channel
+  if (currentChannel === msg.channelId) {
+    addChatMessage(msg.sender, `(${msg.channelName}) ${msg.text}`, false, msg.time);
+  }
+});
+
+// Channel created by another user
+socket.on('channel-created', (data) => {
+  addLogEntry('Канал', `${data.createdBy} создал канал "${data.channelName}"`);
+  // Refresh channel list
+  loadChannels();
+});
+
+// User joined channel
+socket.on('user-joined-channel', (data) => {
+  if (data.userId !== socket.id) {
+    addSystemMessage(`${data.userName} присоединился к каналу "${data.channelName}"`);
+    
+    // Add to current channel users if in same channel
+    if (data.channelId === currentChannel) {
+      currentChannelUsers.set(data.userId, { userName: data.userName });
+      // Refresh channel videos
+      refreshChannelVideos();
+    }
+  }
+  updateChannelParticipants();
+});
+
+// User left channel
+socket.on('user-left-channel', (data) => {
+  if (data.userId !== socket.id) {
+    // Remove from current channel users
+    if (data.channelId === currentChannel) {
+      currentChannelUsers.delete(data.userId);
+      // Remove video from channel container
+      const channelVideo = document.getElementById(`channel-video-${data.userId}`);
+      if (channelVideo) {
+        channelVideo.remove();
+      }
+    }
+  }
+  updateChannelParticipants();
+});
+
+// Refresh channel videos - re-creates the channel video container
+function refreshChannelVideos() {
+  const channelUsers = Array.from(currentChannelUsers.entries()).map(([userId, user]) => ({
+    userId,
+    userName: user.userName || (activeUsers.get(userId)?.name) || 'Участник'
+  }));
+  
+  // Add current user
+  channelUsers.push({
+    userId: socket.id,
+    userName: currentUser.username
+  });
+  
+  updateVideoVisibilityForChannel(channelUsers);
+}
+
+// Handle remote user screen share started
+socket.on('screen-share-started', (userId) => {
+  const user = activeUsers.get(userId);
+  const userName = user ? user.name : 'Участник';
+  addLogEntry('Демонстрация', `${userName} начал демонстрацию экрана`);
+  
+  // Track this user as screen sharing
+  screenShareUsers.add(userId);
+  
+  // Check if video container already exists and UPDATE it to screen share mode
+  const container = document.getElementById(`video-${userId}`);
+  if (container) {
+    // Update existing container to screen share style
+    container.classList.add('screen-share');
+    const video = container.querySelector('video');
+    if (video) {
+      video.style.objectFit = 'contain';
+      
+      // Log resolution for debugging (screen share styling already applied above)
+      const checkResolution = () => {
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+        const isLarge = w > 1920 || h > 1080 || (w > 0 && w/h > 2.5);
+        console.log(`[SCREEN] Video resolution for ${userId}: ${w}x${h}, aspect: ${(w/h).toFixed(2)}, largeRes: ${isLarge}`);
+      };
+      
+      // Check now and on metadata loaded (resolution may change with replaceTrack)
+      if (video.readyState >= 2) {
+        checkResolution();
+      }
+      video.onloadedmetadata = checkResolution;
+      video.onresize = checkResolution;
+    }
+    
+    // Add preview toggle button if not exists
+    if (!container.querySelector('.preview-toggle-btn')) {
+      const previewToggleBtn = document.createElement('button');
+      previewToggleBtn.className = 'preview-toggle-btn';
+      previewToggleBtn.innerHTML = '👁️ Превью';
+      previewToggleBtn.title = 'Переключить режим превью (экономия ресурсов)';
+      previewToggleBtn.onclick = () => toggleScreenSharePreview(userId);
+      container.appendChild(previewToggleBtn);
+    }
+    
+    // Add fullscreen button if not exists
+    if (!container.querySelector('.fullscreen-btn')) {
+      const fullscreenBtn = document.createElement('button');
+      fullscreenBtn.className = 'fullscreen-btn';
+      fullscreenBtn.innerHTML = '🔍';
+      fullscreenBtn.title = 'Увеличить демонстрацию экрана';
+      fullscreenBtn.onclick = () => openScreenModal(userId);
+      container.appendChild(fullscreenBtn);
+      
+      if (video) {
+        video.style.cursor = 'pointer';
+        video.title = 'Двойной клик для увеличения';
+        video.ondblclick = () => openScreenModal(userId);
+      }
+    }
+    
+    console.log('[SCREEN] Updated container for screen share:', userId);
+  } else {
+    console.log('[SCREEN] Container not found yet, will be styled when video arrives');
+  }
+});
+
+// Handle remote user screen share stopped
+socket.on('screen-share-stopped', (userId) => {
+  const user = activeUsers.get(userId);
+  const userName = user ? user.name : 'Участник';
+  addLogEntry('Демонстрация', `${userName} остановил демонстрацию экрана`);
+  
+  // Remove from screen share tracking
+  screenShareUsers.delete(userId);
+  
+  // Revert container to normal video mode (don't remove it!)
+  const container = document.getElementById(`video-${userId}`);
+  if (container) {
+    container.classList.remove('screen-share');
+    container.style.cssText = ''; // Clear forced screen share styles
+    
+    const video = container.querySelector('video');
+    if (video) {
+      video.style.cssText = ''; // Clear forced video styles
+      video.style.transform = 'scaleX(-1)'; // Restore mirror for normal camera
+      video.style.objectFit = 'cover';
+    }
+    
+    // Remove screen share specific buttons
+    const previewBtn = container.querySelector('.preview-toggle-btn');
+    if (previewBtn) previewBtn.remove();
+    const fullscreenBtn = container.querySelector('.fullscreen-btn');
+    if (fullscreenBtn) fullscreenBtn.remove();
+  }
+});
+
+// Handle active screen shares when joining room (users already sharing)
+socket.on('active-screen-shares', (userIds) => {
+  console.log('[SCREEN] Received active screen shares on join:', userIds);
+  
+  userIds.forEach(userId => {
+    // Track this user as screen sharing
+    screenShareUsers.add(userId);
+    const user = activeUsers.get(userId);
+    const userName = user ? user.name : 'Участник';
+    addLogEntry('Демонстрация', `${userName} демонстрирует экран`);
+    
+    // Check if video container already exists and add buttons
+    const container = document.getElementById(`video-${userId}`);
+    if (container) {
+      // Add screen-share class
+      container.classList.add('screen-share');
+      
+      // Add preview toggle button if not exists
+      if (!container.querySelector('.preview-toggle-btn')) {
+        const previewToggleBtn = document.createElement('button');
+        previewToggleBtn.className = 'preview-toggle-btn';
+        previewToggleBtn.innerHTML = '👁️ Превью';
+        previewToggleBtn.title = 'Переключить режим превью (экономия ресурсов)';
+        previewToggleBtn.onclick = () => toggleScreenSharePreview(userId);
+        container.appendChild(previewToggleBtn);
+      }
+      
+      // Add fullscreen button if not exists
+      if (!container.querySelector('.fullscreen-btn')) {
+        const fullscreenBtn = document.createElement('button');
+        fullscreenBtn.className = 'fullscreen-btn';
+        fullscreenBtn.innerHTML = '🔍';
+        fullscreenBtn.title = 'Увеличить демонстрацию экрана';
+        fullscreenBtn.onclick = () => openScreenModal(userId);
+        container.appendChild(fullscreenBtn);
+      }
+      
+      // Add double-click handler to video
+      const video = container.querySelector('video');
+      if (video) {
+        video.style.cursor = 'pointer';
+        video.title = 'Двойной клик для увеличения';
+        video.ondblclick = () => openScreenModal(userId);
+        // Refresh video stream by re-setting srcObject
+        const currentStream = video.srcObject;
+        if (currentStream) {
+          video.srcObject = null;
+          setTimeout(() => {
+            video.srcObject = currentStream;
+            video.play().catch(e => console.log('[SCREEN] Refresh play error:', e));
+          }, 100);
+        }
+      }
+    }
+    
+    // Request fresh video stream from server for this user
+    console.log(`[SCREEN] Requesting fresh stream from user: ${userId}`);
+    socket.emit('request-screen-stream', userId);
+  });
+});
+
+// Handle request to refresh screen offer (when new user joins and needs stream)
+socket.on('refresh-screen-offer', async ({ requesterId, targetId }) => {
+  console.log(`[SCREEN] Received refresh request from ${requesterId}, target: ${targetId}`);
+  // Only respond if we are the target and we're screen sharing
+  if (targetId === socket.id && isScreenSharing) {
+    console.log(`[SCREEN] Re-sending screen stream to ${requesterId}`);
+    // Re-create peer connection or re-offer to this specific user
+    const pc = peers.get(requesterId);
+    if (pc) {
+      // Create new offer to trigger renegotiation
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit('offer', requesterId, offer);
+      console.log(`[SCREEN] Re-sent offer to ${requesterId}`);
+    }
+  }
 });
 
 // ========== CONTROLS ==========
@@ -992,6 +1747,11 @@ function toggleMic() {
       } else {
         btn.classList.add('danger');
         btn.querySelector('.label').textContent = 'Мик выкл';
+      }
+      
+      // Notify other users about mic state
+      if (currentRoom) {
+        socket.emit('user-mute-state', { roomId: currentRoom, isMicMuted: !isMicOn });
       }
     }
   }
@@ -1023,68 +1783,205 @@ function toggleCam() {
   }
 }
 
+function toggleSound() {
+  isSoundOn = !isSoundOn;
+  
+  // Play sound effect
+  if (isSoundOn) {
+    sounds.soundOn();
+  } else {
+    sounds.soundOff();
+  }
+  
+  // Update button UI
+  const btn = document.getElementById('soundBtn');
+  const icon = document.getElementById('soundIcon');
+  const label = document.getElementById('soundLabel');
+  
+  if (isSoundOn) {
+    btn.classList.remove('danger');
+    icon.innerHTML = '&#128266;';
+    label.textContent = 'Звук';
+  } else {
+    btn.classList.add('danger');
+    icon.innerHTML = '&#128263;';
+    label.textContent = 'Звук выкл';
+  }
+  
+  // Mute/unmute all remote videos
+  document.querySelectorAll('.video-container:not(.local) video').forEach(video => {
+    video.muted = !isSoundOn;
+  });
+  
+  // Notify other users about sound state
+  if (currentRoom) {
+    socket.emit('user-mute-state', { roomId: currentRoom, isMicMuted: !isMicOn, isSoundMuted: !isSoundOn });
+  }
+}
+
 async function toggleScreen() {
+  console.log('[SCREEN] Toggle called, isScreenSharing:', isScreenSharing);
+  
   if (isScreenSharing) {
+    // Stop screen sharing
     sounds.screenOff();
     
     if (screenStream) {
-      screenStream.getTracks().forEach(t => t.stop());
+      // Remove onended handler before stopping to prevent double toggle
+      screenStream.getVideoTracks().forEach(track => {
+        track.onended = null;
+        track.stop();
+      });
+      screenStream.getAudioTracks().forEach(track => track.stop());
+      screenStream = null;
     }
     
-    const videoTrack = localStream.getVideoTracks()[0];
-    peers.forEach(pc => {
-      const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-      if (sender && videoTrack) {
-        sender.replaceTrack(videoTrack);
-      }
-    });
-    
-    const localContainer = document.getElementById('video-local');
-    if (localContainer) {
-      localContainer.remove();
+    // Replace with camera track
+    const videoTrack = localStream ? localStream.getVideoTracks()[0] : null;
+    if (videoTrack) {
+      peers.forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender && videoTrack) {
+          sender.replaceTrack(videoTrack).catch(err => {
+            console.error('[SCREEN] Error replacing track:', err);
+          });
+        }
+      });
     }
-    addVideoStream('local', localStream, currentUser.username, true, false);
+    
+    // Remove screen share preview window
+    const preview = document.getElementById('screen-share-preview');
+    if (preview) {
+      preview.remove();
+    }
+    
+    // Restore camera preview
+    if (localStream) {
+      addVideoStream('local', localStream, currentUser.username, true, false);
+    }
     
     isScreenSharing = false;
     socket.emit('screen-share-stopped');
     
     const btn = document.getElementById('screenBtn');
-    btn.classList.remove('active');
-    btn.querySelector('.label').textContent = 'Экран';
+    if (btn) {
+      btn.classList.remove('active');
+      const label = btn.querySelector('.label');
+      if (label) label.textContent = 'Экран';
+    }
+    
+    console.log('[SCREEN] Screen sharing stopped');
   } else {
+    // Start screen sharing
     try {
-      screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      console.log('[SCREEN] Starting screen share...');
+      
+      // Request screen share with constraints - allow maximum resolution
+      const constraints = {
+        video: {
+          cursor: 'always',
+          width: { ideal: 3840, max: 3840 }, // Up to 4K
+          height: { ideal: 2160, max: 2160 }
+        },
+        audio: false // Disable audio to reduce bandwidth
+      };
+      
+      screenStream = await navigator.mediaDevices.getDisplayMedia(constraints);
       sounds.screenOn();
       
       const screenTrack = screenStream.getVideoTracks()[0];
-      screenTrack.onended = () => toggleScreen();
+      if (!screenTrack) {
+        throw new Error('No video track in screen share');
+      }
       
+      // Handle when user stops sharing via browser UI
+      screenTrack.onended = () => {
+        console.log('[SCREEN] Track ended via browser');
+        if (isScreenSharing) {
+          toggleScreen();
+        }
+      };
+      
+      // Replace camera track with screen track in all peer connections
       peers.forEach(pc => {
         const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
         if (sender) {
-          sender.replaceTrack(screenTrack);
+          sender.replaceTrack(screenTrack).catch(err => {
+            console.error('[SCREEN] Error replacing track:', err);
+          });
         }
       });
       
+      // Remove local camera preview - no need to see own screen share
       const localContainer = document.getElementById('video-local');
       if (localContainer) {
         localContainer.remove();
       }
-      addVideoStream('local', screenStream, currentUser.username, true, true);
+      
+      // Add small low-res preview window (160x90) - not CPU intensive
+      const previewContainer = document.createElement('div');
+      previewContainer.id = 'screen-share-preview';
+      previewContainer.style.cssText = 'position: absolute; bottom: 80px; right: 20px; width: 160px; height: 90px; z-index: 100; border-radius: 4px; overflow: hidden; border: 2px solid #3ba55d; background: #000;';
+      
+      const previewVideo = document.createElement('video');
+      previewVideo.srcObject = screenStream;
+      previewVideo.autoplay = true;
+      previewVideo.muted = true;
+      previewVideo.playsInline = true;
+      previewVideo.style.cssText = 'width: 100%; height: 100%; object-fit: contain;';
+      // Limit to 5fps to reduce CPU usage
+      previewVideo.playbackRate = 0.1;
+      
+      const previewLabel = document.createElement('div');
+      previewLabel.innerHTML = '🖥️ Демонстрация';
+      previewLabel.style.cssText = 'position: absolute; bottom: 0; left: 0; right: 0; background: rgba(59, 165, 93, 0.9); color: white; padding: 2px 4px; font-size: 10px; text-align: center;';
+      
+      previewContainer.appendChild(previewVideo);
+      previewContainer.appendChild(previewLabel);
+      document.getElementById('videoGrid').appendChild(previewContainer);
       
       isScreenSharing = true;
       socket.emit('screen-share-started');
       
       const btn = document.getElementById('screenBtn');
-      btn.classList.add('active');
-      btn.querySelector('.label').textContent = 'Экран вкл';
+      if (btn) {
+        btn.classList.add('active');
+        const label = btn.querySelector('.label');
+        if (label) label.textContent = 'Экран вкл';
+      }
+      
+      console.log('[SCREEN] Screen sharing started');
     } catch (err) {
-      console.error('Screen share error:', err);
+      console.error('[SCREEN] Error starting screen share:', err);
+      alert('Ошибка при запуске демонстрации: ' + err.message);
     }
   }
 }
 
 // ========== FULLSCREEN SCREEN SHARE ==========
+let currentScreenResolution = '1080p'; // Default resolution
+
+// Toggle screen share between full size and preview/thumbnail mode
+function toggleScreenSharePreview(videoId) {
+  const container = document.getElementById(`video-${videoId}`);
+  if (!container) return;
+  
+  const isPreview = container.classList.contains('preview-mode');
+  const toggleBtn = container.querySelector('.preview-toggle-btn');
+  
+  if (isPreview) {
+    // Switch to full mode
+    container.classList.remove('preview-mode');
+    if (toggleBtn) toggleBtn.innerHTML = '👁️ Превью';
+    console.log('[SCREEN] Switched to full mode for', videoId);
+  } else {
+    // Switch to preview mode (smaller, less CPU usage)
+    container.classList.add('preview-mode');
+    if (toggleBtn) toggleBtn.innerHTML = '🔲 Полный';
+    console.log('[SCREEN] Switched to preview mode for', videoId);
+  }
+}
+
 function openScreenModal(videoId) {
   // Find the screen share video element by id
   const container = document.getElementById(`video-${videoId}`);
@@ -1117,6 +2014,13 @@ function openScreenModal(videoId) {
     flex-direction: column;
   `;
   
+  // Resolution options
+  const resolutions = {
+    '720p': { width: 1280, height: 720, label: 'HD 720p' },
+    '1080p': { width: 1920, height: 1080, label: 'Full HD 1080p' },
+    '1440p': { width: 2560, height: 1440, label: '2K 1440p' }
+  };
+  
   const header = document.createElement('div');
   header.style.cssText = `
     display: flex;
@@ -1127,7 +2031,22 @@ function openScreenModal(videoId) {
     border-bottom: 1px solid #202225;
   `;
   header.innerHTML = `
-    <span style="color: #fff; font-weight: 600;">🖥️ Демонстрация экрана — ${userName}</span>
+    <div style="display: flex; align-items: center; gap: 15px;">
+      <span style="color: #fff; font-weight: 600;">🖥️ Демонстрация — ${userName}</span>
+      <select id="resolutionSelector" onchange="changeScreenResolution(this.value)" style="
+        background: #40444b;
+        color: #fff;
+        border: 1px solid #202225;
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-size: 13px;
+        cursor: pointer;
+      ">
+        <option value="720p" ${currentScreenResolution === '720p' ? 'selected' : ''}>📺 HD 720p (экономично)</option>
+        <option value="1080p" ${currentScreenResolution === '1080p' ? 'selected' : ''}>📺 Full HD 1080p</option>
+        <option value="1440p" ${currentScreenResolution === '1440p' ? 'selected' : ''}>📺 2K 1440p (макс)</option>
+      </select>
+    </div>
     <button onclick="closeScreenModal()" style="
       background: #ed4245;
       color: #fff;
@@ -1140,21 +2059,29 @@ function openScreenModal(videoId) {
   `;
   
   const videoContainer = document.createElement('div');
+  videoContainer.id = 'screenShareVideoContainer';
   videoContainer.style.cssText = `
     flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 20px;
+    overflow: hidden;
   `;
   
   const clonedVideo = document.createElement('video');
+  clonedVideo.id = 'screenShareClonedVideo';
   clonedVideo.srcObject = video.srcObject;
   clonedVideo.autoplay = true;
   clonedVideo.playsInline = true;
+  
+  // Apply resolution constraint - use contain to preserve aspect ratio without cropping
+  const res = resolutions[currentScreenResolution];
   clonedVideo.style.cssText = `
-    width: 100%;
-    height: 100%;
+    max-width: calc(100vw - 40px);
+    max-height: calc(100vh - 80px);
+    width: auto;
+    height: auto;
     object-fit: contain;
   `;
   
@@ -1180,6 +2107,25 @@ function openScreenModal(videoId) {
   document.body.appendChild(modal);
 }
 
+function changeScreenResolution(resolution) {
+  currentScreenResolution = resolution;
+  const resolutions = {
+    '720p': { width: 1280, height: 720 },
+    '1080p': { width: 1920, height: 1080 },
+    '1440p': { width: 2560, height: 1440 }
+  };
+  
+  const video = document.getElementById('screenShareClonedVideo');
+  const container = document.getElementById('screenShareVideoContainer');
+  
+  if (video && container) {
+    const res = resolutions[resolution];
+    video.style.maxWidth = res.width + 'px';
+    video.style.maxHeight = res.height + 'px';
+    console.log('[SCREEN] Resolution changed to:', resolution);
+  }
+}
+
 function closeScreenModal() {
   const modal = document.getElementById('screenShareModal');
   if (modal) {
@@ -1190,6 +2136,12 @@ function closeScreenModal() {
 // ========== CHAT ==========
 
 function addChatMessage(sender, text, isSystem = false, time = null) {
+  // System messages go to system messages area
+  if (isSystem || sender === 'Система') {
+    addSystemMessage(text, time);
+    return;
+  }
+  
   const messages = document.getElementById('chatMessages');
   const msgDiv = document.createElement('div');
   msgDiv.className = 'chat-message';
@@ -1212,14 +2164,420 @@ function addChatMessage(sender, text, isSystem = false, time = null) {
   messages.scrollTop = messages.scrollHeight;
 }
 
+function addSystemMessage(text, time = null) {
+  const systemMessages = document.getElementById('systemMessages');
+  if (!systemMessages) return;
+  
+  const msgDiv = document.createElement('div');
+  msgDiv.className = 'system-message';
+  msgDiv.innerHTML = `
+    <span class="system-time">${time || new Date().toLocaleTimeString()}</span> — ${escapeHtml(text)}
+  `;
+  
+  systemMessages.appendChild(msgDiv);
+  systemMessages.scrollTop = systemMessages.scrollHeight;
+  
+  // Keep only last 20 system messages
+  while (systemMessages.children.length > 20) {
+    systemMessages.removeChild(systemMessages.firstChild);
+  }
+}
+
 function sendMessage() {
   const input = document.getElementById('chatInput');
   const text = input.value.trim();
   if (text && currentRoom) {
-    socket.emit('chat-message', text);
+    // Send to current channel if in a channel, otherwise to room
+    if (currentChannel && currentChannel !== 'general') {
+      socket.emit('channel-message', currentChannel, text);
+    } else {
+      socket.emit('chat-message', text);
+    }
     addChatMessage(currentUser.username, text, false, new Date().toLocaleTimeString());
     input.value = '';
   }
+}
+
+// ========== CHANNEL/SUBGROUP MANAGEMENT ==========
+let currentChannel = 'general';
+let availableChannels = [];
+
+function createChannel() {
+  console.log('[CHANNEL] Creating channel, currentRoom:', currentRoom, 'socketConnected:', socketConnected);
+  if (!currentRoom) {
+    alert('Сначала войдите в комнату');
+    return;
+  }
+  if (!socketConnected) {
+    alert('Нет подключения к серверу');
+    return;
+  }
+  
+  const name = prompt('Введите название канала:');
+  if (!name || !name.trim()) return;
+  
+  console.log('[CHANNEL] Emitting create-channel with name:', name.trim());
+  
+  let hasResponse = false;
+  const timeout = setTimeout(() => {
+    if (!hasResponse) {
+      console.error('[CHANNEL] create-channel timeout - no response from server');
+      alert('Сервер не отвечает. Проверьте консоль сервера.');
+    }
+  }, 5000);
+  
+  socket.emit('create-channel', name.trim(), (response) => {
+    hasResponse = true;
+    clearTimeout(timeout);
+    console.log('[CHANNEL] create-channel response:', response);
+    if (response && response.success) {
+      addLogEntry('Канал', `Создан канал "${response.channelName}"`);
+      switchChannel(response.channelId);
+    } else {
+      alert('Ошибка создания канала: ' + (response?.error || 'Неизвестная ошибка'));
+    }
+  });
+}
+
+function switchChannel(channelId) {
+  console.log('[CHANNEL] Switching to channel:', channelId, 'currentRoom:', currentRoom, 'currentChannel:', currentChannel);
+  if (!currentRoom) {
+    alert('Сначала войдите в комнату');
+    return;
+  }
+  if (!socketConnected) {
+    alert('Нет подключения к серверу');
+    return;
+  }
+  if (channelId === currentChannel) {
+    console.log('[CHANNEL] Already in this channel');
+    return;
+  }
+  
+  socket.emit('join-channel', channelId, (response) => {
+    console.log('[CHANNEL] join-channel response:', response);
+    if (response && response.success) {
+      const oldChannel = currentChannel;
+      currentChannel = channelId;
+      
+      // Update UI
+      document.querySelectorAll('.channel-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.dataset.channel === channelId) {
+          item.classList.add('active');
+        }
+      });
+      
+      // Update chat header
+      const chatHeader = document.querySelector('.chat-header h3');
+      if (chatHeader) {
+        chatHeader.innerHTML = `&#128172; Чат: ${response.channelName}`;
+      }
+      
+      // Clear chat messages when switching channels
+      const chatMessages = document.getElementById('chatMessages');
+      if (chatMessages) {
+        chatMessages.innerHTML = `<div style="text-align: center; padding: 20px; color: #72767d; font-size: 12px;">Вы перешли в канал "${response.channelName}"</div>`;
+      }
+      
+      // Update channel users tracking
+      currentChannelUsers.clear();
+      console.log('[CHANNEL] Server returned channelUsers:', response.channelUsers);
+      
+      let channelUsers = response.channelUsers || [];
+      
+      // Ensure current user is in the list
+      if (!channelUsers.find(u => u.userId === socket.id)) {
+        channelUsers.push({
+          userId: socket.id,
+          userName: currentUser.username
+        });
+        console.log('[CHANNEL] Added current user to channelUsers');
+      }
+      
+      channelUsers.forEach(u => {
+        currentChannelUsers.set(u.userId, u);
+      });
+      
+      console.log('[CHANNEL] Calling updateVideoVisibilityForChannel with', channelUsers.length, 'users');
+      updateVideoVisibilityForChannel(channelUsers);
+      
+      // Update participants list
+      updateChannelParticipants();
+      
+      addLogEntry('Канал', `Перешли в канал "${response.channelName}"`);
+    } else {
+      alert('Ошибка перехода в канал: ' + (response?.error || 'Неизвестная ошибка'));
+    }
+  });
+}
+
+function updateChannelList(channels) {
+  const listEl = document.getElementById('channelList');
+  if (!listEl) {
+    console.error('[CHANNEL] channelList element not found!');
+    return;
+  }
+  
+  console.log('[CHANNEL] Updating channel list with', channels.length, 'channels');
+  availableChannels = channels;
+  
+  let html = '';
+  channels.forEach(ch => {
+    const isActive = ch.channelId === currentChannel;
+    const icon = ch.isGeneral ? '&#128226;' : '&#128172;';
+    html += `
+      <div class="channel-item ${isActive ? 'active' : ''}" data-channel="${ch.channelId}" onclick="switchChannel('${ch.channelId}')">
+        <span class="channel-name">${icon} ${ch.channelName}</span>
+        <span class="channel-users">${ch.userCount}</span>
+      </div>
+    `;
+  });
+  
+  listEl.innerHTML = html;
+}
+
+function loadChannels() {
+  if (!currentRoom) {
+    console.log('[CHANNELS] Cannot load: not in a room');
+    return;
+  }
+  if (!socketConnected) {
+    console.log('[CHANNELS] Cannot load: socket not connected');
+    return;
+  }
+  
+  console.log('[CHANNELS] Loading channels for room:', currentRoom);
+  
+  socket.emit('get-channels', (response) => {
+    console.log('[CHANNELS] Server response:', response);
+    if (response && response.success) {
+      updateChannelList(response.channels);
+      currentChannel = response.currentChannel || 'general';
+      console.log('[CHANNELS] Loaded successfully, currentChannel:', currentChannel);
+    } else {
+      console.error('[CHANNELS] Failed to load:', response?.error || 'Unknown error');
+      // Show default channel even if server fails
+      updateChannelList([{ channelId: 'general', channelName: 'Общий', userCount: 0, isGeneral: true }]);
+    }
+  });
+}
+
+// ========== CHANNEL ISOLATION FUNCTIONS ==========
+
+let currentChannelUsers = new Map(); // Track which users are in current channel
+
+function showUserVideo(userId, show) {
+  const videoContainer = document.getElementById(`video-${userId}`);
+  if (videoContainer) {
+    videoContainer.style.display = show ? 'block' : 'none';
+    console.log(`[CHANNEL] Video for ${userId}: ${show ? 'shown' : 'hidden'}`);
+  }
+}
+
+function updateVideoVisibilityForChannel(channelUsers) {
+  const channelVideoContainer = document.getElementById('channelVideos');
+  const mainVideoGrid = document.getElementById('videoGrid');
+  
+  if (!channelVideoContainer) {
+    console.log('[CHANNEL] channelVideos container not found');
+    return;
+  }
+  
+  // Clear channel video container
+  channelVideoContainer.innerHTML = '';
+  
+  // Get list of user IDs in this channel
+  const userIdsInChannel = new Set(channelUsers.map(u => u.userId));
+  
+  // Move videos of users in this channel to the channel container
+  userIdsInChannel.forEach(userId => {
+    const container = document.getElementById(`video-${userId}`);
+    if (container) {
+      // Clone the video container for channel view
+      const channelVideo = container.cloneNode(true);
+      channelVideo.id = `channel-video-${userId}`;
+      channelVideo.style.display = 'block';
+      
+      // Add username label
+      const user = activeUsers.get(userId);
+      const userName = user ? user.name : (userId === socket.id ? currentUser.username : 'Участник');
+      
+      // Check if username label exists, if not add it
+      if (!channelVideo.querySelector('.video-username')) {
+        const nameLabel = document.createElement('div');
+        nameLabel.className = 'video-username';
+        nameLabel.textContent = userName;
+        channelVideo.appendChild(nameLabel);
+      }
+      
+      channelVideoContainer.appendChild(channelVideo);
+    }
+  });
+  
+  // Also add local video to channel container
+  const localContainer = document.getElementById('video-local');
+  if (localContainer) {
+    const channelLocalVideo = localContainer.cloneNode(true);
+    channelLocalVideo.id = 'channel-video-local';
+    channelLocalVideo.style.display = 'block';
+    
+    if (!channelLocalVideo.querySelector('.video-username')) {
+      const nameLabel = document.createElement('div');
+      nameLabel.className = 'video-username';
+      nameLabel.textContent = currentUser.username + ' (Вы)';
+      channelLocalVideo.appendChild(nameLabel);
+    }
+    
+    channelVideoContainer.appendChild(channelLocalVideo);
+  }
+  
+  // Show/hide the channel video container based on content
+  const channelVideoWrapper = document.getElementById('channelVideoContainer');
+  if (channelVideoWrapper) {
+    channelVideoWrapper.style.display = channelVideoContainer.children.length > 0 ? 'block' : 'none';
+  }
+  
+  console.log(`[CHANNEL] Moved ${channelVideoContainer.children.length} videos to channel container`);
+  
+  // Update channel avatars
+  updateChannelAvatars(channelUsers);
+}
+
+function updateChannelAvatars(channelUsers) {
+  const avatarsContainer = document.getElementById('channelAvatars');
+  const avatarsWrapper = document.getElementById('channelAvatarsContainer');
+  
+  if (!avatarsContainer) return;
+  
+  avatarsContainer.innerHTML = '';
+  
+  // Add current user first
+  const currentUserItem = document.createElement('div');
+  currentUserItem.className = 'channel-avatar-item';
+  const currentAvatarHtml = userAvatar ? 
+    `<img src="${userAvatar}" alt="avatar">` :
+    currentUser.username.charAt(0).toUpperCase();
+  currentUserItem.innerHTML = `
+    <div class="channel-avatar-img you">${currentAvatarHtml}</div>
+    <div class="channel-avatar-name">${currentUser.username} (Вы)</div>
+  `;
+  avatarsContainer.appendChild(currentUserItem);
+  
+  // Add other users in channel
+  channelUsers.forEach(channelUser => {
+    if (channelUser.userId === socket.id) return; // Skip self
+    
+    const user = activeUsers.get(channelUser.userId);
+    const userName = user ? user.name : channelUser.userName;
+    const userAvatarImg = user ? user.avatar : null;
+    
+    const item = document.createElement('div');
+    item.className = 'channel-avatar-item';
+    const avatarHtml = userAvatarImg ? 
+      `<img src="${userAvatarImg}" alt="avatar">` :
+      userName.charAt(0).toUpperCase();
+    item.innerHTML = `
+      <div class="channel-avatar-img">${avatarHtml}</div>
+      <div class="channel-avatar-name">${userName}</div>
+    `;
+    avatarsContainer.appendChild(item);
+  });
+  
+  // Show/hide container based on content
+  if (avatarsWrapper) {
+    avatarsWrapper.style.display = avatarsContainer.children.length > 0 ? 'block' : 'none';
+  }
+  
+  console.log(`[CHANNEL] Showing ${avatarsContainer.children.length} avatars in channel`);
+}
+
+let isUpdatingChannelParticipants = false;
+
+function updateChannelParticipants() {
+  // Prevent concurrent execution
+  if (isUpdatingChannelParticipants) {
+    console.log('[CHANNEL] Skipping duplicate updateChannelParticipants call');
+    return;
+  }
+  isUpdatingChannelParticipants = true;
+  
+  const list = document.getElementById('activeUsers');
+  if (!list) {
+    isUpdatingChannelParticipants = false;
+    return;
+  }
+  
+  // Clear and rebuild the list
+  list.innerHTML = '';
+  
+  // Track unique usernames to prevent duplicates
+  const addedUsernames = new Set();
+  
+  // Local user - always show in participants
+  const localItem = document.createElement('div');
+  localItem.className = 'user-item';
+  localItem.id = 'user-local-item';
+  const avatarHtml = userAvatar ? 
+    `<img src="${userAvatar}" alt="avatar">` :
+    currentUser.username.charAt(0).toUpperCase();
+  localItem.innerHTML = `
+    <div class="user-avatar" id="avatar-local">${avatarHtml}</div>
+    <span class="user-name">${currentUser.username} (Вы)</span>
+    <div class="user-status" id="status-local"></div>
+  `;
+  list.appendChild(localItem);
+  addedUsernames.add(currentUser.username.toLowerCase());
+  
+  // Show only users in current channel (excluding self)
+  currentChannelUsers.forEach((channelUser, userId) => {
+    // Skip self - already added above
+    if (userId === socket.id) return;
+    
+    // Get user info from activeUsers or use channel data
+    const user = activeUsers.get(userId);
+    const userName = user ? user.name : (channelUser.userName || 'Участник');
+    const userAvatar = user ? user.avatar : null;
+    
+    // Also skip if same username as current user (prevents duplicates)
+    if (userName.toLowerCase() === currentUser.username.toLowerCase()) return;
+    
+    const username = userName.toLowerCase();
+    if (addedUsernames.has(username)) return;
+    addedUsernames.add(username);
+    
+    const item = document.createElement('div');
+    item.className = 'user-item';
+    item.id = `user-item-${userId}`;
+    
+    const avatarHtml = userAvatar ? 
+      `<img src="${userAvatar}" alt="avatar">` :
+      userName.charAt(0).toUpperCase();
+    
+    const isMicMuted = user ? user.isMicMuted : false;
+    const isSoundMuted = user ? user.isSoundMuted : false;
+    
+    const micIcon = isMicMuted ? '<span class="user-icon muted" title="Микрофон выключен">🎤❌</span>' : '';
+    const soundIcon = isSoundMuted ? '<span class="user-icon muted" title="Звук выключен">🔇</span>' : '';
+    
+    item.innerHTML = `
+      <div class="user-avatar" id="avatar-${userId}">${avatarHtml}</div>
+      <span class="user-name">${userName}</span>
+      <div class="user-icons">
+        ${micIcon}
+        ${soundIcon}
+        <div class="user-status" id="status-${userId}"></div>
+      </div>
+    `;
+    list.appendChild(item);
+  });
+  
+  // Update user count
+  const userCount = addedUsernames.size;
+  document.getElementById('userCount').textContent = userCount;
+  
+  // Reset guard flag
+  isUpdatingChannelParticipants = false;
 }
 
 function escapeHtml(text) {
@@ -1347,6 +2705,11 @@ function addLogEntry(category, message) {
     logs.shift();
   }
   
+  // Show in room system messages if in a room
+  if (currentRoom) {
+    addSystemMessage(`[${category}] ${message}`, timestamp);
+  }
+  
   // Update log display if settings panel is open
   const logContainer = document.getElementById('logContainer');
   if (logContainer) {
@@ -1376,6 +2739,8 @@ function clearAllCache() {
     location.reload();
   }
 }
+
+// Admin panel functions are now in admin.js
 
 window.addEventListener('beforeunload', () => {
   if (localStream) {
