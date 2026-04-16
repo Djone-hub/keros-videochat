@@ -747,6 +747,29 @@ function showRoomUI() {
   startPingMeasurement();
 }
 
+function resetRoomStateAndUI() {
+  // Close peer connections
+  peers.forEach(pc => pc.close());
+  peers.clear();
+  activeUsers.clear();
+  screenShareUsers.clear(); // Clear screen share tracking
+
+  // Reset state
+  currentRoom = null;
+  isMicOn = true;
+  isCamOn = true;
+  isScreenSharing = false;
+
+  // Clear UI
+  document.getElementById('videoGrid').innerHTML = '';
+  document.getElementById('chatMessages').innerHTML = '';
+
+  // Reset buttons
+  document.getElementById('micBtn').classList.remove('danger');
+  document.getElementById('camBtn').classList.remove('danger');
+  document.getElementById('screenBtn').classList.remove('active');
+}
+
 function leaveRoom() {
   // Stop streams
   if (localStream) {
@@ -758,40 +781,12 @@ function leaveRoom() {
     screenStream = null;
   }
   
-  // Close peer connections
-  peers.forEach(pc => pc.close());
-  peers.clear();
-  activeUsers.clear();
-  screenShareUsers.clear(); // Clear screen share tracking
-  
   // Stop ping measurement
   stopPingMeasurement();
   
   // Leave socket room
   socket.emit('leave-room', currentRoom);
-  
-  // Reset state
-  currentRoom = null;
-  isMicOn = true;
-  isCamOn = true;
-  isScreenSharing = false;
-  
-  // Clear UI
-  document.getElementById('videoGrid').innerHTML = '';
-  document.getElementById('chatMessages').innerHTML = '';
-  
-  // Reset buttons
-  const micBtn = document.getElementById('micBtn');
-  micBtn.classList.remove('danger');
-  micBtn.querySelector('.label').textContent = 'Мик';
-  
-  const camBtn = document.getElementById('camBtn');
-  camBtn.classList.remove('danger');
-  camBtn.querySelector('.label').textContent = 'Камера';
-  
-  const screenBtn = document.getElementById('screenBtn');
-  screenBtn.classList.remove('active');
-  screenBtn.querySelector('.label').textContent = 'Экран';
+  resetRoomStateAndUI();
   
   // Show settings panel if open
   document.getElementById('settingsPanel').classList.remove('active');
@@ -805,34 +800,7 @@ function disconnectAndJoinAnother() {
   // Leave socket room
   socket.emit('leave-room', currentRoom);
   
-  // Close peer connections but keep streams
-  peers.forEach(pc => pc.close());
-  peers.clear();
-  activeUsers.clear();
-  screenShareUsers.clear(); // Clear screen share tracking
-  
-  // Reset state
-  currentRoom = null;
-  isMicOn = true;
-  isCamOn = true;
-  isScreenSharing = false;
-  
-  // Clear UI
-  document.getElementById('videoGrid').innerHTML = '';
-  document.getElementById('chatMessages').innerHTML = '';
-  
-  // Reset buttons
-  const micBtn = document.getElementById('micBtn');
-  micBtn.classList.remove('danger');
-  micBtn.querySelector('.label').textContent = 'Мик';
-  
-  const camBtn = document.getElementById('camBtn');
-  camBtn.classList.remove('danger');
-  camBtn.querySelector('.label').textContent = 'Камера';
-  
-  const screenBtn = document.getElementById('screenBtn');
-  screenBtn.classList.remove('active');
-  screenBtn.querySelector('.label').textContent = 'Экран';
+  resetRoomStateAndUI();
   
   // Show settings panel if open
   document.getElementById('settingsPanel').classList.remove('active');
