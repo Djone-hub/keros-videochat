@@ -928,6 +928,7 @@
       <div class="user-info">
         <div class="avatar" id="lobbyAvatar">Я</div>
         <span id="lobbyUsername">Пользователь</span>
+        <button onclick="showAdminPanel()" style="background: #5865f2; margin-right: 8px;">⚙️ Админ</button>
         <button onclick="logout()">Выйти</button>
       </div>
     </div>
@@ -1091,6 +1092,35 @@
     </div>
   </div>
   
+  <!-- Admin Panel Modal -->
+  <div id="adminPanelModal" class="modal">
+    <div class="modal-content" style="max-width: 800px; width: 90%;">
+      <div class="modal-header">
+        <h3>⚙️ Панель администратора</h3>
+        <button class="modal-close" onclick="hideAdminPanel()">&times;</button>
+      </div>
+      <div style="padding: 20px;">
+        <div style="margin-bottom: 20px;">
+          <h4 style="color: #fff; margin-bottom: 10px;">📊 Статистика</h4>
+          <div id="adminStats" style="color: #b9bbbe; font-size: 14px;">
+            Загрузка...
+          </div>
+        </div>
+        <div>
+          <h4 style="color: #fff; margin-bottom: 10px;">🏠 Все комнаты</h4>
+          <div id="adminRoomList" style="max-height: 400px; overflow-y: auto;">
+            Загрузка...
+          </div>
+        </div>
+        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #202225;">
+          <button onclick="forceRefreshRooms()" style="padding: 8px 16px; background: #5865f2; color: #fff; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">🔄 Обновить список</button>
+          <button onclick="clearGhostRooms()" style="padding: 8px 16px; background: #faa81a; color: #000; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">👻 Очистить призраки</button>
+          <button onclick="deleteAllEmptyRooms()" style="padding: 8px 16px; background: #ed4245; color: #fff; border: none; border-radius: 4px; cursor: pointer;">🗑️ Удалить пустые</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="app.js"></script>
 </body>

@@ -39,12 +39,24 @@ let screenShareUsers = new Set(); // Track which remote users are screen sharing
 
 // Ping measurement function
 function measurePing() {
-  if (!socketConnected) return;
+  if (!socketConnected) {
+    console.log('[PING] Socket not connected, skipping');
+    return;
+  }
   
   const startTime = Date.now();
-  socket.emit('ping-check', (serverTime) => {
+  console.log('[PING] Sending ping...');
+  
+  socket.timeout(5000).emit('ping-check', (err, serverTime) => {
+    if (err) {
+      console.log('[PING] Error or timeout:', err);
+      currentPing = 0;
+      updatePingDisplay();
+      return;
+    }
     const endTime = Date.now();
     currentPing = endTime - startTime;
+    console.log('[PING] Received pong, latency:', currentPing, 'ms');
     updatePingDisplay();
   });
 }
@@ -578,14 +590,19 @@ function deleteRoom(roomId) {
   const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
   const filteredRooms = rooms.filter(r => r.id !== roomId);
   
+  // Always update localStorage if room was found
   if (filteredRooms.length !== rooms.length) {
     localStorage.setItem('keroschat_rooms', JSON.stringify(filteredRooms));
-    // Notify server to delete room
-    socket.emit('delete-room', roomId);
-    loadServerRooms();
-    addLogEntry('Комната', `Комната ${roomId} удалена`);
-    alert('Комната удалена!');
+    console.log(`[DELETE] Room ${roomId} removed from localStorage`);
   }
+  
+  // Always notify server to delete (even if not in localStorage, might be on server)
+  socket.emit('delete-room', roomId);
+  
+  // Reload room list immediately
+  loadServerRooms();
+  addLogEntry('Комната', `Комната ${roomId} удалена`);
+  alert('Комната удалена!');
 }
 
 function showCreateRoomModal() {
@@ -1644,6 +1661,164 @@ function clearAllCache() {
     alert('Кэш очищен! Страница перезагрузится.');
     location.reload();
   }
+}
+
+// ========== ADMIN PANEL ==========
+function showAdminPanel() {
+  document.getElementById('adminPanelModal').classList.add('active');
+  renderAdminPanel();
+}
+
+function hideAdminPanel() {
+  document.getElementById('adminPanelModal').classList.remove('active');
+}
+
+function renderAdminPanel() {
+  // Load all rooms from server
+  fetch('/api/rooms')
+    .then(res => res.json())
+    .then(rooms => {
+      // Stats
+      const activeRooms = rooms.filter(r => r.active).length;
+      const emptyRooms = rooms.filter(r => r.userCount === 0).length;
+      const ghostRooms = rooms.filter(r => r.id === r.name && /^[A-Z0-9]{8}$/.test(r.id)).length;
+      
+      document.getElementById('adminStats').innerHTML = `
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+          <div style="background: #40444b; padding: 10px; border-radius: 4px; text-align: center;">
+            <div style="font-size: 24px; color: #fff; font-weight: bold;">${rooms.length}</div>
+            <div style="font-size: 12px;">Всего комнат</div>
+          </div>
+          <div style="background: #40444b; padding: 10px; border-radius: 4px; text-align: center;">
+            <div style="font-size: 24px; color: #3ba55d; font-weight: bold;">${activeRooms}</div>
+            <div style="font-size: 12px;">Активных</div>
+          </div>
+          <div style="background: #40444b; padding: 10px; border-radius: 4px; text-align: center;">
+            <div style="font-size: 24px; color: #faa81a; font-weight: bold;">${emptyRooms}</div>
+            <div style="font-size: 12px;">Пустых</div>
+          </div>
+        </div>
+        ${ghostRooms > 0 ? `<div style="margin-top: 10px; color: #ed4245;">⚠️ Найдено ${ghostRooms} призрачных комнат</div>` : ''}
+      `;
+      
+      // Room list
+      const listHtml = rooms.map(room => {
+        const isGhost = room.id === room.name && /^[A-Z0-9]{8}$/.test(room.id);
+        const statusColor = room.active ? '#3ba55d' : '#72767d';
+        const userText = room.userCount > 0 ? `${room.userCount} участников` : 'пустая';
+        
+        return `
+          <div style="background: ${isGhost ? '#3a1c1c' : '#40444b'}; padding: 12px; margin-bottom: 8px; border-radius: 4px; border-left: 3px solid ${statusColor};">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="color: #fff; font-weight: 600;">${room.name} ${isGhost ? '👻' : ''}</div>
+                <div style="color: #b9bbbe; font-size: 12px; margin-top: 2px;">
+                  ID: ${room.id} | ${userText} | Создатель: ${room.creator || 'неизвестен'}
+                </div>
+                ${room.users && room.users.length > 0 ? `
+                  <div style="color: #72767d; font-size: 11px; margin-top: 4px;">
+                    👤 ${room.users.join(', ')}
+                  </div>
+                ` : ''}
+              </div>
+              <div>
+                <button onclick="adminDeleteRoom('${room.id}')" style="padding: 6px 12px; background: #ed4245; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">🗑️ Удалить</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+      document.getElementById('adminRoomList').innerHTML = listHtml || '<div style="color: #72767d; text-align: center; padding: 20px;">Нет комнат</div>';
+    })
+    .catch(err => {
+      console.error('Error loading admin data:', err);
+      document.getElementById('adminStats').innerHTML = '<span style="color: #ed4245;">Ошибка загрузки</span>';
+      document.getElementById('adminRoomList').innerHTML = '<span style="color: #ed4245;">Ошибка загрузки списка комнат</span>';
+    });
+}
+
+function adminDeleteRoom(roomId) {
+  if (!confirm(`Удалить комнату ${roomId}?\n\nЭто действие нельзя отменить!`)) return;
+  
+  // Delete from localStorage
+  const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+  const filtered = rooms.filter(r => r.id !== roomId);
+  localStorage.setItem('keroschat_rooms', JSON.stringify(filtered));
+  
+  // Notify server
+  socket.emit('delete-room', roomId);
+  
+  // Refresh display
+  setTimeout(renderAdminPanel, 500);
+  addLogEntry('Админ', `Комната ${roomId} удалена администратором`);
+}
+
+function forceRefreshRooms() {
+  isLoadingRooms = false;
+  lastLoadTime = 0;
+  loadServerRooms();
+  renderAdminPanel();
+  addLogEntry('Админ', 'Принудительное обновление списка комнат');
+}
+
+function clearGhostRooms() {
+  const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+  const ghostIds = rooms
+    .filter(r => r.id === r.name && /^[A-Z0-9]{8}$/.test(r.id))
+    .map(r => r.id);
+  
+  if (ghostIds.length === 0) {
+    alert('Призрачных комнат не найдено!');
+    return;
+  }
+  
+  if (!confirm(`Найдено ${ghostIds.length} призрачных комнат. Удалить их из локального хранилища?`)) return;
+  
+  const filtered = rooms.filter(r => !ghostIds.includes(r.id));
+  localStorage.setItem('keroschat_rooms', JSON.stringify(filtered));
+  
+  // Also notify server to delete
+  ghostIds.forEach(id => socket.emit('delete-room', id));
+  
+  renderAdminPanel();
+  loadServerRooms();
+  addLogEntry('Админ', `Очищено ${ghostIds.length} призрачных комнат`);
+  alert(`Очищено ${ghostIds.length} призрачных комнат!`);
+}
+
+function deleteAllEmptyRooms() {
+  fetch('/api/rooms')
+    .then(res => res.json())
+    .then(rooms => {
+      const emptyRooms = rooms.filter(r => r.userCount === 0);
+      
+      if (emptyRooms.length === 0) {
+        alert('Пустых комнат не найдено!');
+        return;
+      }
+      
+      if (!confirm(`Найдено ${emptyRooms.length} пустых комнат. Удалить их?\n\n${emptyRooms.map(r => r.name).join(', ')}`)) return;
+      
+      // Delete all empty rooms
+      emptyRooms.forEach(room => {
+        // Delete from localStorage
+        const localRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+        const filtered = localRooms.filter(r => r.id !== room.id);
+        localStorage.setItem('keroschat_rooms', JSON.stringify(filtered));
+        
+        // Notify server
+        socket.emit('delete-room', room.id);
+      });
+      
+      setTimeout(() => {
+        renderAdminPanel();
+        loadServerRooms();
+      }, 500);
+      
+      addLogEntry('Админ', `Удалено ${emptyRooms.length} пустых комнат`);
+      alert(`Удалено ${emptyRooms.length} пустых комнат!`);
+    });
 }
 
 window.addEventListener('beforeunload', () => {
