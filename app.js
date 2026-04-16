@@ -4,7 +4,10 @@ let socketConnected = false;
 
 // Socket connection event
 socket.on('connect', () => {
-  console.log('Connected to server');
+  // Connected - only log on localhost
+  if (window.location.hostname === 'localhost') {
+    console.log('Connected to server');
+  }
   socketConnected = true;
   // If lobby is already visible, reload rooms
   const lobbyScreen = document.getElementById('lobbyScreen');
@@ -258,7 +261,19 @@ function showLobby() {
 // Store server rooms
 let serverRooms = [];
 
+// Prevent multiple simultaneous loads
+let isLoadingRooms = false;
+let lastLoadTime = 0;
+
 async function loadServerRooms() {
+  // Debounce: don't reload if loaded in last 2 seconds
+  const now = Date.now();
+  if (isLoadingRooms || (now - lastLoadTime < 2000)) {
+    console.log('[ROOMS] Skip reload - already loading or loaded recently');
+    return;
+  }
+  
+  isLoadingRooms = true;
   const list = document.getElementById('roomsList');
   list.innerHTML = '<p style="color: #72767d; padding: 16px; text-align: center;">⏳ Загрузка комнат...</p>';
   
@@ -267,10 +282,14 @@ async function loadServerRooms() {
     const response = await fetch('/api/rooms');
     if (!response.ok) throw new Error('Failed to fetch rooms');
     serverRooms = await response.json();
-    console.log('Loaded rooms from server:', serverRooms.length);
+    // Only log in development
+    if (window.location.hostname === 'localhost') {
+      console.log('Loaded rooms from server:', serverRooms.length);
+    }
   } catch (err) {
     console.error('Error loading rooms:', err);
     serverRooms = [];
+    isLoadingRooms = false; // Reset on error
   }
   
   // Get local rooms and clean up those not on server (old/deleted)
@@ -321,6 +340,10 @@ async function loadServerRooms() {
   });
   
   renderRoomsList(allRooms);
+  
+  // Reset loading state
+  isLoadingRooms = false;
+  lastLoadTime = Date.now();
 }
 
 function renderRoomsList(roomsToRender) {
@@ -794,6 +817,11 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
       fullscreenBtn.title = 'Увеличить демонстрацию экрана';
       fullscreenBtn.onclick = () => openScreenModal(id);
       container.appendChild(fullscreenBtn);
+      
+      // Double-click on video to enlarge screen share
+      video.style.cursor = 'pointer';
+      video.title = 'Двойной клик для увеличения';
+      video.ondblclick = () => openScreenModal(id);
     }
     
     container.appendChild(video);
@@ -959,20 +987,22 @@ socket.on('room-info', (room) => {
 });
 
 socket.on('users-in-room', async (users) => {
-  console.log('Users in room:', users.length, users);
-  addLogEntry('Отладка', `Получен список пользователей: ${users.length}`);
+  // Users list received - debug minimized
+  // console.log('Users in room:', users.length);
   for (const user of users) {
     // Skip if already connected to this user
     if (activeUsers.has(user.id) || peers.has(user.id)) {
-      console.log('Already connected to user:', user.id, 'skipping...');
+      // Already connected, skip
       continue;
     }
-    console.log('Creating peer connection for user:', user.id);
+    // Debug disabled for performance
+  // console.log('Creating peer connection for user:', user.id);
     activeUsers.set(user.id, user);
     const pc = await createPeerConnection(user.id);
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    console.log('Sending offer to:', user.id);
+    // Debug disabled
+    // console.log('Sending offer to:', user.id);
     socket.emit('offer', user.id, offer);
   }
   updateActiveUsers();
@@ -980,7 +1010,7 @@ socket.on('users-in-room', async (users) => {
 
 // Listen for room list updates from server
 socket.on('rooms-updated', () => {
-  console.log('Rooms updated, refreshing list...');
+  // Rooms updated - refresh quietly
   // Refresh room list if in lobby
   const lobbyScreen = document.getElementById('lobbyScreen');
   if (lobbyScreen && lobbyScreen.style.display === 'flex') {
@@ -1012,7 +1042,8 @@ socket.on('user-joined', async (user) => {
     console.log('User already connected:', user.id);
     return;
   }
-  console.log('[AVATAR] User joined:', user.name, 'has avatar:', !!user.avatar);
+  // Avatar sync debug - disabled for production performance
+  // console.log('[AVATAR] User joined:', user.name, 'has avatar:', !!user.avatar);
   sounds.userJoin();
   activeUsers.set(user.id, user);
   addChatMessage('Система', `${user.name} присоединился`, true);
@@ -1029,40 +1060,41 @@ socket.on('user-left', (userId) => {
     peers.delete(userId);
   }
   activeUsers.delete(userId);
-  addChatMessage('Система', 'Участник вышел', true);
-  addLogEntry('Пользователи', `${user ? user.name : 'Участник'} покинул комнату`);
+  const userName = user ? user.name : 'Участник';
+  addChatMessage('Система', `${userName} вышел`, true);
+  addLogEntry('Пользователи', `${userName} покинул комнату`);
   updateActiveUsers();
 });
 
 socket.on('offer', async (userId, offer) => {
-  console.log('Received offer from:', userId);
-  addLogEntry('Отладка', `Получен offer от ${userId}`);
+  // Offer received - debug disabled
+  // console.log('Received offer from:', userId);
   const pc = await createPeerConnection(userId);
   await pc.setRemoteDescription(offer);
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
-  console.log('Sending answer to:', userId);
+  // Answer sent
   socket.emit('answer', userId, answer);
   updateActiveUsers();
 });
 
 socket.on('answer', async (userId, answer) => {
-  console.log('Received answer from:', userId);
-  addLogEntry('Отладка', `Получен answer от ${userId}`);
+  // Answer received - debug disabled
+  // console.log('Received answer from:', userId);
   if (peers.has(userId)) {
     await peers.get(userId).setRemoteDescription(answer);
-    console.log('Set remote description for:', userId);
+    // Remote description set
   } else {
-    console.warn('No peer connection for answer from:', userId);
+    // No peer for answer
   }
 });
 
 socket.on('ice-candidate', async (userId, candidate) => {
-  console.log('Received ICE candidate from:', userId);
+  // ICE candidate received - too verbose, disabled
   if (peers.has(userId)) {
     await peers.get(userId).addIceCandidate(new RTCIceCandidate(candidate));
   } else {
-    console.warn('No peer connection for ICE from:', userId);
+    // No peer for ICE
   }
 });
 
@@ -1072,7 +1104,8 @@ socket.on('chat-message', (msg) => {
 
 // Handle remote user screen share started
 socket.on('screen-share-started', (userId) => {
-  console.log('[SCREEN] Remote user started screen share:', userId);
+  // Screen share started - debug disabled
+  // console.log('[SCREEN] Remote user started screen share:', userId);
   addLogEntry('Демонстрация', 'Пользователь начал демонстрацию экрана');
   // The screen share video will come through WebRTC ontrack event
   // Fullscreen button will be added automatically in addVideoStream when isScreenShare=true and isLocal=false
@@ -1080,7 +1113,8 @@ socket.on('screen-share-started', (userId) => {
 
 // Handle remote user screen share stopped
 socket.on('screen-share-stopped', (userId) => {
-  console.log('[SCREEN] Remote user stopped screen share:', userId);
+  // Screen share stopped - debug disabled
+  // console.log('[SCREEN] Remote user stopped screen share:', userId);
   addLogEntry('Демонстрация', 'Пользователь остановил демонстрацию экрана');
   // Remove the screen share video container
   const container = document.getElementById(`video-${userId}`);
