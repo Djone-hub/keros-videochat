@@ -850,7 +850,7 @@ async function joinRoomById(roomId) {
   }
   
   // Join socket room with avatar, room name and room avatar
-  socket.emit('join-room', roomId, currentUser.username, userAvatar, currentRoomName, roomAvatar);
+  socket.emit('join-room', roomId, currentUser.username, userAvatar, currentRoomName, currentRoomAvatar);
   
   // Play sound for local user entering room
   sounds.userJoin();
