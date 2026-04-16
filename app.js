@@ -9,21 +9,35 @@ socket.on('connect', () => {
     console.log('Connected to server');
   }
   socketConnected = true;
-  
+
   // Sync registered users from localStorage to server
   const localUsers = JSON.parse(localStorage.getItem('keroschat_users') || '[]');
   const currentUserData = JSON.parse(localStorage.getItem('keroschat_user') || '{}');
-  
+
   // Send all registered users to server
   localUsers.forEach(u => {
     const avatar = localStorage.getItem(`keroschat_avatar_${u.username}`);
-    socket.emit('user-registered', { 
-      username: u.username, 
+    socket.emit('user-registered', {
+      username: u.username,
       avatar: avatar,
       isOnline: currentUserData.username === u.username
     });
   });
-  
+
+  // REJOIN ROOM: If we were in a room, rejoin to restore socket.roomId on server
+  if (currentRoom && currentUser && currentUser.username) {
+    console.log('[RECONNECT] Rejoining room after reconnect:', currentRoom);
+    socket.emit('join-room', currentRoom, currentUser.username, userAvatar, currentRoomName, currentRoomAvatar, (response) => {
+      if (response && response.success) {
+        console.log('[RECONNECT] Successfully rejoined room:', currentRoom);
+        // Reload channels after rejoin
+        loadChannels();
+      } else {
+        console.error('[RECONNECT] Failed to rejoin room:', response?.error);
+      }
+    });
+  }
+
   // If lobby is already visible, reload rooms and users
   const lobbyScreen = document.getElementById('lobbyScreen');
   if (lobbyScreen && lobbyScreen.style.display === 'flex') {
@@ -46,6 +60,7 @@ socket.on('users-updated', () => {
 let currentUser = null;
 let currentRoom = null;
 let currentRoomName = '';
+let currentRoomAvatar = null;
 let localStream = null;
 let screenStream = null;
 let peers = new Map();
@@ -808,8 +823,8 @@ async function joinRoomById(roomId) {
   const serverRoom = serverRooms.find(r => r.id === roomId);
   const room = localRoom || serverRoom;
   currentRoomName = room ? room.name : roomId;
-  const roomAvatar = room ? room.avatar : null;
-  
+  currentRoomAvatar = room ? room.avatar : null;
+
   addLogEntry('Комната', `"${currentRoomName}" - вы подключились`);
   
   // Request media
