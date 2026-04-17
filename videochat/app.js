@@ -10,24 +10,8 @@ socket.on('connect', () => {
   }
   socketConnected = true;
 
-  // Sync registered users from localStorage to server
-  const localUsers = JSON.parse(localStorage.getItem('keroschat_users') || '[]');
-  const currentUserData = JSON.parse(localStorage.getItem('keroschat_user') || '{}');
-
-  // Send all registered users to server
-  localUsers.forEach(u => {
-    if (!u.username) {
-      console.warn('Skipping user without username:', u);
-      return;
-    }
-    const avatar = localStorage.getItem(`keroschat_avatar_${u.username}`);
-    socket.emit('user-registered', {
-      username: u.username,
-      avatar: avatar,
-      isOnline: currentUserData.username === u.username,
-      password: u.password
-    });
-  });
+  // NOTE: Removed local users sync to prevent password overwrite
+  // Users are now stored in Supabase, no need to sync from localStorage
 
   // REJOIN ROOM: If we were in a room, rejoin to restore socket.roomId on server
   if (currentRoom && currentUser && currentUser.username) {
