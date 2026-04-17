@@ -1498,8 +1498,8 @@ async function createPeerConnection(userId) {
     const settings = videoTrack?.getSettings();
     const width = settings?.width || 0;
     const height = settings?.height || 0;
-    // Screen share typically has 16:9 or wider aspect ratio, or high resolution
-    const isScreenByResolution = width >= 1280 || (width > 0 && width/height > 1.5);
+    // Screen share typically has 16:9 or wider aspect ratio, or high resolution (reverted to less strict)
+    const isScreenByResolution = width >= 720 || (width > 0 && width/height > 1.3);
     
     console.log(`[TRACK] Video settings for ${userId}:`, width, 'x', height, 'aspect:', width/height);
     
@@ -2164,15 +2164,12 @@ async function toggleScreen() {
         return;
       }
 
-      // Request screen share with constraints - 1080p max for better mobile compatibility
+      // Request screen share with original constraints
       const constraints = {
         video: {
-          cursor: 'always',
-          width: { ideal: 1920, max: 1920 }, // 1080p max for mobile compatibility
-          height: { ideal: 1080, max: 1080 },
-          frameRate: { ideal: 30, max: 30 } // 30fps for better performance
+          cursor: 'always'
         },
-        audio: false // Disable audio to reduce bandwidth
+        audio: false
       };
 
       screenStream = await navigator.mediaDevices.getDisplayMedia(constraints);
