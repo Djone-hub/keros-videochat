@@ -1466,12 +1466,12 @@ async function createPeerConnection(userId) {
       videoTrack.label.toLowerCase().includes('window')
     );
     
-    // Detect screen share by settings (screen share usually has higher resolution)
+    // Detect screen share by settings (screen share usually has higher resolution or aspect ratio)
     const settings = videoTrack?.getSettings();
     const width = settings?.width || 0;
     const height = settings?.height || 0;
-    // Screen share typically has resolution matching monitor (>1920x1080 common)
-    const isScreenByResolution = width > 1920 || height > 1080 || (width > 0 && width/height > 2.5);
+    // Screen share typically has 16:9 or wider aspect ratio, or high resolution
+    const isScreenByResolution = width >= 1280 || (width > 0 && width/height > 1.5);
     
     console.log(`[TRACK] Video settings for ${userId}:`, width, 'x', height, 'aspect:', width/height);
     
@@ -1796,7 +1796,7 @@ socket.on('screen-share-started', (userId) => {
       const checkResolution = () => {
         const w = video.videoWidth;
         const h = video.videoHeight;
-        const isLarge = w > 1920 || h > 1080 || (w > 0 && w/h > 2.5);
+        const isLarge = w >= 1280 || (w > 0 && w/h > 1.5);
         console.log(`[SCREEN] Video resolution for ${userId}: ${w}x${h}, aspect: ${(w/h).toFixed(2)}, largeRes: ${isLarge}`);
       };
       
@@ -2136,12 +2136,13 @@ async function toggleScreen() {
         return;
       }
 
-      // Request screen share with constraints - allow maximum resolution
+      // Request screen share with constraints - 1080p max for better mobile compatibility
       const constraints = {
         video: {
           cursor: 'always',
-          width: { ideal: 3840, max: 3840 }, // Up to 4K
-          height: { ideal: 2160, max: 2160 }
+          width: { ideal: 1920, max: 1920 }, // 1080p max for mobile compatibility
+          height: { ideal: 1080, max: 1080 },
+          frameRate: { ideal: 30, max: 30 } // 30fps for better performance
         },
         audio: false // Disable audio to reduce bandwidth
       };
