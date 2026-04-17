@@ -270,6 +270,7 @@ function startMicLevelMonitoring() {
     const source = audioContext.createMediaStreamSource(localStream);
     const analyzer = audioContext.createAnalyser();
     analyzer.fftSize = 256;
+    analyzer.smoothingTimeConstant = 0.8; // Smoother transitions
     source.connect(analyzer);
     micLevelAnalyzer = analyzer;
 
@@ -278,13 +279,14 @@ function startMicLevelMonitoring() {
     micLevelInterval = setInterval(() => {
       analyzer.getByteFrequencyData(dataArray);
 
-      // Calculate average volume
+      // Calculate average volume with increased sensitivity
       let sum = 0;
       for (let i = 0; i < dataArray.length; i++) {
         sum += dataArray[i];
       }
       const average = sum / dataArray.length;
-      const level = Math.min(100, Math.round((average / 128) * 100));
+      // Increase sensitivity: multiply by 2.5 to use full range
+      const level = Math.min(100, Math.round((average / 128) * 100 * 2.5));
 
       // Update UI
       updateMicLevelIndicator(level);
@@ -318,17 +320,38 @@ function updateMicLevelIndicator(level) {
   const indicator = document.getElementById('micLevelIndicator');
   if (!indicator) return;
 
-  // Create bars based on level
+  // Create bars based on level (increased sensitivity to use all 5 bars)
   const barsCount = 5;
-  const activeBars = Math.ceil((level / 100) * barsCount);
+  // Use logarithmic scale for better sensitivity: level 0-100 maps to 0-5 bars
+  // Level 0-10: 1 bar, 10-30: 2 bars, 30-50: 3 bars, 50-70: 4 bars, 70-100: 5 bars
+  let activeBars;
+  if (level < 10) activeBars = 1;
+  else if (level < 30) activeBars = 2;
+  else if (level < 50) activeBars = 3;
+  else if (level < 70) activeBars = 4;
+  else activeBars = 5;
+
   let html = '';
 
   for (let i = 0; i < barsCount; i++) {
     const isActive = i < activeBars;
-    const color = isActive ? (level > 80 ? '#ed4245' : level > 50 ? '#faa61a' : '#3ba55d') : '#40444b';
+    const color = isActive ? (level > 80 ? '#ed4245' : level > 60 ? '#faa61a' : '#3ba55d') : '#40444b';
     html += `<div style="width: 8px; height: 4px; background: ${color}; border-radius: 2px;"></div>`;
   }
 
+  indicator.innerHTML = html;
+}
+
+// Reset mic level indicator to default state
+function resetMicLevelIndicator() {
+  const indicator = document.getElementById('micLevelIndicator');
+  if (!indicator) return;
+
+  const barsCount = 5;
+  let html = '';
+  for (let i = 0; i < barsCount; i++) {
+    html += `<div style="width: 8px; height: 4px; background: #40444b; border-radius: 2px;"></div>`;
+  }
   indicator.innerHTML = html;
 }
 
@@ -3179,6 +3202,8 @@ function toggleSettings() {
   } else {
     // Stop monitoring when closing settings
     stopMicLevelMonitoring();
+    // Reset indicator to default state
+    resetMicLevelIndicator();
   }
 }
 
