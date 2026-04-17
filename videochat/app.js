@@ -2,23 +2,6 @@
 const socket = io();
 let socketConnected = false;
 
-// Hide screen share button on mobile devices (getDisplayMedia not supported)
-if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-  // Hide screen button when DOM is ready
-  const hideScreenBtn = () => {
-    const screenBtn = document.getElementById('screenBtn');
-    if (screenBtn) {
-      screenBtn.style.display = 'none';
-      console.log('[SCREEN] Screen share button hidden - not supported on this device');
-    }
-  };
-  // Try immediately, also on DOMContentLoaded
-  hideScreenBtn();
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', hideScreenBtn);
-  }
-}
-
 // Socket connection event
 socket.on('connect', () => {
   // Connected - only log on localhost
