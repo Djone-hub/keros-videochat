@@ -215,7 +215,7 @@ app.post('/api/login', (req, res) => {
 
   if (user && user.password === password) {
     console.log(`[LOGIN] SUCCESS: ${username}`);
-    res.json({ success: true, user: { username: user.username, name: user.name, avatar: user.avatar } });
+    res.json({ success: true, user: { username: user.username, name: user.name, avatar: user.avatar, role: user.role || 'user' } });
   } else {
     console.log(`[LOGIN] FAILED: ${username} - user not found or wrong password`);
     res.status(401).json({ success: false, message: 'Invalid username or password' });

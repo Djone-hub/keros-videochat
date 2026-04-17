@@ -402,10 +402,16 @@ function renderAdminUsersList(users) {
   const listHtml = uniqueUsers.map(user => {
     const statusColor = user.isOnline ? '#3ba55d' : '#72767d';
     const statusText = user.isOnline ? '🟢 В сети' : '⚪ Не в сети';
-    const avatarHtml = user.avatar ? 
+    const avatarHtml = user.avatar ?
       `<img src="${user.avatar}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">` :
       `<div style="width: 32px; height: 32px; border-radius: 50%; background: #5865f2; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 600;">${user.name.charAt(0).toUpperCase()}</div>`;
-    
+
+    // Check if current user is admin
+    const currentUserRole = currentUser?.role || 'user';
+    const isAdmin = currentUserRole === 'admin' || currentUserRole === 'superadmin';
+    const canDelete = isAdmin || currentUser.username === user.username;
+    const canChangeRole = isAdmin;
+
     return `
       <div class="admin-room-item ${user.isOnline ? '' : 'empty'}">
         <div class="admin-room-info" style="display: flex; align-items: center; gap: 12px;">
@@ -419,13 +425,17 @@ function renderAdminUsersList(users) {
           </div>
         </div>
         <div style="display: flex; gap: 8px;">
-          <select onchange="changeUserRole('${user.username}', this.value)" class="admin-btn" style="padding: 6px 10px; font-size: 12px;">
-            <option value="user" ${user.role === 'user' ? 'selected' : ''}>Пользователь</option>
-            <option value="moderator" ${user.role === 'moderator' ? 'selected' : ''}>Модератор</option>
-            <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Админ</option>
-            <option value="superadmin" ${user.role === 'superadmin' ? 'selected' : ''}>Суперадмин</option>
-          </select>
-          <button onclick="deleteUser('${user.username}')" class="admin-btn danger" title="Удалить пользователя">🗑️</button>
+          ${canChangeRole ? `
+            <select onchange="changeUserRole('${user.username}', this.value)" class="admin-btn" style="padding: 6px 10px; font-size: 12px;">
+              <option value="user" ${user.role === 'user' ? 'selected' : ''}>Пользователь</option>
+              <option value="moderator" ${user.role === 'moderator' ? 'selected' : ''}>Модератор</option>
+              <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Админ</option>
+              <option value="superadmin" ${user.role === 'superadmin' ? 'selected' : ''}>Суперадмин</option>
+            </select>
+          ` : ''}
+          ${canDelete ? `
+            <button onclick="deleteUser('${user.username}')" class="admin-btn danger" title="Удалить пользователя">🗑️</button>
+          ` : ''}
         </div>
       </div>
     `;
