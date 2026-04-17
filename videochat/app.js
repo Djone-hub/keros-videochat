@@ -1040,6 +1040,9 @@ async function joinRoomById(roomId) {
   // Join socket room with avatar, room name and room avatar
   socket.emit('join-room', roomId, currentUser.username, userAvatar, currentRoomName, currentRoomAvatar);
 
+  // TEMPORARILY DISABLED: Load channels (causing video display issues)
+  // loadChannelsForRoom();
+
   // Play sound for local user entering room
   sounds.userJoin();
   
