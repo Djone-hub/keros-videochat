@@ -2,6 +2,23 @@
 const socket = io();
 let socketConnected = false;
 
+// Hide screen share button on mobile devices (getDisplayMedia not supported)
+if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+  // Hide screen button when DOM is ready
+  const hideScreenBtn = () => {
+    const screenBtn = document.getElementById('screenBtn');
+    if (screenBtn) {
+      screenBtn.style.display = 'none';
+      console.log('[SCREEN] Screen share button hidden - not supported on this device');
+    }
+  };
+  // Try immediately, also on DOMContentLoaded
+  hideScreenBtn();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', hideScreenBtn);
+  }
+}
+
 // Socket connection event
 socket.on('connect', () => {
   // Connected - only log on localhost
@@ -2112,7 +2129,13 @@ async function toggleScreen() {
     // Start screen sharing
     try {
       console.log('[SCREEN] Starting screen share...');
-      
+
+      // Check if getDisplayMedia is supported (not available on mobile devices)
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        showAlertModal('Демонстрация экрана недоступна на этом устройстве. Эта функция работает только на десктопных браузерах.', 'error');
+        return;
+      }
+
       // Request screen share with constraints - allow maximum resolution
       const constraints = {
         video: {
@@ -2122,7 +2145,7 @@ async function toggleScreen() {
         },
         audio: false // Disable audio to reduce bandwidth
       };
-      
+
       screenStream = await navigator.mediaDevices.getDisplayMedia(constraints);
       sounds.screenOn();
       
