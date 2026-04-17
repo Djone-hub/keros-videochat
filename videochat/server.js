@@ -231,9 +231,9 @@ app.delete('/api/users/:username', async (req, res) => {
   const requesterUser = registeredUsers.get(requester);
   const isAdmin = requesterUser && (requesterUser.role === 'admin' || requesterUser.role === 'superadmin');
 
-  // Only allow deletion if requester is admin or deleting own account
-  if (!isAdmin && requester !== username) {
-    return res.status(403).json({ success: false, message: 'Only admins can delete other users' });
+  // Only allow deletion if requester is admin
+  if (!isAdmin) {
+    return res.status(403).json({ success: false, message: 'Only admins can delete users' });
   }
 
   if (registeredUsers.has(username)) {

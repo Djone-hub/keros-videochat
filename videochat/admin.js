@@ -403,7 +403,7 @@ function loadAdminUsersList() {
         // Check if current user is admin
         const currentUserRole = currentUser?.role || 'user';
         const isAdmin = currentUserRole === 'admin' || currentUserRole === 'superadmin';
-        const canDelete = isAdmin || currentUser.username === user.username;
+        const canDelete = isAdmin;  // Only admins can delete
         const canChangeRole = isAdmin && !(currentUserRole === 'superadmin' && currentUser.username === user.username);
 
         // Debug logging
@@ -496,7 +496,7 @@ function filterAdminUsers(searchTerm) {
 
     const currentUserRole = currentUser?.role || 'user';
     const isAdmin = currentUserRole === 'admin' || currentUserRole === 'superadmin';
-    const canDelete = isAdmin || currentUser.username === user.username;
+    const canDelete = isAdmin;  // Only admins can delete
     const canChangeRole = isAdmin && !(currentUserRole === 'superadmin' && currentUser.username === user.username);
 
     return `
