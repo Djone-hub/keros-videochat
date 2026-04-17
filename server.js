@@ -65,15 +65,16 @@ app.get('/api/rooms', (req, res) => {
   // First add all stored rooms
   roomStore.forEach((r, id) => {
     const activeRoom = rooms.get(id);
-    const activeUsersCount = activeRoom ? activeRoom.users.size : 0;
-    const userList = activeRoom ? Array.from(activeRoom.users).map(u => u.name) : [];
+    // Deduplicate user names (same user may reconnect with different socket.id)
+    const userList = activeRoom ? [...new Set(Array.from(activeRoom.users).map(u => u.name))] : [];
+    const uniqueUserCount = userList.length;
     allRoomsMap.set(id, {
       id: id,
       name: r.name,
       avatar: r.avatar,
       creator: r.creator,
-      active: activeUsersCount > 0,
-      userCount: activeUsersCount,
+      active: uniqueUserCount > 0,
+      userCount: uniqueUserCount,
       users: userList,
       created: r.created
     });
@@ -82,14 +83,15 @@ app.get('/api/rooms', (req, res) => {
   // Then add any active rooms not in store (orphaned/active only rooms)
   rooms.forEach((activeRoom, id) => {
     if (!allRoomsMap.has(id)) {
-      const userList = Array.from(activeRoom.users).map(u => u.name);
+      // Deduplicate user names
+      const userList = [...new Set(Array.from(activeRoom.users).map(u => u.name))];
       allRoomsMap.set(id, {
         id: id,
         name: activeRoom.name || id,
         avatar: null,
         creator: activeRoom.creator || null,
         active: true,
-        userCount: activeRoom.users.size,
+        userCount: userList.length,
         users: userList,
         created: Date.now()
       });
@@ -169,7 +171,7 @@ io.on('connection', (socket) => {
     io.emit('users-updated');
   });
 
-  socket.on('join-room', (roomId, userName, userAvatar, roomName, roomAvatar) => {
+  socket.on('join-room', (roomId, userName, userAvatar, roomName, roomAvatar, callback) => {
     socket.join(roomId);
     socket.roomId = roomId;
     socket.userName = userName;
@@ -245,13 +247,45 @@ io.on('connection', (socket) => {
     } else {
       console.log(`[CHANNELS] No stored channels found for room ${roomId} (storedRoom: ${storedRoom ? 'exists' : 'null'})`);
     }
+    // Deduplicate: remove any existing entry with same socket.id OR same username (reconnect case)
+    const existingBySocketId = Array.from(room.users).find(u => u.id === socket.id);
+    if (existingBySocketId) {
+      room.users.delete(existingBySocketId);
+      console.log(`[DEDUP] Removed duplicate room.users entry for socket ${socket.id}`);
+    }
+    const existingByName = Array.from(room.users).find(u => u.name === userName);
+    if (existingByName) {
+      room.users.delete(existingByName);
+      console.log(`[DEDUP] Removed stale room.users entry for username ${userName} (old socket: ${existingByName.id})`);
+    }
     room.users.add({ id: socket.id, name: userName, avatar: userAvatar });
     
     // Join default channel
     socket.currentChannel = 'general';
     const generalChannel = room.channels.get('general');
     if (generalChannel) {
+      // Deduplicate channel users by socket.id and username
+      const existingChannelBySocket = Array.from(generalChannel.users).find(u => u.id === socket.id);
+      if (existingChannelBySocket) {
+        generalChannel.users.delete(existingChannelBySocket);
+      }
+      const existingChannelByName = Array.from(generalChannel.users).find(u => u.name === userName);
+      if (existingChannelByName) {
+        generalChannel.users.delete(existingChannelByName);
+      }
       generalChannel.users.add({ id: socket.id, name: userName });
+    }
+    
+    // Also clean stale entries from ALL channels (user may have been in a non-general channel before reconnect)
+    if (room.channels) {
+      room.channels.forEach((channel, channelId) => {
+        if (channelId === 'general') return; // Already handled above
+        const staleByName = Array.from(channel.users).find(u => u.name === userName);
+        if (staleByName) {
+          channel.users.delete(staleByName);
+          console.log(`[DEDUP] Removed stale entry for ${userName} from channel ${channelId}`);
+        }
+      });
     }
     
     // Store room metadata if this is a new room with a proper name
@@ -294,20 +328,23 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('user-joined', { id: socket.id, name: userName, avatar: userAvatar });
 
     console.log(`${userName} joined room ${roomId} (${finalRoomName})`);
+    
+    // Send callback for reconnect support
+    if (callback) callback({ success: true });
   });
   
   socket.on('get-available-rooms', (callback) => {
     const availableRooms = Array.from(roomStore.values()).map(r => {
-      // Check if room has active users
+      // Check if room has active users - deduplicate by name
       const activeRoom = rooms.get(r.id);
-      const activeUsersCount = activeRoom ? activeRoom.users.size : 0;
+      const uniqueNames = activeRoom ? [...new Set(Array.from(activeRoom.users).map(u => u.name))] : [];
       return {
         id: r.id,
         name: r.name,
         avatar: r.avatar,
         creator: r.creator,
-        active: activeUsersCount > 0,
-        userCount: activeUsersCount
+        active: uniqueNames.length > 0,
+        userCount: uniqueNames.length
       };
     });
     callback(availableRooms);
@@ -317,14 +354,14 @@ io.on('connection', (socket) => {
     const storedRoom = roomStore.get(roomId);
     if (storedRoom) {
       const activeRoom = rooms.get(roomId);
-      const activeUsersCount = activeRoom ? activeRoom.users.size : 0;
+      const uniqueNames = activeRoom ? [...new Set(Array.from(activeRoom.users).map(u => u.name))] : [];
       callback({
         id: storedRoom.id,
         name: storedRoom.name,
         avatar: storedRoom.avatar,
         creator: storedRoom.creator,
-        active: activeUsersCount > 0,
-        userCount: activeUsersCount
+        active: uniqueNames.length > 0,
+        userCount: uniqueNames.length
       });
     } else {
       callback(null);
@@ -453,17 +490,38 @@ io.on('connection', (socket) => {
     socket.leave(roomId);
     if (rooms.has(roomId)) {
       const room = rooms.get(roomId);
-      // Find and remove user from Set
+      // Find and remove user from room.users Set
       const userToRemove = Array.from(room.users).find(u => u.id === socket.id);
       if (userToRemove) {
         room.users.delete(userToRemove);
         console.log(`User ${socket.userName} removed from room ${roomId}`);
+      }
+      // Remove from ALL channel.users Sets
+      if (room.channels) {
+        room.channels.forEach((channel, channelId) => {
+          const channelUser = Array.from(channel.users).find(u => u.id === socket.id);
+          if (channelUser) {
+            channel.users.delete(channelUser);
+            console.log(`[CHANNEL] Removed ${socket.userName} from channel ${channelId} on leave-room`);
+          }
+        });
       }
       if (room.users.size === 0) {
         rooms.delete(roomId);
         // Don't delete from roomStore so room persists for rejoining
       }
       socket.to(roomId).emit('user-left', socket.id);
+      
+      // Broadcast updated channel counts after user removal
+      if (room.channels && room.users.size > 0) {
+        const updatedChannels = Array.from(room.channels.entries()).map(([id, ch]) => ({
+          channelId: id,
+          channelName: ch.name,
+          userCount: ch.users ? ch.users.size : 0,
+          isGeneral: id === 'general'
+        }));
+        io.to(roomId).emit('channels-updated', updatedChannels);
+      }
       
       // Notify all clients to refresh room list (for lobby users)
       io.emit('rooms-updated');
@@ -646,6 +704,12 @@ io.on('connection', (socket) => {
       
       // Join new channel
       const channel = room.channels.get(channelId);
+      // Deduplicate: remove existing entry with same socket.id
+      const existingInChannel = Array.from(channel.users).find(u => u.id === socket.id);
+      if (existingInChannel) {
+        channel.users.delete(existingInChannel);
+        console.log(`[CHANNEL] Dedup: removed existing entry for socket ${socket.id} in channel ${channelId}`);
+      }
       channel.users.add({ id: socket.id, name: socket.userName });
       
       // Store old channel for notification
@@ -721,6 +785,9 @@ io.on('connection', (socket) => {
       socket.currentChannel = 'general';
       const generalChannel = room.channels.get('general');
       if (generalChannel) {
+        // Deduplicate before adding
+        const existingInGeneral = Array.from(generalChannel.users).find(u => u.id === socket.id);
+        if (existingInGeneral) generalChannel.users.delete(existingInGeneral);
         generalChannel.users.add({ id: socket.id, name: socket.userName });
         socket.join(`${socket.roomId}_general`);
       }
@@ -827,11 +894,21 @@ io.on('connection', (socket) => {
     
     if (socket.roomId && rooms.has(socket.roomId)) {
       const room = rooms.get(socket.roomId);
-      // Find and remove user from Set
+      // Find and remove user from room.users Set
       const userToRemove = Array.from(room.users).find(u => u.id === socket.id);
       if (userToRemove) {
         room.users.delete(userToRemove);
         console.log(`User ${socket.userName} removed from room ${socket.roomId} on disconnect`);
+      }
+      // Remove from ALL channel.users Sets
+      if (room.channels) {
+        room.channels.forEach((channel, channelId) => {
+          const channelUser = Array.from(channel.users).find(u => u.id === socket.id);
+          if (channelUser) {
+            channel.users.delete(channelUser);
+            console.log(`[CHANNEL] Removed ${socket.userName} from channel ${channelId} on disconnect`);
+          }
+        });
       }
       // Remove from screen sharing tracking
       if (room.screenSharingUsers) {
@@ -841,6 +918,17 @@ io.on('connection', (socket) => {
         rooms.delete(socket.roomId);
       }
       socket.to(socket.roomId).emit('user-left', socket.id);
+      
+      // Broadcast updated channel counts after user removal
+      if (room.channels && room.users.size > 0) {
+        const updatedChannels = Array.from(room.channels.entries()).map(([id, ch]) => ({
+          channelId: id,
+          channelName: ch.name,
+          userCount: ch.users ? ch.users.size : 0,
+          isGeneral: id === 'general'
+        }));
+        io.to(socket.roomId).emit('channels-updated', updatedChannels);
+      }
       
       // Notify all clients to refresh room list (for lobby users)
       io.emit('rooms-updated');
