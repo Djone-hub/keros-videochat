@@ -317,30 +317,38 @@ sessionStorage.removeItem('pendingRoomInvite');
 
 window.addEventListener('load', () => {
   const savedUser = localStorage.getItem('keroschat_user');
+  console.log('[AUTO-LOGIN] Checking localStorage for saved user...');
   if (savedUser) {
-    currentUser = JSON.parse(savedUser);
-    userAvatar = localStorage.getItem(`keroschat_avatar_${currentUser.username}`);
-    console.log('[AUTO-LOGIN] Loaded user from localStorage:', currentUser.username);
+    try {
+      currentUser = JSON.parse(savedUser);
+      userAvatar = localStorage.getItem(`keroschat_avatar_${currentUser.username}`);
+      console.log('[AUTO-LOGIN] Loaded user from localStorage:', currentUser.username, 'role:', currentUser.role);
 
-    // Refresh user data from API to get fresh role
-    fetch('/api/users')
-      .then(res => res.json())
-      .then(users => {
-        const freshUserData = users.find(u => u.username === currentUser.username);
-        if (freshUserData && freshUserData.role) {
-          currentUser.role = freshUserData.role;
-          currentUser.isMuted = freshUserData.isMuted;
-          currentUser.muteUntil = freshUserData.muteUntil;
-          currentUser.kickedRooms = freshUserData.kickedRooms;
-          localStorage.setItem('keroschat_user', JSON.stringify(currentUser));
-          console.log('[AUTO-LOGIN] Refreshed user data from API, role:', currentUser.role);
-        }
-        showLobby();
-      })
-      .catch(err => {
-        console.error('[AUTO-LOGIN] Error refreshing user data:', err);
-        showLobby();
-      });
+      // Refresh user data from API to get fresh role
+      fetch('/api/users')
+        .then(res => res.json())
+        .then(users => {
+          const freshUserData = users.find(u => u.username === currentUser.username);
+          if (freshUserData && freshUserData.role) {
+            currentUser.role = freshUserData.role;
+            currentUser.isMuted = freshUserData.isMuted;
+            currentUser.muteUntil = freshUserData.muteUntil;
+            currentUser.kickedRooms = freshUserData.kickedRooms;
+            localStorage.setItem('keroschat_user', JSON.stringify(currentUser));
+            console.log('[AUTO-LOGIN] Refreshed user data from API, role:', currentUser.role);
+          }
+          showLobby();
+        })
+        .catch(err => {
+          console.error('[AUTO-LOGIN] Error refreshing user data:', err);
+          // Still show lobby even if API fails
+          showLobby();
+        });
+    } catch (err) {
+      console.error('[AUTO-LOGIN] Error parsing saved user:', err);
+      localStorage.removeItem('keroschat_user');
+      showAuth();
+    }
 
     setTimeout(() => {
         const pendingRoom = sessionStorage.getItem('pendingRoomInvite');
@@ -495,13 +503,28 @@ function showLobby() {
   document.getElementById('authScreen').style.display = 'none';
   document.getElementById('roomScreen').style.display = 'none';
   document.getElementById('lobbyScreen').style.display = 'flex';
-  
+
   // Update user info
   if (!currentUser || !currentUser.username) {
     console.error('showLobby: currentUser or username is undefined', currentUser);
-    showAlertModal('Ошибка: пользователь не найден. Пожалуйста, войдите снова.', 'error');
-    showAuth();
-    return;
+    // Try to restore from localStorage
+    const savedUser = localStorage.getItem('keroschat_user');
+    if (savedUser) {
+      try {
+        currentUser = JSON.parse(savedUser);
+        userAvatar = localStorage.getItem(`keroschat_avatar_${currentUser.username}`);
+        console.log('[LOBBY] Restored user from localStorage:', currentUser.username);
+      } catch (err) {
+        console.error('[LOBBY] Error restoring user:', err);
+        showAlertModal('Ошибка: пользователь не найден. Пожалуйста, войдите снова.', 'error');
+        showAuth();
+        return;
+      }
+    } else {
+      showAlertModal('Ошибка: пользователь не найден. Пожалуйста, войдите снова.', 'error');
+      showAuth();
+      return;
+    }
   }
 
   document.getElementById('lobbyUsername').textContent = currentUser.username;

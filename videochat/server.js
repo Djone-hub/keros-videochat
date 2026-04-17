@@ -1406,18 +1406,24 @@ io.on('connection', (socket) => {
   socket.on('delete-room', (roomId) => {
     const storedRoom = roomStore.get(roomId);
     const activeRoom = rooms.get(roomId);
-    
+
     console.log(`[DELETE] Room ${roomId} delete attempt by ${socket.userName}`);
     console.log(`[DELETE] storedRoom:`, storedRoom);
     console.log(`[DELETE] activeRoom:`, activeRoom ? { name: activeRoom.name, creator: activeRoom.creator } : null);
-    
+
     // Check both stored room and active room for creator
     const creator = storedRoom?.creator || activeRoom?.creator;
-    
+
+    // Get user role
+    const user = registeredUsers.get(socket.userName);
+    const userRole = user?.role || 'user';
+    const isSuperAdmin = userRole === 'superadmin';
+
     // Allow deletion if:
     // 1. User is the creator, OR
-    // 2. No creator is set (orphaned room) - first user to delete becomes "owner"
-    if (creator === socket.userName || !creator) {
+    // 2. No creator is set (orphaned room) - first user to delete becomes "owner", OR
+    // 3. User is superadmin
+    if (creator === socket.userName || !creator || isSuperAdmin) {
       roomStore.delete(roomId);
       if (rooms.has(roomId)) {
         rooms.delete(roomId);
@@ -1425,9 +1431,9 @@ io.on('connection', (socket) => {
       saveRoomsToSupabase();
       io.emit('room-deleted', roomId);
       io.emit('rooms-updated');
-      console.log(`[DELETE] Room ${roomId} deleted by ${socket.userName}`);
+      console.log(`[DELETE] Room ${roomId} deleted by ${socket.userName} (role: ${userRole})`);
     } else {
-      console.log(`[DELETE] Rejected: ${socket.userName} is not creator (creator=${creator})`);
+      console.log(`[DELETE] Rejected: ${socket.userName} is not creator (creator=${creator}, role=${userRole})`);
       socket.emit('room-error', { message: 'Только создатель может удалить комнату' });
     }
   });
