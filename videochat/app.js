@@ -103,6 +103,123 @@ let isMicOn = true;
 let isCamOn = true;
 let isSoundOn = true;
 let isScreenSharing = false;
+
+// Audio/Video device selection
+let selectedAudioInput = null; // microphone
+let selectedAudioOutput = null; // speakers
+let selectedVideoInput = null; // camera
+let availableDevices = {
+  audioinput: [],
+  audiooutput: [],
+  videoinput: []
+};
+
+// Load saved device preferences
+function loadDevicePreferences() {
+  selectedAudioInput = localStorage.getItem('keroschat_audioInput') || null;
+  selectedAudioOutput = localStorage.getItem('keroschat_audioOutput') || null;
+  selectedVideoInput = localStorage.getItem('keroschat_videoInput') || null;
+  console.log('[DEVICES] Loaded preferences:', { selectedAudioInput, selectedAudioOutput, selectedVideoInput });
+}
+
+// Save device preferences
+function saveDevicePreferences() {
+  if (selectedAudioInput) localStorage.setItem('keroschat_audioInput', selectedAudioInput);
+  if (selectedAudioOutput) localStorage.setItem('keroschat_audioOutput', selectedAudioOutput);
+  if (selectedVideoInput) localStorage.setItem('keroschat_videoInput', selectedVideoInput);
+  console.log('[DEVICES] Saved preferences:', { selectedAudioInput, selectedAudioOutput, selectedVideoInput });
+}
+
+// Enumerate available devices
+async function enumerateDevices() {
+  try {
+    // Request permission first
+    await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    availableDevices = {
+      audioinput: devices.filter(d => d.kind === 'audioinput'),
+      audiooutput: devices.filter(d => d.kind === 'audiooutput'),
+      videoinput: devices.filter(d => d.kind === 'videoinput')
+    };
+
+    console.log('[DEVICES] Available devices:', availableDevices);
+
+    // Update UI if settings panel is open
+    updateDeviceSelectors();
+
+    return availableDevices;
+  } catch (err) {
+    console.error('[DEVICES] Error enumerating devices:', err);
+    return availableDevices;
+  }
+}
+
+// Update device selector UI
+function updateDeviceSelectors() {
+  const audioInputSelect = document.getElementById('audioInputSelect');
+  const audioOutputSelect = document.getElementById('audioOutputSelect');
+  const videoInputSelect = document.getElementById('videoInputSelect');
+
+  if (!audioInputSelect || !audioOutputSelect || !videoInputSelect) return;
+
+  // Audio input (microphone)
+  audioInputSelect.innerHTML = '<option value="">Default</option>';
+  availableDevices.audioinput.forEach(device => {
+    const option = document.createElement('option');
+    option.value = device.deviceId;
+    option.textContent = device.label || `Microphone ${device.deviceId.slice(0, 8)}`;
+    if (device.deviceId === selectedAudioInput) option.selected = true;
+    audioInputSelect.appendChild(option);
+  });
+
+  // Audio output (speakers)
+  audioOutputSelect.innerHTML = '<option value="">Default</option>';
+  availableDevices.audiooutput.forEach(device => {
+    const option = document.createElement('option');
+    option.value = device.deviceId;
+    option.textContent = device.label || `Speakers ${device.deviceId.slice(0, 8)}`;
+    if (device.deviceId === selectedAudioOutput) option.selected = true;
+    audioOutputSelect.appendChild(option);
+  });
+
+  // Video input (camera)
+  videoInputSelect.innerHTML = '<option value="">Default</option>';
+  availableDevices.videoinput.forEach(device => {
+    const option = document.createElement('option');
+    option.value = device.deviceId;
+    option.textContent = device.label || `Camera ${device.deviceId.slice(0, 8)}`;
+    if (device.deviceId === selectedVideoInput) option.selected = true;
+    videoInputSelect.appendChild(option);
+  });
+}
+
+// Select device
+function selectDevice(type, deviceId) {
+  console.log('[DEVICES] Selected device:', type, deviceId);
+
+  switch (type) {
+    case 'audioinput':
+      selectedAudioInput = deviceId;
+      break;
+    case 'audiooutput':
+      selectedAudioOutput = deviceId;
+      // Apply to all remote videos
+      document.querySelectorAll('.video-container:not(.local) video').forEach(video => {
+        if (deviceId) {
+          video.setSinkId(deviceId).catch(err => {
+            console.error('[DEVICES] Error setting output device:', err);
+          });
+        }
+      });
+      break;
+    case 'videoinput':
+      selectedVideoInput = deviceId;
+      break;
+  }
+
+  saveDevicePreferences();
+}
 let userAvatar = null;
 let pingInterval = null;
 let currentPing = 0;
@@ -316,6 +433,9 @@ const inviteRoomId = urlParams.get('room');
 sessionStorage.removeItem('pendingRoomInvite');
 
 window.addEventListener('load', () => {
+  // Load device preferences
+  loadDevicePreferences();
+
   const savedUser = localStorage.getItem('keroschat_user');
   console.log('[AUTO-LOGIN] Checking localStorage for saved user...');
   if (savedUser) {
@@ -1000,9 +1120,21 @@ async function joinRoomById(roomId) {
 
   addLogEntry('Комната', `"${currentRoomName}" - вы подключились`);
 
-  // Request media
+  // Request media with selected devices
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    const constraints = {
+      audio: selectedAudioInput ? { deviceId: { exact: selectedAudioInput } } : true,
+      video: selectedVideoInput ? { deviceId: { exact: selectedVideoInput } } : true
+    };
+
+    console.log('[DEVICES] Requesting media with constraints:', constraints);
+    localStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+    // Apply audio output device to local video if selected
+    if (selectedAudioOutput) {
+      // Note: setSinkId doesn't work for local video, only for remote videos
+      console.log('[DEVICES] Audio output device selected (will apply to remote videos):', selectedAudioOutput);
+    }
 
     // Ensure all tracks are enabled
     localStream.getTracks().forEach(track => {
@@ -1010,8 +1142,15 @@ async function joinRoomById(roomId) {
       console.log(`[TRACK] Local track ${track.kind} enabled:`, track.enabled);
     });
   } catch (err) {
-    showAlertModal('Ошибка доступа к камере/микрофону: ' + err.message, 'error');
-    return;
+    console.error('[DEVICES] Error requesting media:', err);
+    // Fallback to default devices
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      console.log('[DEVICES] Fallback to default devices successful');
+    } catch (fallbackErr) {
+      showAlertModal('Ошибка доступа к камере/микрофону: ' + fallbackErr.message, 'error');
+      return;
+    }
   }
 
   // Join socket room with avatar, room name and room avatar
@@ -1236,6 +1375,13 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
       video.volume = 0.5;
       // IMPORTANT: Never mute remote videos - user controls via volume slider
       video.muted = false;
+
+      // Apply selected audio output device
+      if (selectedAudioOutput && typeof video.setSinkId === 'function') {
+        video.setSinkId(selectedAudioOutput).catch(err => {
+          console.error('[DEVICES] Error setting output device:', err);
+        });
+      }
     }
     
     // Add fullscreen button for screen share (only for REMOTE users, not local)
@@ -2836,6 +2982,7 @@ function toggleSettings() {
   panel.classList.toggle('active');
   if (panel.classList.contains('active')) {
     updateRemoteVolumeControls();
+    enumerateDevices();
   }
 }
 
