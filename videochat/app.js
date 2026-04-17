@@ -306,34 +306,48 @@ function updateMicLevelIndicator(level) {
 // Test audio output
 async function testAudioOutput() {
   try {
+    // Create audio context
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Create oscillator
     const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    const destination = audioContext.createMediaStreamDestination();
-
-    oscillator.connect(gainNode);
-    gainNode.connect(destination);
-
     oscillator.frequency.value = 440; // A4 note
     oscillator.type = 'sine';
+
+    // Create gain node for volume control
+    const gainNode = audioContext.createGain();
     gainNode.gain.value = 0.3; // 30% volume
 
-    // Create audio element to play the sound with selected output device
+    // Connect oscillator to gain node
+    oscillator.connect(gainNode);
+
+    // Create media stream destination
+    const destination = audioContext.createMediaStreamDestination();
+    gainNode.connect(destination);
+
+    // Create audio element
     const audioElement = new Audio();
     audioElement.srcObject = destination.stream;
-    audioElement.autoplay = true;
+    audioElement.volume = 1.0;
 
-    // Apply selected output device if available
+    // Apply selected output device BEFORE playing
     if (selectedAudioOutput && typeof audioElement.setSinkId === 'function') {
       try {
         await audioElement.setSinkId(selectedAudioOutput);
-        console.log('[AUDIO TEST] Using selected output device:', selectedAudioOutput);
+        console.log('[AUDIO TEST] Successfully set output device to:', selectedAudioOutput);
       } catch (err) {
         console.error('[AUDIO TEST] Error setting sink ID:', err);
+        console.log('[AUDIO TEST] Falling back to default output');
       }
+    } else {
+      console.log('[AUDIO TEST] Using default output device (setSinkId not available or no device selected)');
     }
 
+    // Play the audio
+    await audioElement.play();
     oscillator.start();
+
+    // Fade out and stop
     gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
 
     setTimeout(() => {
@@ -341,9 +355,10 @@ async function testAudioOutput() {
       audioElement.pause();
       audioElement.remove();
       audioContext.close();
+      console.log('[AUDIO TEST] Test completed');
     }, 500);
 
-    console.log('[AUDIO TEST] Played test sound');
+    console.log('[AUDIO TEST] Playing test sound...');
   } catch (err) {
     console.error('[AUDIO TEST] Error:', err);
     showAlertModal('Ошибка теста звука: ' + err.message, 'error');
