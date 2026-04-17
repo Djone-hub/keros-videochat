@@ -604,6 +604,9 @@ function filterAdminUsers(searchTerm) {
       Всего пользователей: <strong style="color: #fff;">${uniqueUsers.length}</strong> |
       Онлайн: <strong style="color: #3ba55d;">${uniqueUsers.filter(u => u.isOnline).length}</strong>
     </div>
+    ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin') ? `
+    <button onclick="reloadUsersFromSupabase()" class="admin-btn" style="margin-bottom: 15px; padding: 8px 16px;">🔄 Перезагрузить пользователей из Supabase</button>
+    ` : ''}
     ${listHtml}
   `;
 }
@@ -633,30 +636,84 @@ function deleteUser(username) {
 }
 
 function muteUser(username, isMuted) {
-  const duration = isMuted ? prompt('На сколько минут замутить? (0 = навсегда)', '10') : '0';
-  if (duration === null) return;
-
-  fetch(`/api/users/${encodeURIComponent(username)}/mute`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Username': currentUser?.username || 'unknown'
-    },
-    body: JSON.stringify({ isMuted, duration: parseInt(duration) || 0 })
-  })
-    .then(res => res.json())
-    .then(result => {
-      if (result.success) {
-        alert(`✅ Пользователь "${username}" ${isMuted ? 'замучен' : 'размучен'}`);
-        loadAdminUsersList();
-      } else {
-        alert(`❌ Ошибка: ${result.message}`);
-      }
+  if (!isMuted) {
+    // Unmute immediately
+    fetch(`/api/users/${username}/mute`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Username': currentUser?.username || 'unknown'
+      },
+      body: JSON.stringify({ isMuted: false, duration: 0 })
     })
-    .catch(err => {
-      console.error('Error muting user:', err);
-      alert('❌ Ошибка при изменении мута');
-    });
+      .then(res => res.json())
+      .then(result => {
+        if (result.success) {
+          alert(`✅ Пользователь "${username}" размучен`);
+          loadAdminUsersList();
+        } else {
+          alert(`❌ Ошибка: ${result.message}`);
+        }
+      })
+      .catch(err => {
+        console.error('Error unmuting user:', err);
+        alert('❌ Ошибка при размуте');
+      });
+    return;
+  }
+
+  // Show modal for mute duration
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
+    z-index: 10000;
+  `;
+  modal.innerHTML = `
+    <div style="background: #36393f; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%;">
+      <h3 style="color: #fff; margin-top: 0;">Замутить пользователя ${username}</h3>
+      <p style="color: #b9bbbe; margin-bottom: 15px;">На сколько минут замутить?</p>
+      <input type="number" id="muteDuration" value="10" min="0" style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 4px; border: none; background: #40444b; color: #fff;">
+      <p style="color: #72767d; font-size: 12px; margin-bottom: 15px;">0 = навсегда</p>
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button onclick="this.closest('div[style*=fixed]').remove()" class="admin-btn" style="padding: 10px 20px;">Отмена</button>
+        <button id="confirmMute" class="admin-btn danger" style="padding: 10px 20px;">Замутить</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  document.getElementById('confirmMute').addEventListener('click', async () => {
+    const duration = parseInt(document.getElementById('muteDuration').value) || 0;
+    modal.remove();
+
+    if (duration < 0) {
+      alert('❌ Неверное значение');
+      return;
+    }
+
+    fetch(`/api/users/${username}/mute`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Username': currentUser?.username || 'unknown'
+      },
+      body: JSON.stringify({ isMuted: true, duration: duration })
+    })
+      .then(res => res.json())
+      .then(result => {
+        if (result.success) {
+          alert(`✅ Пользователь "${username}" замучен на ${duration === 0 ? 'навсегда' : duration + ' минут'}`);
+          loadAdminUsersList();
+        } else {
+          alert(`❌ Ошибка: ${result.message}`);
+        }
+      })
+      .catch(err => {
+        console.error('Error muting user:', err);
+        alert('❌ Ошибка при муте');
+      });
+  });
 }
 
 async function kickUser(username) {
