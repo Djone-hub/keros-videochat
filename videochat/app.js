@@ -142,13 +142,21 @@ async function enumerateDevices() {
     await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
 
     const devices = await navigator.mediaDevices.enumerateDevices();
+
+    // Filter only devices with labels (available/active devices)
+    // Devices without labels are usually disconnected or not accessible
     availableDevices = {
-      audioinput: devices.filter(d => d.kind === 'audioinput'),
-      audiooutput: devices.filter(d => d.kind === 'audiooutput'),
-      videoinput: devices.filter(d => d.kind === 'videoinput')
+      audioinput: devices.filter(d => d.kind === 'audioinput' && d.label),
+      audiooutput: devices.filter(d => d.kind === 'audiooutput' && d.label),
+      videoinput: devices.filter(d => d.kind === 'videoinput' && d.label)
     };
 
     console.log('[DEVICES] Available devices:', availableDevices);
+    console.log('[DEVICES] Total devices found:', devices.length, 'Active devices:', {
+      audioinput: availableDevices.audioinput.length,
+      audiooutput: availableDevices.audiooutput.length,
+      videoinput: availableDevices.videoinput.length
+    });
 
     // Update UI if settings panel is open
     updateDeviceSelectors();
@@ -303,34 +311,17 @@ function updateMicLevelIndicator(level) {
   indicator.innerHTML = html;
 }
 
-// Test audio output
+// Test audio output with melody
 async function testAudioOutput() {
   try {
     // Create audio context
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-    // Create oscillator
-    const oscillator = audioContext.createOscillator();
-    oscillator.frequency.value = 440; // A4 note
-    oscillator.type = 'sine';
-
-    // Create gain node for volume control
-    const gainNode = audioContext.createGain();
-    gainNode.gain.value = 0.3; // 30% volume
-
-    // Connect oscillator to gain node
-    oscillator.connect(gainNode);
-
-    // Create media stream destination
-    const destination = audioContext.createMediaStreamDestination();
-    gainNode.connect(destination);
-
-    // Create audio element
+    // Create audio element for output
     const audioElement = new Audio();
-    audioElement.srcObject = destination.stream;
-    audioElement.volume = 1.0;
+    audioElement.volume = 0.5;
 
-    // Apply selected output device BEFORE playing
+    // Apply selected output device BEFORE creating source
     if (selectedAudioOutput && typeof audioElement.setSinkId === 'function') {
       try {
         await audioElement.setSinkId(selectedAudioOutput);
@@ -343,12 +334,44 @@ async function testAudioOutput() {
       console.log('[AUDIO TEST] Using default output device (setSinkId not available or no device selected)');
     }
 
+    // Create oscillator for melody
+    const oscillator = audioContext.createOscillator();
+    oscillator.type = 'sine';
+
+    // Create gain node for volume control
+    const gainNode = audioContext.createGain();
+    gainNode.gain.value = 0.3;
+
+    // Connect oscillator to gain node
+    oscillator.connect(gainNode);
+
+    // Create media stream destination
+    const destination = audioContext.createMediaStreamDestination();
+    gainNode.connect(destination);
+
+    // Connect to audio element
+    audioElement.srcObject = destination.stream;
+
     // Play the audio
     await audioElement.play();
     oscillator.start();
 
-    // Fade out and stop
-    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
+    // Play a 3-second melody: C-E-G-C (C major chord arpeggio)
+    const notes = [
+      { freq: 261.63, start: 0, duration: 0.5 },    // C4
+      { freq: 329.63, start: 0.5, duration: 0.5 }, // E4
+      { freq: 392.00, start: 1.0, duration: 0.5 }, // G4
+      { freq: 523.25, start: 1.5, duration: 0.5 }, // C5
+      { freq: 392.00, start: 2.0, duration: 0.5 }, // G4
+      { freq: 329.63, start: 2.5, duration: 0.5 }  // E4
+    ];
+
+    notes.forEach(note => {
+      oscillator.frequency.setValueAtTime(note.freq, audioContext.currentTime + note.start);
+    });
+
+    // Fade out at the end
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 3);
 
     setTimeout(() => {
       oscillator.stop();
@@ -356,9 +379,9 @@ async function testAudioOutput() {
       audioElement.remove();
       audioContext.close();
       console.log('[AUDIO TEST] Test completed');
-    }, 500);
+    }, 3000);
 
-    console.log('[AUDIO TEST] Playing test sound...');
+    console.log('[AUDIO TEST] Playing 3-second melody...');
   } catch (err) {
     console.error('[AUDIO TEST] Error:', err);
     showAlertModal('Ошибка теста звука: ' + err.message, 'error');
