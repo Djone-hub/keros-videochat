@@ -88,6 +88,10 @@ function saveUsersToFile() {
 const roomStore = loadRoomsFromFile();
 const registeredUsers = loadUsersFromFile();
 
+console.log('========================================');
+console.log('[VERSION] Server v2.0 - User persistence enabled');
+console.log('========================================');
+
 // REST API endpoint for rooms - returns ALL rooms (stored + active) with user list
 app.get('/api/rooms', (req, res) => {
   const allRoomsMap = new Map();
