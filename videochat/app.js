@@ -3048,6 +3048,19 @@ async function clearAllCache() {
   });
 }
 
+function emergencyClearCache() {
+  try {
+    // Clear all storage immediately without confirmation
+    localStorage.clear();
+    sessionStorage.clear();
+    console.log('[EMERGENCY] Cache cleared, reloading...');
+    location.reload();
+  } catch (err) {
+    console.error('[EMERGENCY] Error clearing cache:', err);
+    alert('Ошибка очистки кэша. Пожалуйста, очистите кэш вручную в настройках браузера.');
+  }
+}
+
 // Admin panel functions are now in admin.js
 
 window.addEventListener('beforeunload', () => {
