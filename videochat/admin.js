@@ -635,33 +635,67 @@ function muteUser(username, isMuted) {
     });
 }
 
-function kickUser(username) {
-  const roomId = prompt('Введите ID комнаты для кика:');
-  if (!roomId) return;
+async function kickUser(username) {
+  // Fetch rooms from API
+  const response = await fetch('/api/rooms');
+  const rooms = await response.json();
 
-  if (!confirm(`Кикнуть пользователя "${username}" из комнаты "${roomId}"?`)) return;
+  if (rooms.length === 0) {
+    alert('❌ Нет активных комнат');
+    return;
+  }
 
-  fetch(`/api/users/${encodeURIComponent(username)}/kick`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Username': currentUser?.username || 'unknown'
-    },
-    body: JSON.stringify({ roomId })
-  })
-    .then(res => res.json())
-    .then(result => {
-      if (result.success) {
-        alert(`✅ Пользователь "${username}" кикнут из комнаты`);
-        loadAdminUsersList();
-      } else {
-        alert(`❌ Ошибка: ${result.message}`);
-      }
+  // Create room options
+  const roomOptions = rooms.map(r => `<option value="${r.id}">${r.name} (${r.id})</option>`).join('');
+
+  // Show modal with room selection
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
+    z-index: 10000;
+  `;
+  modal.innerHTML = `
+    <div style="background: #36393f; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%;">
+      <h3 style="color: #fff; margin-top: 0;">Кикнуть пользователя ${username}</h3>
+      <p style="color: #b9bbbe; margin-bottom: 15px;">Выберите комнату:</p>
+      <select id="kickRoomSelect" style="width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 4px; border: none;">
+        ${roomOptions}
+      </select>
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button onclick="this.closest('div[style*=fixed]').remove()" class="admin-btn" style="padding: 10px 20px;">Отмена</button>
+        <button id="confirmKick" class="admin-btn danger" style="padding: 10px 20px;">Кикнуть</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  document.getElementById('confirmKick').addEventListener('click', async () => {
+    const roomId = document.getElementById('kickRoomSelect').value;
+    modal.remove();
+
+    fetch(`/api/users/${username}/kick`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Username': currentUser?.username || 'unknown'
+      },
+      body: JSON.stringify({ roomId })
     })
-    .catch(err => {
-      console.error('Error kicking user:', err);
-      alert('❌ Ошибка при кике пользователя');
-    });
+      .then(res => res.json())
+      .then(result => {
+        if (result.success) {
+          alert(`✅ Пользователь "${username}" кикнут из комнаты`);
+          loadAdminUsersList();
+        } else {
+          alert(`❌ Ошибка: ${result.message}`);
+        }
+      })
+      .catch(err => {
+        console.error('Error kicking user:', err);
+        alert('❌ Ошибка при кике');
+      });
+  });
 }
 
 function getRoleColor(role) {
