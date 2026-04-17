@@ -97,12 +97,6 @@ async function saveUsersToSupabase() {
   try {
     const usersArray = Array.from(registeredUsers.values());
 
-    // Log users before saving
-    console.log('[USERS] Before save:');
-    usersArray.forEach(u => {
-      console.log(`  ${u.username}: hasPassword=${!!u.password}, passwordLength=${u.password?.length || 0}`);
-    });
-
     // Convert to Supabase format
     const supabaseUsers = usersArray.map(u => ({
       username: u.username,
@@ -123,12 +117,6 @@ async function saveUsersToSupabase() {
     } else {
       console.log(`[USERS] Saved ${usersArray.length} users to Supabase`);
     }
-
-    // Log users after saving
-    console.log('[USERS] After save:');
-    usersArray.forEach(u => {
-      console.log(`  ${u.username}: hasPassword=${!!u.password}, passwordLength=${u.password?.length || 0}`);
-    });
   } catch (err) {
     console.error('[USERS] Error saving users to Supabase:', err);
   }
@@ -210,15 +198,15 @@ app.get('/api/users', (req, res) => {
 // REST API endpoint for user login
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
-  console.log(`[LOGIN] Attempt: username=${username}, hasPassword=${!!password}, passwordLength=${password?.length || 0}, password="${password}"`);
+  console.log(`[LOGIN] Attempt: username=${username}, hasPassword=${!!password}, passwordLength=${password?.length || 0}`);
   const user = registeredUsers.get(username);
-  console.log(`[LOGIN] User found in registry: ${!!user}, hasPassword: ${!!user?.password}, passwordLength=${user?.password?.length || 0}, storedPassword="${user?.password}"`);
+  console.log(`[LOGIN] User found in registry: ${!!user}, hasPassword: ${!!user?.password}, passwordLength=${user?.password?.length || 0}`);
 
   if (user && user.password === password) {
     console.log(`[LOGIN] SUCCESS: ${username}`);
     res.json({ success: true, user: { username: user.username, name: user.name, avatar: user.avatar } });
   } else {
-    console.log(`[LOGIN] FAILED: ${username} - user not found or wrong password, passwordMatch=${!!user && user.password === password}`);
+    console.log(`[LOGIN] FAILED: ${username} - user not found or wrong password`);
     res.status(401).json({ success: false, message: 'Invalid username or password' });
   }
 });
@@ -258,7 +246,7 @@ io.on('connection', (socket) => {
 
   // Handle user registration
   socket.on('user-registered', async ({ username, avatar, isOnline, password }) => {
-    console.log(`[REGISTER] User: ${username}, online: ${isOnline}, hasPassword: ${!!password}, passwordLength: ${password?.length || 0}, password: "${password}"`);
+    console.log(`[REGISTER] User: ${username}, online: ${isOnline}, hasPassword: ${!!password}, passwordLength: ${password?.length || 0}`);
 
     // Add to global registry with password
     const existingUser = registeredUsers.get(username);
@@ -1056,11 +1044,9 @@ io.on('connection', (socket) => {
     // Mark user as offline in registered users
     if (socket.userName && registeredUsers.has(socket.userName)) {
       const user = registeredUsers.get(socket.userName);
-      console.log(`[DISCONNECT] User before: ${socket.userName}, hasPassword: ${!!user.password}, passwordLength: ${user.password?.length || 0}`);
       user.isOnline = false;
       user.lastSeen = Date.now();
       registeredUsers.set(socket.userName, user);
-      console.log(`[DISCONNECT] User after: ${socket.userName}, hasPassword: ${!!user.password}, passwordLength: ${user.password?.length || 0}`);
     }
     
     if (socket.roomId && rooms.has(socket.roomId)) {
