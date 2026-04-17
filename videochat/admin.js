@@ -356,57 +356,144 @@ function loadAdminUsersList() {
   const listEl = document.getElementById('adminUsersList');
   const usersTab = document.getElementById('adminTab-users');
   if (!listEl || !usersTab) return;
-  
-  listEl.innerHTML = '<div style="text-align: center; padding: 40px; color: #72767d;">⏳ Загрузка...</div>';
-  
+
+  // Fetch users from API
   fetch('/api/users')
     .then(res => res.json())
     .then(users => {
       window.allAdminUsers = users;
-      renderAdminUsersList(users);
+
+      // Update current user role from users list
+      const currentUserData = users.find(u => u.username === currentUser?.username);
+      if (currentUserData && currentUserData.role) {
+        currentUser.role = currentUserData.role;
+        console.log(`[ADMIN] Updated current user role: ${currentUser.role}`);
+      }
+
+      if (users.length === 0) {
+        listEl.innerHTML = '<div style="text-align: center; padding: 40px; color: #72767d;">😕 Нет пользователей</div>';
+        return;
+      }
+      // Remove duplicates by username (keep first occurrence, prefer online users)
+      const uniqueUsers = [];
+      const seenNames = new Set();
+
+      // First pass: add online users
+      users.forEach(user => {
+        if (!seenNames.has(user.username)) {
+          seenNames.add(user.username);
+          uniqueUsers.push(user);
+        }
+      });
+
+      // Sort: online first, then by name
+      uniqueUsers.sort((a, b) => {
+        if (a.isOnline && !b.isOnline) return -1;
+        if (!a.isOnline && b.isOnline) return 1;
+        return a.username.localeCompare(b.username);
+      });
+
+      const listHtml = uniqueUsers.map(user => {
+        const statusColor = user.isOnline ? '#3ba55d' : '#72767d';
+        const statusText = user.isOnline ? '🟢 В сети' : '⚪ Не в сети';
+        const avatarHtml = user.avatar ?
+          `<img src="${user.avatar}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">` :
+          `<div style="width: 32px; height: 32px; border-radius: 50%; background: #5865f2; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 600;">${user.username.charAt(0).toUpperCase()}</div>`;
+
+        // Check if current user is admin
+        const currentUserRole = currentUser?.role || 'user';
+        const isAdmin = currentUserRole === 'admin' || currentUserRole === 'superadmin';
+        const canDelete = isAdmin || currentUser.username === user.username;
+        const canChangeRole = isAdmin;
+
+        // Debug logging
+        console.log(`[ADMIN] Current user: ${currentUser?.username}, role: ${currentUserRole}, isAdmin: ${isAdmin}`);
+        console.log(`[ADMIN] Target user: ${user.username}, canDelete: ${canDelete}, canChangeRole: ${canChangeRole}`);
+
+        return `
+          <div class="admin-room-item ${user.isOnline ? '' : 'empty'}">
+            <div class="admin-room-info" style="display: flex; align-items: center; gap: 12px;">
+              ${avatarHtml}
+              <div>
+                <div class="admin-room-name">${user.username}</div>
+                <div class="admin-room-meta" style="color: ${statusColor};">${statusText}</div>
+                <div class="admin-room-meta" style="font-size: 12px; margin-top: 4px;">
+                  Роль: <span style="color: ${getRoleColor(user.role)}; font-weight: bold;">${getRoleLabel(user.role)}</span>
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              ${canChangeRole ? `
+                <select onchange="changeUserRole('${user.username}', this.value)" class="admin-btn" style="padding: 6px 10px; font-size: 12px;">
+                  <option value="user" ${user.role === 'user' ? 'selected' : ''}>Пользователь</option>
+                  <option value="moderator" ${user.role === 'moderator' ? 'selected' : ''}>Модератор</option>
+                  <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Админ</option>
+                  <option value="superadmin" ${user.role === 'superadmin' ? 'selected' : ''}>Суперадмин</option>
+                </select>
+              ` : ''}
+              ${canDelete ? `
+                <button onclick="deleteUser('${user.username}')" class="admin-btn danger" title="Удалить пользователя">🗑️</button>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      listEl.innerHTML = `
+        <div style="margin-bottom: 15px; color: #b9bbbe; font-size: 14px;">
+          Всего пользователей: <strong style="color: #fff;">${uniqueUsers.length}</strong> |
+          Онлайн: <strong style="color: #3ba55d;">${uniqueUsers.filter(u => u.isOnline).length}</strong>
+        </div>
+        ${listHtml}
+      `;
     })
     .catch(err => {
       console.error('Error loading users:', err);
-      listEl.innerHTML = '<div style="text-align: center; padding: 40px; color: #ed4245;">❌ Ошибка загрузки пользователей</div>';
+      if (listEl) {
+        listEl.innerHTML = '<div style="color: #ed4245; text-align: center; padding: 20px;">Ошибка загрузки пользователей</div>';
+      }
     });
 }
 
-function renderAdminUsersList(users) {
+function filterAdminUsers(searchTerm) {
+  if (!window.allAdminUsers) return;
+  const filtered = window.allAdminUsers.filter(u =>
+    u.username.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Re-render with filtered users
   const listEl = document.getElementById('adminUsersList');
   if (!listEl) return;
-  
-  if (users.length === 0) {
-    listEl.innerHTML = '<div style="text-align: center; padding: 40px; color: #72767d;">😕 Нет пользователей</div>';
-    return;
+
+  // Update current user role from users list
+  const currentUserData = filtered.find(u => u.username === currentUser?.username);
+  if (currentUserData && currentUserData.role) {
+    currentUser.role = currentUserData.role;
   }
-  
-  // Remove duplicates by username (keep first occurrence, prefer online users)
+
   const uniqueUsers = [];
   const seenNames = new Set();
-  
-  // First pass: add online users
-  users.forEach(user => {
-    if (!seenNames.has(user.name)) {
-      seenNames.add(user.name);
+
+  filtered.forEach(user => {
+    if (!seenNames.has(user.username)) {
+      seenNames.add(user.username);
       uniqueUsers.push(user);
     }
   });
-  
-  // Sort: online first, then by name
+
   uniqueUsers.sort((a, b) => {
     if (a.isOnline && !b.isOnline) return -1;
     if (!a.isOnline && b.isOnline) return 1;
-    return a.name.localeCompare(b.name);
+    return a.username.localeCompare(b.username);
   });
-  
+
   const listHtml = uniqueUsers.map(user => {
     const statusColor = user.isOnline ? '#3ba55d' : '#72767d';
     const statusText = user.isOnline ? '🟢 В сети' : '⚪ Не в сети';
     const avatarHtml = user.avatar ?
       `<img src="${user.avatar}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">` :
-      `<div style="width: 32px; height: 32px; border-radius: 50%; background: #5865f2; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 600;">${user.name.charAt(0).toUpperCase()}</div>`;
+      `<div style="width: 32px; height: 32px; border-radius: 50%; background: #5865f2; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 600;">${user.username.charAt(0).toUpperCase()}</div>`;
 
-    // Check if current user is admin
     const currentUserRole = currentUser?.role || 'user';
     const isAdmin = currentUserRole === 'admin' || currentUserRole === 'superadmin';
     const canDelete = isAdmin || currentUser.username === user.username;
@@ -417,7 +504,7 @@ function renderAdminUsersList(users) {
         <div class="admin-room-info" style="display: flex; align-items: center; gap: 12px;">
           ${avatarHtml}
           <div>
-            <div class="admin-room-name">${user.name}</div>
+            <div class="admin-room-name">${user.username}</div>
             <div class="admin-room-meta" style="color: ${statusColor};">${statusText}</div>
             <div class="admin-room-meta" style="font-size: 12px; margin-top: 4px;">
               Роль: <span style="color: ${getRoleColor(user.role)}; font-weight: bold;">${getRoleLabel(user.role)}</span>
@@ -440,22 +527,14 @@ function renderAdminUsersList(users) {
       </div>
     `;
   }).join('');
-  
+
   listEl.innerHTML = `
     <div style="margin-bottom: 15px; color: #b9bbbe; font-size: 14px;">
-      Всего пользователей: <strong style="color: #fff;">${uniqueUsers.length}</strong> | 
+      Всего пользователей: <strong style="color: #fff;">${uniqueUsers.length}</strong> |
       Онлайн: <strong style="color: #3ba55d;">${uniqueUsers.filter(u => u.isOnline).length}</strong>
     </div>
     ${listHtml}
   `;
-}
-
-function filterAdminUsers(searchTerm) {
-  if (!window.allAdminUsers) return;
-  const filtered = window.allAdminUsers.filter(u => 
-    u.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  renderAdminUsersList(filtered);
 }
 
 function deleteUser(username) {
