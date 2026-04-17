@@ -367,7 +367,6 @@ function loadAdminUsersList() {
       const currentUserData = users.find(u => u.username === currentUser?.username);
       if (currentUserData && currentUserData.role) {
         currentUser.role = currentUserData.role;
-        console.log(`[ADMIN] Updated current user role: ${currentUser.role}`);
       }
 
       if (users.length === 0) {
@@ -405,10 +404,6 @@ function loadAdminUsersList() {
         const isAdmin = currentUserRole === 'admin' || currentUserRole === 'superadmin';
         const canDelete = isAdmin;  // Only admins can delete
         const canChangeRole = isAdmin && !(currentUserRole === 'superadmin' && currentUser.username === user.username);
-
-        // Debug logging
-        console.log(`[ADMIN] Current user: ${currentUser?.username}, role: ${currentUserRole}, isAdmin: ${isAdmin}`);
-        console.log(`[ADMIN] Target user: ${user.username}, canDelete: ${canDelete}, canChangeRole: ${canChangeRole}`);
 
         return `
           <div class="admin-room-item ${user.isOnline ? '' : 'empty'}">

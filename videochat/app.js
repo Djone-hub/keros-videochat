@@ -281,8 +281,6 @@ async function handleLogin(e) {
       if (data.success) {
         currentUser = data.user;
         currentUser.role = data.user.role || 'user';  // Ensure role is set
-        console.log(`[LOGIN] User data received:`, data.user);
-        console.log(`[LOGIN] Current user role: ${currentUser.role}`);
         localStorage.setItem('keroschat_user', JSON.stringify(currentUser));
         userAvatar = data.user.avatar || localStorage.getItem(`keroschat_avatar_${username}`);
         addLogEntry('Авторизация', `Пользователь ${username} вошёл в систему`);

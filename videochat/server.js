@@ -75,7 +75,6 @@ async function loadUsersFromSupabase() {
         lastSeen: u.last_seen,
         role: u.role || 'user'  // Default role is 'user'
       });
-      console.log(`[USERS] Loaded user: ${u.username}, role: ${u.role || 'user'}`);
     });
 
     console.log(`[USERS] Loaded ${data.length} users from Supabase`);
@@ -215,7 +214,6 @@ app.post('/api/login', (req, res) => {
   console.log(`[LOGIN] User found in registry: ${!!user}, hasPassword: ${!!user?.password}, passwordLength=${user?.password?.length || 0}`);
 
   if (user && user.password === password) {
-    console.log(`[LOGIN] SUCCESS: ${username}, role: ${user.role || 'user'}`);
     res.json({ success: true, user: { username: user.username, name: user.name, avatar: user.avatar, role: user.role || 'user' } });
   } else {
     console.log(`[LOGIN] FAILED: ${username} - user not found or wrong password`);
