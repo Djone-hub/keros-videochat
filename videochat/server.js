@@ -265,13 +265,38 @@ app.delete('/api/users/:username', async (req, res) => {
   const username = req.params.username;
   const requester = req.headers['x-username'];
 
-  // Check if requester is admin
-  const requesterUser = registeredUsers.get(requester);
-  const isAdmin = requesterUser && (requesterUser.role === 'admin' || requesterUser.role === 'superadmin');
+  // Fetch fresh data from Supabase to verify requester role
+  const { data: requesterData, error: requesterError } = await supabase
+    .from('videochat_users')
+    .select('role')
+    .eq('username', requester)
+    .single();
+
+  if (requesterError || !requesterData) {
+    return res.status(403).json({ success: false, message: 'Requester not found' });
+  }
+
+  const isAdmin = requesterData.role === 'admin' || requesterData.role === 'superadmin';
 
   // Only allow deletion if requester is admin
   if (!isAdmin) {
     return res.status(403).json({ success: false, message: 'Only admins can delete users' });
+  }
+
+  // Fetch target user data to check if it's superadmin
+  const { data: targetUser, error: targetError } = await supabase
+    .from('videochat_users')
+    .select('role')
+    .eq('username', username)
+    .single();
+
+  if (targetError || !targetUser) {
+    return res.status(404).json({ success: false, message: 'User not found' });
+  }
+
+  // Prevent deleting superadmins
+  if (targetUser.role === 'superadmin') {
+    return res.status(403).json({ success: false, message: 'Cannot delete superadmins' });
   }
 
   if (registeredUsers.has(username)) {
@@ -287,7 +312,7 @@ app.delete('/api/users/:username', async (req, res) => {
       console.error('[DELETE] Error deleting user from Supabase:', error);
     }
 
-    console.log(`[DELETE] User ${username} deleted by ${requester || 'unknown'} (role: ${requesterUser?.role})`);
+    console.log(`[DELETE] User ${username} deleted by ${requester || 'unknown'} (role: ${requesterData.role})`);
     io.emit('user-deleted', username);
     io.emit('users-updated');
     res.json({ success: true, message: `User ${username} deleted` });
@@ -302,21 +327,30 @@ app.put('/api/users/:username/role', async (req, res) => {
   const { role } = req.body;
   const requester = req.headers['x-username'];
 
-  // Check if requester is admin
-  const requesterUser = registeredUsers.get(requester);
-  const isAdmin = requesterUser && (requesterUser.role === 'admin' || requesterUser.role === 'superadmin');
+  // Fetch fresh data from Supabase to verify requester role
+  const { data: requesterData, error: requesterError } = await supabase
+    .from('videochat_users')
+    .select('role')
+    .eq('username', requester)
+    .single();
+
+  if (requesterError || !requesterData) {
+    return res.status(403).json({ success: false, message: 'Requester not found' });
+  }
+
+  const isAdmin = requesterData.role === 'admin' || requesterData.role === 'superadmin';
 
   if (!isAdmin) {
     return res.status(403).json({ success: false, message: 'Only admins can change user roles' });
   }
 
   // Prevent superadmins from changing their own role
-  if (requesterUser.role === 'superadmin' && requester === username) {
+  if (requesterData.role === 'superadmin' && requester === username) {
     return res.status(403).json({ success: false, message: 'Superadmins cannot change their own role' });
   }
 
   // Prevent changing superadmin role unless requester is also superadmin
-  if (role === 'superadmin' && requesterUser.role !== 'superadmin') {
+  if (role === 'superadmin' && requesterData.role !== 'superadmin') {
     return res.status(403).json({ success: false, message: 'Only superadmins can grant superadmin role' });
   }
 
@@ -357,22 +391,37 @@ app.put('/api/users/:username/mute', async (req, res) => {
   const { isMuted, duration } = req.body;  // duration in minutes, 0 for permanent
   const requester = req.headers['x-username'];
 
-  // Check if requester is admin or moderator
-  const requesterUser = registeredUsers.get(requester);
-  const isAdmin = requesterUser && (requesterUser.role === 'admin' || requesterUser.role === 'superadmin');
-  const isModerator = requesterUser && requesterUser.role === 'moderator';
+  // Fetch fresh data from Supabase to verify requester role
+  const { data: requesterData, error: requesterError } = await supabase
+    .from('videochat_users')
+    .select('role')
+    .eq('username', requester)
+    .single();
+
+  if (requesterError || !requesterData) {
+    return res.status(403).json({ success: false, message: 'Requester not found' });
+  }
+
+  const isAdmin = requesterData.role === 'admin' || requesterData.role === 'superadmin';
+  const isModerator = requesterData.role === 'moderator';
 
   if (!isAdmin && !isModerator) {
     return res.status(403).json({ success: false, message: 'Only admins and moderators can mute users' });
   }
 
-  const user = registeredUsers.get(username);
-  if (!user) {
+  // Fetch target user data from Supabase
+  const { data: targetUser, error: targetError } = await supabase
+    .from('videochat_users')
+    .select('*')
+    .eq('username', username)
+    .single();
+
+  if (targetError || !targetUser) {
     return res.status(404).json({ success: false, message: 'User not found' });
   }
 
   // Prevent muting admins/superadmins
-  if (user.role === 'admin' || user.role === 'superadmin') {
+  if (targetUser.role === 'admin' || targetUser.role === 'superadmin') {
     return res.status(403).json({ success: false, message: 'Cannot mute admins or superadmins' });
   }
 
@@ -380,9 +429,12 @@ app.put('/api/users/:username/mute', async (req, res) => {
   const muteUntil = duration > 0 ? Date.now() + (duration * 60 * 1000) : 0;
 
   // Update user in memory
-  user.isMuted = isMuted;
-  user.muteUntil = muteUntil;
-  registeredUsers.set(username, user);
+  const memoryUser = registeredUsers.get(username);
+  if (memoryUser) {
+    memoryUser.isMuted = isMuted;
+    memoryUser.muteUntil = muteUntil;
+    registeredUsers.set(username, memoryUser);
+  }
 
   // Update user in Supabase
   const { error } = await supabase
@@ -410,37 +462,55 @@ app.post('/api/users/:username/kick', async (req, res) => {
   const { roomId } = req.body;
   const requester = req.headers['x-username'];
 
-  // Check if requester is admin or moderator
-  const requesterUser = registeredUsers.get(requester);
-  const isAdmin = requesterUser && (requesterUser.role === 'admin' || requesterUser.role === 'superadmin');
-  const isModerator = requesterUser && requesterUser.role === 'moderator';
+  // Fetch fresh data from Supabase to verify requester role
+  const { data: requesterData, error: requesterError } = await supabase
+    .from('videochat_users')
+    .select('role')
+    .eq('username', requester)
+    .single();
+
+  if (requesterError || !requesterData) {
+    return res.status(403).json({ success: false, message: 'Requester not found' });
+  }
+
+  const isAdmin = requesterData.role === 'admin' || requesterData.role === 'superadmin';
+  const isModerator = requesterData.role === 'moderator';
 
   if (!isAdmin && !isModerator) {
     return res.status(403).json({ success: false, message: 'Only admins and moderators can kick users' });
   }
 
-  const user = registeredUsers.get(username);
-  if (!user) {
+  // Fetch target user data from Supabase
+  const { data: targetUser, error: targetError } = await supabase
+    .from('videochat_users')
+    .select('*')
+    .eq('username', username)
+    .single();
+
+  if (targetError || !targetUser) {
     return res.status(404).json({ success: false, message: 'User not found' });
   }
 
   // Prevent kicking admins/superadmins
-  if (user.role === 'admin' || user.role === 'superadmin') {
+  if (targetUser.role === 'admin' || targetUser.role === 'superadmin') {
     return res.status(403).json({ success: false, message: 'Cannot kick admins or superadmins' });
   }
 
   // Update user's kicked rooms in memory
-  let kickedRooms = JSON.parse(user.kickedRooms || '[]');
+  const memoryUser = registeredUsers.get(username);
+  let kickedRooms = memoryUser ? JSON.parse(memoryUser.kickedRooms || '[]') : JSON.parse(targetUser.kicked_rooms || '[]');
   if (!kickedRooms.includes(roomId)) {
     kickedRooms.push(roomId);
-    user.kickedRooms = JSON.stringify(kickedRooms);
-    registeredUsers.set(username, user);
+    if (memoryUser) {
+      memoryUser.kickedRooms = JSON.stringify(kickedRooms);
+      registeredUsers.set(username, memoryUser);
+    }
   }
 
   // Update user in Supabase
   const { error } = await supabase
     .from('videochat_users')
-    .update({ kicked_rooms: user.kickedRooms })
+    .update({ kicked_rooms: JSON.stringify(kickedRooms) })
     .eq('username', username);
 
   if (error) {
@@ -489,9 +559,18 @@ app.delete('/api/messages/:messageId', (req, res) => {
 app.post('/api/admin/reload-users', async (req, res) => {
   const requester = req.headers['x-username'];
 
-  // Check if requester is admin
-  const requesterUser = registeredUsers.get(requester);
-  if (!requesterUser || (requesterUser.role !== 'admin' && requesterUser.role !== 'superadmin')) {
+  // Fetch fresh data from Supabase to verify requester role
+  const { data: requesterData, error: requesterError } = await supabase
+    .from('videochat_users')
+    .select('role')
+    .eq('username', requester)
+    .single();
+
+  if (requesterError || !requesterData) {
+    return res.status(403).json({ success: false, message: 'Requester not found' });
+  }
+
+  if (requesterData.role !== 'admin' && requesterData.role !== 'superadmin') {
     return res.status(403).json({ success: false, message: 'Only admins can reload users' });
   }
 
