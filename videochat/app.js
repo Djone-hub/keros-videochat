@@ -20,7 +20,8 @@ socket.on('connect', () => {
     socket.emit('user-registered', {
       username: u.username,
       avatar: avatar,
-      isOnline: currentUserData.username === u.username
+      isOnline: currentUserData.username === u.username,
+      password: u.password
     });
   });
 
