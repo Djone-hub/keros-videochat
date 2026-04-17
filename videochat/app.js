@@ -1700,13 +1700,14 @@ socket.on('ice-candidate', async (userId, candidate) => {
 });
 
 socket.on('chat-message', (msg) => {
-  // Only show room messages if in general channel
-  if (currentChannel === 'general') {
+  // TEMPORARILY DISABLED: Channel check - show all messages
+  // if (currentChannel === 'general') {
     addChatMessage(msg.sender, msg.text, false, msg.time);
-  }
+  // }
 });
 
-// Channel-specific messages
+// Channel-specific messages - TEMPORARILY DISABLED
+/*
 socket.on('channel-message', (msg) => {
   // Only show if user is in this channel
   if (currentChannel === msg.channelId) {
@@ -1719,7 +1720,7 @@ socket.on('channel-created', (data) => {
   console.log('[CHANNEL DEBUG] Received channel-created event:', data);
   addLogEntry('Канал', `${data.createdBy} создал канал "${data.channelName}"`);
   // Refresh channel list
-  loadChannels();
+  loadChannelsForRoom();
 });
 
 // Channels updated (counts changed)
@@ -1733,14 +1734,15 @@ socket.on('user-joined-channel', (data) => {
   if (data.userId !== socket.id) {
     addSystemMessage(`${data.userName} присоединился к каналу "${data.channelName}"`);
     
-    // Add to current channel users if in same channel
+    // Update channel user counts
     if (data.channelId === currentChannel) {
       currentChannelUsers.set(data.userId, { userName: data.userName });
-      // Refresh channel videos
-      refreshChannelVideos();
+      updateChannelParticipants();
+      
+      // Show user's video if they joined current channel
+      showUserVideo(data.userId, true);
     }
   }
-  updateChannelParticipants();
 });
 
 // User left channel
@@ -1749,21 +1751,14 @@ socket.on('user-left-channel', (data) => {
     // Remove from current channel users
     if (data.channelId === currentChannel) {
       currentChannelUsers.delete(data.userId);
-      // Update video visibility to hide this user's video
-      const channelUsers = Array.from(currentChannelUsers.entries()).map(([userId, user]) => ({
-        userId,
-        userName: user.userName || (activeUsers.get(userId)?.name) || 'Участник'
-      }));
-      // Add current user
-      channelUsers.push({
-        userId: socket.id,
-        userName: currentUser.username
-      });
-      updateVideoVisibilityForChannel(channelUsers);
+      updateChannelParticipants();
+      
+      // Hide user's video if they left current channel
+      showUserVideo(data.userId, false);
     }
   }
-  updateChannelParticipants();
 });
+*/
 
 // Refresh channel videos - re-creates the channel video container
 function refreshChannelVideos() {
