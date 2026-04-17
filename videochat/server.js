@@ -396,11 +396,48 @@ app.get('/api/users/:username', (req, res) => {
 });
 
 // REST API endpoint for user login
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   console.log(`[LOGIN] Attempt: username=${username}, hasPassword=${!!password}, passwordLength=${password?.length || 0}`);
-  const user = registeredUsers.get(username);
-  console.log(`[LOGIN] User found in registry: ${!!user}, hasPassword: ${!!user?.password}, passwordLength=${user?.password?.length || 0}`);
+
+  // First check cached users in memory
+  let user = registeredUsers.get(username);
+
+  // If user not found or role might be outdated, fetch fresh from Supabase
+  if (!user) {
+    console.log(`[LOGIN] User not found in cache, fetching from Supabase...`);
+    try {
+      const { data, error } = await supabase
+        .from('videochat_users')
+        .select('*')
+        .eq('username', username)
+        .single();
+
+      if (error) {
+        console.error('[LOGIN] Error fetching from Supabase:', error);
+      } else if (data) {
+        // Update cache with fresh data
+        registeredUsers.set(username, {
+          username: data.username,
+          password: data.password,
+          name: data.name,
+          avatar: data.avatar,
+          isOnline: data.is_online,
+          lastSeen: data.last_seen,
+          role: data.role || 'user',
+          isMuted: data.is_muted || false,
+          muteUntil: data.mute_until || 0,
+          kickedRooms: data.kicked_rooms || '[]'
+        });
+        user = registeredUsers.get(username);
+        console.log(`[LOGIN] Loaded fresh user from Supabase: role=${user.role}`);
+      }
+    } catch (err) {
+      console.error('[LOGIN] Error fetching from Supabase:', err);
+    }
+  }
+
+  console.log(`[LOGIN] User found in registry: ${!!user}, hasPassword: ${!!user?.password}, passwordLength=${user?.password?.length || 0}, role=${user?.role}`);
 
   if (user && user.password === password) {
     res.json({ success: true, user: { username: user.username, name: user.name, avatar: user.avatar, role: user.role || 'user' } });
