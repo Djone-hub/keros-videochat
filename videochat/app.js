@@ -497,6 +497,14 @@ function logout() {
   location.reload();
 }
 
+// ========== AUTH ==========
+
+function showAuth() {
+  document.getElementById('authScreen').style.display = 'flex';
+  document.getElementById('roomScreen').style.display = 'none';
+  document.getElementById('lobbyScreen').style.display = 'none';
+}
+
 // ========== LOBBY ==========
 
 function showLobby() {
@@ -516,12 +524,11 @@ function showLobby() {
         console.log('[LOBBY] Restored user from localStorage:', currentUser.username);
       } catch (err) {
         console.error('[LOBBY] Error restoring user:', err);
-        showAlertModal('Ошибка: пользователь не найден. Пожалуйста, войдите снова.', 'error');
         showAuth();
         return;
       }
     } else {
-      showAlertModal('Ошибка: пользователь не найден. Пожалуйста, войдите снова.', 'error');
+      console.log('[LOBBY] No saved user found, showing auth screen');
       showAuth();
       return;
     }
