@@ -3,6 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs');
+const { createClient } = require('@supabase/supabase-js');
 
 // Global error handlers to prevent server crashes
 process.on('uncaughtException', (err) => {
@@ -30,7 +31,11 @@ const rooms = new Map();
 
 // File-based persistence for rooms and users
 const ROOMS_FILE = path.join(__dirname, 'rooms.json');
-const USERS_FILE = path.join(__dirname, 'users.json');
+
+// Supabase configuration
+const SUPABASE_URL = 'https://gtixajbcfxwqrtsdxnif.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd0aXhhamJjZnh3cXJ0c2R4bmlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MDUwMTIsImV4cCI6MjA3NjA4MTAxMn0.T3Wvz0UPTG1O4NFS54PzfyB4sJdNLdiGT9GvnvJKGzw';
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 function loadRoomsFromFile() {
   try {
@@ -48,22 +53,35 @@ function loadRoomsFromFile() {
   return new Map();
 }
 
-function loadUsersFromFile() {
+async function loadUsersFromSupabase() {
   try {
-    if (fs.existsSync(USERS_FILE)) {
-      const data = fs.readFileSync(USERS_FILE, 'utf8');
-      const usersArray = JSON.parse(data);
-      const map = new Map();
-      usersArray.forEach(u => map.set(u.username, u));
-      console.log(`[USERS] Loaded ${usersArray.length} users from file`);
-      return map;
-    } else {
-      console.log(`[USERS] No users.json file found, starting with empty user registry`);
+    const { data, error } = await supabase
+      .from('users')
+      .select('*');
+    
+    if (error) {
+      console.error('[USERS] Error loading users from Supabase:', error);
+      return new Map();
     }
+    
+    const map = new Map();
+    data.forEach(u => {
+      map.set(u.username, {
+        username: u.username,
+        password: u.password,
+        name: u.name,
+        avatar: u.avatar,
+        isOnline: u.is_online,
+        lastSeen: u.last_seen
+      });
+    });
+    
+    console.log(`[USERS] Loaded ${data.length} users from Supabase`);
+    return map;
   } catch (err) {
-    console.error('[USERS] Error loading users file:', err);
+    console.error('[USERS] Error loading users from Supabase:', err);
+    return new Map();
   }
-  return new Map();
 }
 
 function saveRoomsToFile() {
@@ -75,22 +93,51 @@ function saveRoomsToFile() {
   }
 }
 
-function saveUsersToFile() {
+async function saveUsersToSupabase() {
   try {
     const usersArray = Array.from(registeredUsers.values());
-    fs.writeFileSync(USERS_FILE, JSON.stringify(usersArray, null, 2));
-    console.log(`[USERS] Saved ${usersArray.length} users to file`);
+    
+    // Convert to Supabase format
+    const supabaseUsers = usersArray.map(u => ({
+      username: u.username,
+      password: u.password,
+      name: u.name,
+      avatar: u.avatar,
+      is_online: u.isOnline,
+      last_seen: u.lastSeen
+    }));
+    
+    // Use upsert to insert or update
+    const { data, error } = await supabase
+      .from('users')
+      .upsert(supabaseUsers, { onConflict: 'username' });
+    
+    if (error) {
+      console.error('[USERS] Error saving users to Supabase:', error);
+    } else {
+      console.log(`[USERS] Saved ${usersArray.length} users to Supabase`);
+    }
   } catch (err) {
-    console.error('[USERS] Error saving users file:', err);
+    console.error('[USERS] Error saving users to Supabase:', err);
   }
 }
 
 const roomStore = loadRoomsFromFile();
-const registeredUsers = loadUsersFromFile();
+const registeredUsers = new Map();
 
-console.log('========================================');
-console.log('[VERSION] Server v2.0 - User persistence enabled');
-console.log('========================================');
+// Load users from Supabase asynchronously
+loadUsersFromSupabase().then(users => {
+  // Copy all users to registeredUsers
+  users.forEach((value, key) => registeredUsers.set(key, value));
+  console.log('========================================');
+  console.log('[VERSION] Server v3.0 - Supabase user persistence enabled');
+  console.log('========================================');
+}).catch(err => {
+  console.error('[USERS] Failed to load users from Supabase:', err);
+  console.log('========================================');
+  console.log('[VERSION] Server v3.0 - Starting with empty user registry');
+  console.log('========================================');
+});
 
 // REST API endpoint for rooms - returns ALL rooms (stored + active) with user list
 app.get('/api/rooms', (req, res) => {
@@ -165,7 +212,7 @@ app.post('/api/login', (req, res) => {
 });
 
 // REST API endpoint to delete a registered user
-app.delete('/api/users/:username', (req, res) => {
+app.delete('/api/users/:username', async (req, res) => {
   const username = req.params.username;
   const requester = req.headers['x-username'];
   
@@ -173,7 +220,17 @@ app.delete('/api/users/:username', (req, res) => {
   // For now, anyone can delete any user (you can add admin check later)
   if (registeredUsers.has(username)) {
     registeredUsers.delete(username);
-    saveUsersToFile();
+    
+    // Delete from Supabase
+    const { error } = await supabase
+      .from('users')
+      .delete()
+      .eq('username', username);
+    
+    if (error) {
+      console.error('[DELETE] Error deleting user from Supabase:', error);
+    }
+    
     console.log(`[DELETE] User ${username} deleted by ${requester || 'unknown'}`);
     io.emit('user-deleted', username);
     io.emit('users-updated');
@@ -188,7 +245,7 @@ io.on('connection', (socket) => {
   console.log('Current rooms in store:', roomStore.size);
 
   // Handle user registration
-  socket.on('user-registered', ({ username, avatar, isOnline, password }) => {
+  socket.on('user-registered', async ({ username, avatar, isOnline, password }) => {
     console.log(`[REGISTER] User: ${username}, online: ${isOnline}, hasPassword: ${!!password}, passwordLength: ${password?.length || 0}`);
     
     // Add to global registry with password
@@ -217,8 +274,8 @@ io.on('connection', (socket) => {
       console.log(`[REGISTER] Created new user: ${username}`);
     }
     
-    // Save to file
-    saveUsersToFile();
+    // Save to Supabase
+    await saveUsersToSupabase();
     
     // Broadcast to all clients to refresh user list
     io.emit('users-updated');
