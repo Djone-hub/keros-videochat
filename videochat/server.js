@@ -365,6 +365,8 @@ app.get('/api/users', async (req, res) => {
       return;
     }
 
+    console.log('[API] Fetched users from Supabase:', data.map(u => ({ username: u.username, role: u.role })));
+
     // Map Supabase data to API format, merging with online status from memory
     const users = data.map(su => {
       const memoryUser = registeredUsers.get(su.username);
@@ -381,6 +383,7 @@ app.get('/api/users', async (req, res) => {
       };
     });
 
+    console.log('[API] Returning users to client:', users.map(u => ({ username: u.username, role: u.role })));
     res.json(users);
   } catch (err) {
     console.error('[API] Error in /api/users:', err);
