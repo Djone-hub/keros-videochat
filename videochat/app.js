@@ -9,21 +9,35 @@ socket.on('connect', () => {
     console.log('Connected to server');
   }
   socketConnected = true;
-  
+
   // Sync registered users from localStorage to server
   const localUsers = JSON.parse(localStorage.getItem('keroschat_users') || '[]');
   const currentUserData = JSON.parse(localStorage.getItem('keroschat_user') || '{}');
-  
+
   // Send all registered users to server
   localUsers.forEach(u => {
     const avatar = localStorage.getItem(`keroschat_avatar_${u.username}`);
-    socket.emit('user-registered', { 
-      username: u.username, 
+    socket.emit('user-registered', {
+      username: u.username,
       avatar: avatar,
       isOnline: currentUserData.username === u.username
     });
   });
-  
+
+  // REJOIN ROOM: If we were in a room, rejoin to restore socket.roomId on server
+  if (currentRoom && currentUser && currentUser.username) {
+    console.log('[RECONNECT] Rejoining room after reconnect:', currentRoom);
+    socket.emit('join-room', currentRoom, currentUser.username, userAvatar, currentRoomName, currentRoomAvatar, (response) => {
+      if (response && response.success) {
+        console.log('[RECONNECT] Successfully rejoined room:', currentRoom);
+        // Reload channels after rejoin
+        loadChannels();
+      } else {
+        console.error('[RECONNECT] Failed to rejoin room:', response?.error);
+      }
+    });
+  }
+
   // If lobby is already visible, reload rooms and users
   const lobbyScreen = document.getElementById('lobbyScreen');
   if (lobbyScreen && lobbyScreen.style.display === 'flex') {
@@ -46,6 +60,7 @@ socket.on('users-updated', () => {
 let currentUser = null;
 let currentRoom = null;
 let currentRoomName = '';
+let currentRoomAvatar = null;
 let localStream = null;
 let screenStream = null;
 let peers = new Map();
@@ -259,28 +274,69 @@ function switchTab(tab) {
   }
 }
 
-function handleLogin(e) {
+async function handleLogin(e) {
   e.preventDefault();
   const username = document.getElementById('loginUsername').value.trim();
   const password = document.getElementById('loginPassword').value;
   
-  // Check stored users
-  const users = JSON.parse(localStorage.getItem('keroschat_users') || '[]');
-  const user = users.find(u => u.username === username && u.password === password);
-  
-  if (user) {
-    currentUser = user;
-    localStorage.setItem('keroschat_user', JSON.stringify(user));
-    userAvatar = localStorage.getItem(`keroschat_avatar_${username}`);
-    addLogEntry('Авторизация', `Пользователь ${username} вошел в систему`);
-    showLobby();
-  } else {
-    addLogEntry('Ошибка', `Неудачная попытка входа для ${username}`);
-    alert('Неверный никнейм или пароль!');
+  try {
+    // Try server-side login first
+    const response = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success) {
+        currentUser = data.user;
+        localStorage.setItem('keroschat_user', JSON.stringify(currentUser));
+        userAvatar = data.user.avatar || localStorage.getItem(`keroschat_avatar_${username}`);
+        addLogEntry('Авторизация', `Пользователь ${username} вошёл в систему`);
+        
+        // Notify server about user being online
+        socket.emit('user-registered', { username, avatar: data.user.avatar, isOnline: true, password });
+        
+        showLobby();
+        return;
+      }
+    }
+    
+    // Fallback to localStorage if server login fails
+    const users = JSON.parse(localStorage.getItem('keroschat_users') || '[]');
+    const user = users.find(u => u.username === username && u.password === password);
+    
+    if (user) {
+      currentUser = user;
+      localStorage.setItem('keroschat_user', JSON.stringify(user));
+      userAvatar = localStorage.getItem(`keroschat_avatar_${username}`);
+      addLogEntry('Авторизация', `Пользователь ${username} вошел в систему (локально)`);
+      showLobby();
+    } else {
+      addLogEntry('Ошибка', `Неудачная попытка входа для ${username}`);
+      alert('Неверный никнейм или пароль!');
+    }
+  } catch (err) {
+    console.error('Login error:', err);
+    // Fallback to localStorage on error
+    const users = JSON.parse(localStorage.getItem('keroschat_users') || '[]');
+    const user = users.find(u => u.username === username && u.password === password);
+    
+    if (user) {
+      currentUser = user;
+      localStorage.setItem('keroschat_user', JSON.stringify(user));
+      userAvatar = localStorage.getItem(`keroschat_avatar_${username}`);
+      addLogEntry('Авторизация', `Пользователь ${username} вошел в систему (локально)`);
+      showLobby();
+    } else {
+      addLogEntry('Ошибка', `Неудачная попытка входа для ${username}`);
+      alert('Неверный никнейм или пароль!');
+    }
   }
 }
 
-function handleRegister(e) {
+async function handleRegister(e) {
   e.preventDefault();
   const username = document.getElementById('regUsername').value.trim();
   const password = document.getElementById('regPassword').value;
@@ -291,28 +347,57 @@ function handleRegister(e) {
     return;
   }
   
-  // Check if username exists
-  const users = JSON.parse(localStorage.getItem('keroschat_users') || '[]');
-  if (users.find(u => u.username === username)) {
-    alert('Такой никнейм уже занят!');
-    return;
+  try {
+    // Register on server
+    const response = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    
+    if (response.ok) {
+      // User exists, try to login
+      const data = await response.json();
+      if (data.success) {
+        currentUser = data.user;
+        localStorage.setItem('keroschat_user', JSON.stringify(currentUser));
+        addLogEntry('Авторизация', `Пользователь ${username} вошёл в систему`);
+        
+        // Notify server about user being online
+        socket.emit('user-registered', { username, avatar: data.user.avatar, isOnline: true, password });
+        
+        showLobby();
+        alert('Вход успешен!');
+        return;
+      }
+    }
+    
+    // If login failed or user doesn't exist, check if username is already taken on server
+    const usersResponse = await fetch('/api/users');
+    const users = await usersResponse.json();
+    if (users.find(u => u.name === username)) {
+      alert('Такой никнейм уже занят!');
+      return;
+    }
+    
+    // Register new user on server
+    socket.emit('user-registered', { username, avatar: null, isOnline: true, password });
+    
+    // Also save locally for offline support
+    const localUsers = JSON.parse(localStorage.getItem('keroschat_users') || '[]');
+    localUsers.push({ username, password, created: Date.now() });
+    localStorage.setItem('keroschat_users', JSON.stringify(localUsers));
+    
+    currentUser = { username, name: username, avatar: null };
+    localStorage.setItem('keroschat_user', JSON.stringify(currentUser));
+    addLogEntry('Авторизация', `Новый пользователь ${username} зарегистрирован`);
+    
+    showLobby();
+    alert('Регистрация успешна!');
+  } catch (err) {
+    console.error('Registration error:', err);
+    alert('Ошибка регистрации. Попробуйте снова.');
   }
-  
-  // Create new user
-  const newUser = { username, password, created: Date.now() };
-  users.push(newUser);
-  localStorage.setItem('keroschat_users', JSON.stringify(users));
-  
-  // Auto login
-  currentUser = newUser;
-  localStorage.setItem('keroschat_user', JSON.stringify(newUser));
-  addLogEntry('Авторизация', `Новый пользователь ${username} зарегистрирован`);
-  
-  // Notify server about new user registration
-  socket.emit('user-registered', { username, avatar: null });
-  
-  showLobby();
-  alert('Регистрация успешна!');
 };
 
 function logout() {
@@ -808,8 +893,8 @@ async function joinRoomById(roomId) {
   const serverRoom = serverRooms.find(r => r.id === roomId);
   const room = localRoom || serverRoom;
   currentRoomName = room ? room.name : roomId;
-  const roomAvatar = room ? room.avatar : null;
-  
+  currentRoomAvatar = room ? room.avatar : null;
+
   addLogEntry('Комната', `"${currentRoomName}" - вы подключились`);
   
   // Request media
@@ -835,7 +920,7 @@ async function joinRoomById(roomId) {
   }
   
   // Join socket room with avatar, room name and room avatar
-  socket.emit('join-room', roomId, currentUser.username, userAvatar, currentRoomName, roomAvatar);
+  socket.emit('join-room', roomId, currentUser.username, userAvatar, currentRoomName, currentRoomAvatar);
   
   // Play sound for local user entering room
   sounds.userJoin();
@@ -927,6 +1012,9 @@ function resetRoomStateAndUI() {
 }
 
 function leaveRoom() {
+  // Close any open screen share modals
+  closeAllScreenModals();
+  
   // Stop streams
   if (localStream) {
     localStream.getTracks().forEach(t => t.stop());
@@ -952,6 +1040,9 @@ function leaveRoom() {
 }
 
 function disconnectAndJoinAnother() {
+  // Close any open screen share modals
+  closeAllScreenModals();
+  
   // Just disconnect and return to lobby without stopping streams
   // Leave socket room
   socket.emit('leave-room', currentRoom);
@@ -969,6 +1060,9 @@ function disconnectAndJoinAnother() {
 }
 
 function disconnectAndShowLobby() {
+  // Close any open screen share modals
+  closeAllScreenModals();
+  
   // Leave socket room
   socket.emit('leave-room', currentRoom);
   
@@ -1497,9 +1591,16 @@ socket.on('channel-message', (msg) => {
 
 // Channel created by another user
 socket.on('channel-created', (data) => {
+  console.log('[CHANNEL DEBUG] Received channel-created event:', data);
   addLogEntry('Канал', `${data.createdBy} создал канал "${data.channelName}"`);
   // Refresh channel list
   loadChannels();
+});
+
+// Channels updated (counts changed)
+socket.on('channels-updated', (channels) => {
+  console.log('[CHANNEL] Received updated channel counts:', channels);
+  updateChannelList(channels);
 });
 
 // User joined channel
@@ -1523,11 +1624,17 @@ socket.on('user-left-channel', (data) => {
     // Remove from current channel users
     if (data.channelId === currentChannel) {
       currentChannelUsers.delete(data.userId);
-      // Remove video from channel container
-      const channelVideo = document.getElementById(`channel-video-${data.userId}`);
-      if (channelVideo) {
-        channelVideo.remove();
-      }
+      // Update video visibility to hide this user's video
+      const channelUsers = Array.from(currentChannelUsers.entries()).map(([userId, user]) => ({
+        userId,
+        userName: user.userName || (activeUsers.get(userId)?.name) || 'Участник'
+      }));
+      // Add current user
+      channelUsers.push({
+        userId: socket.id,
+        userName: currentUser.username
+      });
+      updateVideoVisibilityForChannel(channelUsers);
     }
   }
   updateChannelParticipants();
@@ -1649,60 +1756,82 @@ socket.on('screen-share-stopped', (userId) => {
 socket.on('active-screen-shares', (userIds) => {
   console.log('[SCREEN] Received active screen shares on join:', userIds);
   
-  userIds.forEach(userId => {
+  userIds.forEach(async (userId) => {
     // Track this user as screen sharing
     screenShareUsers.add(userId);
     const user = activeUsers.get(userId);
     const userName = user ? user.name : 'Участник';
     addLogEntry('Демонстрация', `${userName} демонстрирует экран`);
     
-    // Check if video container already exists and add buttons
-    const container = document.getElementById(`video-${userId}`);
-    if (container) {
-      // Add screen-share class
-      container.classList.add('screen-share');
-      
-      // Add preview toggle button if not exists
-      if (!container.querySelector('.preview-toggle-btn')) {
-        const previewToggleBtn = document.createElement('button');
-        previewToggleBtn.className = 'preview-toggle-btn';
-        previewToggleBtn.innerHTML = '👁️ Превью';
-        previewToggleBtn.title = 'Переключить режим превью (экономия ресурсов)';
-        previewToggleBtn.onclick = () => toggleScreenSharePreview(userId);
-        container.appendChild(previewToggleBtn);
-      }
-      
-      // Add fullscreen button if not exists
-      if (!container.querySelector('.fullscreen-btn')) {
-        const fullscreenBtn = document.createElement('button');
-        fullscreenBtn.className = 'fullscreen-btn';
-        fullscreenBtn.innerHTML = '🔍';
-        fullscreenBtn.title = 'Увеличить демонстрацию экрана';
-        fullscreenBtn.onclick = () => openScreenModal(userId);
-        container.appendChild(fullscreenBtn);
-      }
-      
-      // Add double-click handler to video
-      const video = container.querySelector('video');
-      if (video) {
-        video.style.cursor = 'pointer';
-        video.title = 'Двойной клик для увеличения';
-        video.ondblclick = () => openScreenModal(userId);
-        // Refresh video stream by re-setting srcObject
-        const currentStream = video.srcObject;
-        if (currentStream) {
-          video.srcObject = null;
-          setTimeout(() => {
-            video.srcObject = currentStream;
-            video.play().catch(e => console.log('[SCREEN] Refresh play error:', e));
-          }, 100);
-        }
+    // Ensure peer connection exists before requesting screen stream
+    if (!peers.has(userId) && !activeUsers.has(userId)) {
+      // Create user entry if not exists
+      activeUsers.set(userId, { name: userName, avatar: user?.avatar });
+    }
+    
+    // Create peer connection if not exists
+    if (!peers.has(userId)) {
+      try {
+        console.log(`[SCREEN] Creating peer connection for screen share user: ${userId}`);
+        const pc = await createPeerConnection(userId);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit('offer', userId, offer);
+      } catch (e) {
+        console.error('[SCREEN] Error creating peer connection for screen share:', e);
       }
     }
     
-    // Request fresh video stream from server for this user
-    console.log(`[SCREEN] Requesting fresh stream from user: ${userId}`);
-    socket.emit('request-screen-stream', userId);
+    // Wait a bit for peer connection to establish before requesting screen stream
+    setTimeout(() => {
+      // Check if video container already exists and add buttons
+      const container = document.getElementById(`video-${userId}`);
+      if (container) {
+        // Add screen-share class
+        container.classList.add('screen-share');
+        
+        // Add preview toggle button if not exists
+        if (!container.querySelector('.preview-toggle-btn')) {
+          const previewToggleBtn = document.createElement('button');
+          previewToggleBtn.className = 'preview-toggle-btn';
+          previewToggleBtn.innerHTML = '👁️ Превью';
+          previewToggleBtn.title = 'Переключить режим превью (экономия ресурсов)';
+          previewToggleBtn.onclick = () => toggleScreenSharePreview(userId);
+          container.appendChild(previewToggleBtn);
+        }
+        
+        // Add fullscreen button if not exists
+        if (!container.querySelector('.fullscreen-btn')) {
+          const fullscreenBtn = document.createElement('button');
+          fullscreenBtn.className = 'fullscreen-btn';
+          fullscreenBtn.innerHTML = '🔍';
+          fullscreenBtn.title = 'Увеличить демонстрацию экрана';
+          fullscreenBtn.onclick = () => openScreenModal(userId);
+          container.appendChild(fullscreenBtn);
+        }
+        
+        // Add double-click handler to video
+        const video = container.querySelector('video');
+        if (video) {
+          video.style.cursor = 'pointer';
+          video.title = 'Двойной клик для увеличения';
+          video.ondblclick = () => openScreenModal(userId);
+          // Refresh video stream by re-setting srcObject
+          const currentStream = video.srcObject;
+          if (currentStream) {
+            video.srcObject = null;
+            setTimeout(() => {
+              video.srcObject = currentStream;
+              video.play().catch(e => console.log('[SCREEN] Refresh play error:', e));
+            }, 100);
+          }
+        }
+      }
+      
+      // Request fresh video stream from server for this user
+      console.log(`[SCREEN] Requesting fresh stream from user: ${userId}`);
+      socket.emit('request-screen-stream', userId);
+    }, 500); // Wait 500ms for peer connection to establish
   });
 });
 
@@ -1712,15 +1841,22 @@ socket.on('refresh-screen-offer', async ({ requesterId, targetId }) => {
   // Only respond if we are the target and we're screen sharing
   if (targetId === socket.id && isScreenSharing) {
     console.log(`[SCREEN] Re-sending screen stream to ${requesterId}`);
-    // Re-create peer connection or re-offer to this specific user
-    const pc = peers.get(requesterId);
-    if (pc) {
-      // Create new offer to trigger renegotiation
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socket.emit('offer', requesterId, offer);
-      console.log(`[SCREEN] Re-sent offer to ${requesterId}`);
+    // Create peer connection if not exists
+    let pc = peers.get(requesterId);
+    if (!pc) {
+      try {
+        console.log(`[SCREEN] Creating new peer connection for ${requesterId}`);
+        pc = await createPeerConnection(requesterId);
+      } catch (e) {
+        console.error('[SCREEN] Error creating peer connection:', e);
+        return;
+      }
     }
+    // Create new offer to trigger renegotiation
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit('offer', requesterId, offer);
+    console.log(`[SCREEN] Re-sent offer to ${requesterId}`);
   }
 });
 
@@ -1982,7 +2118,22 @@ function toggleScreenSharePreview(videoId) {
   }
 }
 
+function closeAllScreenModals() {
+  const modal = document.getElementById('screenShareModal');
+  if (modal) {
+    modal.remove();
+    console.log('[SCREEN] Closed all screen share modals');
+  }
+}
+
 function openScreenModal(videoId) {
+  // Check if user is in the same channel as the screen sharing user
+  if (!currentChannelUsers.has(videoId) && videoId !== 'local') {
+    console.log('[SCREEN] Cannot open modal: user', videoId, 'is not in current channel');
+    addSystemMessage('Вы не можете просматривать демонстрацию экрана пользователя из другого канала');
+    return;
+  }
+  
   // Find the screen share video element by id
   const container = document.getElementById(`video-${videoId}`);
   if (!container) {
@@ -2260,6 +2411,9 @@ function switchChannel(channelId) {
       const oldChannel = currentChannel;
       currentChannel = channelId;
       
+      // Close any open screen share modals when switching channels
+      closeAllScreenModals();
+      
       // Update UI
       document.querySelectorAll('.channel-item').forEach(item => {
         item.classList.remove('active');
@@ -2274,18 +2428,50 @@ function switchChannel(channelId) {
         chatHeader.innerHTML = `&#128172; Чат: ${response.channelName}`;
       }
       
+      // Update currentChannelUsers from response
+      currentChannelUsers.clear();
+      if (response.channelUsers) {
+        response.channelUsers.forEach(u => {
+          currentChannelUsers.set(u.userId, { userName: u.userName });
+        });
+        console.log('[CHANNEL] Updated currentChannelUsers with', currentChannelUsers.size, 'users');
+        
+        // Update video visibility based on new channel users
+        const channelUsers = Array.from(currentChannelUsers.entries()).map(([userId, user]) => ({
+          userId,
+          userName: user.userName || (activeUsers.get(userId)?.name) || 'Участник'
+        }));
+        updateVideoVisibilityForChannel(channelUsers);
+      }
+      
+      // Refresh channel list to update user counts
+      loadChannels();
+      
       // Clear chat messages when switching channels
       const chatMessages = document.getElementById('chatMessages');
       if (chatMessages) {
-        chatMessages.innerHTML = `<div style="text-align: center; padding: 20px; color: #72767d; font-size: 12px;">Вы перешли в канал "${response.channelName}"</div>`;
+        chatMessages.innerHTML = '';
       }
+      
+      // Add system message
+      addSystemMessage(`Вы перешли в канал "${response.channelName}"`);
       
       // Update channel users tracking
       currentChannelUsers.clear();
       console.log('[CHANNEL] Server returned channelUsers:', response.channelUsers);
-      
+
       let channelUsers = response.channelUsers || [];
-      
+
+      // Deduplicate by username (server may send duplicates)
+      const seenUsernames = new Set();
+      channelUsers = channelUsers.filter(u => {
+        const username = u.userName?.toLowerCase();
+        if (!username || seenUsernames.has(username)) return false;
+        seenUsernames.add(username);
+        return true;
+      });
+      console.log('[CHANNEL] Deduplicated channelUsers:', channelUsers);
+
       // Ensure current user is in the list
       if (!channelUsers.find(u => u.userId === socket.id)) {
         channelUsers.push({
@@ -2294,7 +2480,7 @@ function switchChannel(channelId) {
         });
         console.log('[CHANNEL] Added current user to channelUsers');
       }
-      
+
       channelUsers.forEach(u => {
         currentChannelUsers.set(u.userId, u);
       });
@@ -2355,6 +2541,28 @@ function loadChannels() {
       updateChannelList(response.channels);
       currentChannel = response.currentChannel || 'general';
       console.log('[CHANNELS] Loaded successfully, currentChannel:', currentChannel);
+      
+      // Update currentChannelUsers based on channelUsers from server
+      currentChannelUsers.clear();
+      const currentChannelData = response.channels.find(ch => ch.channelId === currentChannel);
+      if (currentChannelData && currentChannelData.channelUsers) {
+        currentChannelData.channelUsers.forEach(u => {
+          currentChannelUsers.set(u.userId, { userName: u.userName });
+        });
+        console.log('[CHANNELS] Updated currentChannelUsers with', currentChannelUsers.size, 'users');
+        
+        // Update video visibility based on current channel users
+        const channelUsers = Array.from(currentChannelUsers.entries()).map(([userId, user]) => ({
+          userId,
+          userName: user.userName || (activeUsers.get(userId)?.name) || 'Участник'
+        }));
+        // Add current user
+        channelUsers.push({
+          userId: socket.id,
+          userName: currentUser.username
+        });
+        updateVideoVisibilityForChannel(channelUsers);
+      }
     } else {
       console.error('[CHANNELS] Failed to load:', response?.error || 'Unknown error');
       // Show default channel even if server fails
@@ -2376,120 +2584,39 @@ function showUserVideo(userId, show) {
 }
 
 function updateVideoVisibilityForChannel(channelUsers) {
-  const channelVideoContainer = document.getElementById('channelVideos');
-  const mainVideoGrid = document.getElementById('videoGrid');
-  
-  if (!channelVideoContainer) {
-    console.log('[CHANNEL] channelVideos container not found');
-    return;
-  }
-  
-  // Clear channel video container
-  channelVideoContainer.innerHTML = '';
-  
   // Get list of user IDs in this channel
   const userIdsInChannel = new Set(channelUsers.map(u => u.userId));
-  
-  // Move videos of users in this channel to the channel container
-  userIdsInChannel.forEach(userId => {
-    const container = document.getElementById(`video-${userId}`);
-    if (container) {
-      // Clone the video container for channel view
-      const channelVideo = container.cloneNode(true);
-      channelVideo.id = `channel-video-${userId}`;
-      channelVideo.style.display = 'block';
-      
-      // Add username label
-      const user = activeUsers.get(userId);
-      const userName = user ? user.name : (userId === socket.id ? currentUser.username : 'Участник');
-      
-      // Check if username label exists, if not add it
-      if (!channelVideo.querySelector('.video-username')) {
-        const nameLabel = document.createElement('div');
-        nameLabel.className = 'video-username';
-        nameLabel.textContent = userName;
-        channelVideo.appendChild(nameLabel);
-      }
-      
-      channelVideoContainer.appendChild(channelVideo);
-    }
-  });
-  
-  // Also add local video to channel container
-  const localContainer = document.getElementById('video-local');
-  if (localContainer) {
-    const channelLocalVideo = localContainer.cloneNode(true);
-    channelLocalVideo.id = 'channel-video-local';
-    channelLocalVideo.style.display = 'block';
-    
-    if (!channelLocalVideo.querySelector('.video-username')) {
-      const nameLabel = document.createElement('div');
-      nameLabel.className = 'video-username';
-      nameLabel.textContent = currentUser.username + ' (Вы)';
-      channelLocalVideo.appendChild(nameLabel);
-    }
-    
-    channelVideoContainer.appendChild(channelLocalVideo);
-  }
-  
-  // Show/hide the channel video container based on content
-  const channelVideoWrapper = document.getElementById('channelVideoContainer');
-  if (channelVideoWrapper) {
-    channelVideoWrapper.style.display = channelVideoContainer.children.length > 0 ? 'block' : 'none';
-  }
-  
-  console.log(`[CHANNEL] Moved ${channelVideoContainer.children.length} videos to channel container`);
-  
-  // Update channel avatars
-  updateChannelAvatars(channelUsers);
-}
 
-function updateChannelAvatars(channelUsers) {
-  const avatarsContainer = document.getElementById('channelAvatars');
-  const avatarsWrapper = document.getElementById('channelAvatarsContainer');
-  
-  if (!avatarsContainer) return;
-  
-  avatarsContainer.innerHTML = '';
-  
-  // Add current user first
-  const currentUserItem = document.createElement('div');
-  currentUserItem.className = 'channel-avatar-item';
-  const currentAvatarHtml = userAvatar ? 
-    `<img src="${userAvatar}" alt="avatar">` :
-    currentUser.username.charAt(0).toUpperCase();
-  currentUserItem.innerHTML = `
-    <div class="channel-avatar-img you">${currentAvatarHtml}</div>
-    <div class="channel-avatar-name">${currentUser.username} (Вы)</div>
-  `;
-  avatarsContainer.appendChild(currentUserItem);
-  
-  // Add other users in channel
-  channelUsers.forEach(channelUser => {
-    if (channelUser.userId === socket.id) return; // Skip self
-    
-    const user = activeUsers.get(channelUser.userId);
-    const userName = user ? user.name : channelUser.userName;
-    const userAvatarImg = user ? user.avatar : null;
-    
-    const item = document.createElement('div');
-    item.className = 'channel-avatar-item';
-    const avatarHtml = userAvatarImg ? 
-      `<img src="${userAvatarImg}" alt="avatar">` :
-      userName.charAt(0).toUpperCase();
-    item.innerHTML = `
-      <div class="channel-avatar-img">${avatarHtml}</div>
-      <div class="channel-avatar-name">${userName}</div>
-    `;
-    avatarsContainer.appendChild(item);
+  console.log(`[CHANNEL DEBUG] updateVideoVisibilityForChannel called with ${channelUsers.length} users:`, channelUsers.map(u => u.userId));
+  console.log(`[CHANNEL DEBUG] socket.id: ${socket.id}, userIdsInChannel has socket.id: ${userIdsInChannel.has(socket.id)}`);
+
+  // Show/hide videos in the main video grid based on channel membership
+  document.querySelectorAll('.video-container').forEach(container => {
+    const userId = container.id.replace('video-', '');
+    // For local user, check if socket.id is in the channel; for others, check userId directly
+    const isLocalUser = userId === 'local';
+    const isInChannel = isLocalUser ? userIdsInChannel.has(socket.id) : userIdsInChannel.has(userId);
+
+    console.log(`[CHANNEL DEBUG] Video container ${container.id}: isLocalUser=${isLocalUser}, isInChannel=${isInChannel}, display will be: ${isInChannel ? 'block' : 'none'}`);
+
+    if (isInChannel) {
+      container.style.display = 'block';
+      container.classList.remove('channel-hidden');
+    } else {
+      container.style.display = 'none';
+      container.classList.add('channel-hidden');
+    }
   });
-  
-  // Show/hide container based on content
-  if (avatarsWrapper) {
-    avatarsWrapper.style.display = avatarsContainer.children.length > 0 ? 'block' : 'none';
+
+  // Handle screen share preview - only show if current user is in this channel
+  const screenSharePreview = document.getElementById('screen-share-preview');
+  if (screenSharePreview) {
+    const isLocalInChannel = userIdsInChannel.has(socket.id);
+    screenSharePreview.style.display = isLocalInChannel ? 'block' : 'none';
+    console.log(`[CHANNEL DEBUG] Screen share preview: isLocalInChannel=${isLocalInChannel}, display=${screenSharePreview.style.display}`);
   }
-  
-  console.log(`[CHANNEL] Showing ${avatarsContainer.children.length} avatars in channel`);
+
+  console.log(`[CHANNEL] Showing ${userIdsInChannel.size} users in main video grid for channel`);
 }
 
 let isUpdatingChannelParticipants = false;

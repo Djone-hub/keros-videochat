@@ -4,6 +4,15 @@ const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs');
 
+// Global error handlers to prevent server crashes
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[FATAL] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -17,9 +26,11 @@ app.use(express.static(path.join(__dirname)));
 app.use(express.json());
 
 const rooms = new Map();
+// registeredUsers will be initialized from file below
 
-// File-based persistence for rooms
+// File-based persistence for rooms and users
 const ROOMS_FILE = path.join(__dirname, 'rooms.json');
+const USERS_FILE = path.join(__dirname, 'users.json');
 
 function loadRoomsFromFile() {
   try {
@@ -37,6 +48,24 @@ function loadRoomsFromFile() {
   return new Map();
 }
 
+function loadUsersFromFile() {
+  try {
+    if (fs.existsSync(USERS_FILE)) {
+      const data = fs.readFileSync(USERS_FILE, 'utf8');
+      const usersArray = JSON.parse(data);
+      const map = new Map();
+      usersArray.forEach(u => map.set(u.username, u));
+      console.log(`[USERS] Loaded ${usersArray.length} users from file`);
+      return map;
+    } else {
+      console.log(`[USERS] No users.json file found, starting with empty user registry`);
+    }
+  } catch (err) {
+    console.error('[USERS] Error loading users file:', err);
+  }
+  return new Map();
+}
+
 function saveRoomsToFile() {
   try {
     const roomsArray = Array.from(roomStore.values());
@@ -46,49 +75,292 @@ function saveRoomsToFile() {
   }
 }
 
-const roomStore = loadRoomsFromFile();
+function saveUsersToFile() {
+  try {
+    const usersArray = Array.from(registeredUsers.values());
+    fs.writeFileSync(USERS_FILE, JSON.stringify(usersArray, null, 2));
+    console.log(`[USERS] Saved ${usersArray.length} users to file`);
+  } catch (err) {
+    console.error('[USERS] Error saving users file:', err);
+  }
+}
 
-// REST API endpoint for rooms (fallback for socket issues)
+const roomStore = loadRoomsFromFile();
+const registeredUsers = loadUsersFromFile();
+
+// REST API endpoint for rooms - returns ALL rooms (stored + active) with user list
 app.get('/api/rooms', (req, res) => {
-  const availableRooms = Array.from(roomStore.values()).map(r => {
-    const activeRoom = rooms.get(r.id);
-    const activeUsersCount = activeRoom ? activeRoom.users.size : 0;
-    return {
-      id: r.id,
+  const allRoomsMap = new Map();
+  
+  // First add all stored rooms
+  roomStore.forEach((r, id) => {
+    const activeRoom = rooms.get(id);
+    // Deduplicate user names (same user may reconnect with different socket.id)
+    const userList = activeRoom ? [...new Set(Array.from(activeRoom.users).map(u => u.name))] : [];
+    const uniqueUserCount = userList.length;
+    allRoomsMap.set(id, {
+      id: id,
       name: r.name,
       avatar: r.avatar,
       creator: r.creator,
-      active: activeUsersCount > 0,
-      userCount: activeUsersCount
-    };
+      active: uniqueUserCount > 0,
+      userCount: uniqueUserCount,
+      users: userList,
+      created: r.created
+    });
   });
+  
+  // Then add any active rooms not in store (orphaned/active only rooms)
+  rooms.forEach((activeRoom, id) => {
+    if (!allRoomsMap.has(id)) {
+      // Deduplicate user names
+      const userList = [...new Set(Array.from(activeRoom.users).map(u => u.name))];
+      allRoomsMap.set(id, {
+        id: id,
+        name: activeRoom.name || id,
+        avatar: null,
+        creator: activeRoom.creator || null,
+        active: true,
+        userCount: userList.length,
+        users: userList,
+        created: Date.now()
+      });
+    }
+  });
+  
+  const availableRooms = Array.from(allRoomsMap.values());
+  console.log(`[API] Returning ${availableRooms.length} rooms (${roomStore.size} stored, ${rooms.size} active)`);
   res.json(availableRooms);
+});
+
+// REST API endpoint for registered users with online status
+app.get('/api/users', (req, res) => {
+  const users = Array.from(registeredUsers.values()).map(u => ({
+    name: u.name,
+    avatar: u.avatar,
+    isOnline: u.isOnline,
+    lastSeen: u.lastSeen
+  }));
+  res.json(users);
+});
+
+// REST API endpoint for user login
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
+  const user = registeredUsers.get(username);
+  
+  if (user && user.password === password) {
+    res.json({ success: true, user: { username: user.username, name: user.name, avatar: user.avatar } });
+  } else {
+    res.status(401).json({ success: false, message: 'Invalid username or password' });
+  }
+});
+
+// REST API endpoint to delete a registered user
+app.delete('/api/users/:username', (req, res) => {
+  const username = req.params.username;
+  const requester = req.headers['x-username'];
+  
+  // Simple authorization: only allow deletion if requester is the same user or an admin
+  // For now, anyone can delete any user (you can add admin check later)
+  if (registeredUsers.has(username)) {
+    registeredUsers.delete(username);
+    saveUsersToFile();
+    console.log(`[DELETE] User ${username} deleted by ${requester || 'unknown'}`);
+    io.emit('user-deleted', username);
+    io.emit('users-updated');
+    res.json({ success: true, message: `User ${username} deleted` });
+  } else {
+    res.status(404).json({ success: false, message: 'User not found' });
+  }
 });
 
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
   console.log('Current rooms in store:', roomStore.size);
 
-  socket.on('join-room', (roomId, userName, userAvatar, roomName, roomAvatar) => {
+  // Handle user registration
+  socket.on('user-registered', ({ username, avatar, isOnline, password }) => {
+    console.log(`[REGISTER] User: ${username}, online: ${isOnline}, hasPassword: ${!!password}`);
+    
+    // Add to global registry with password
+    const existingUser = registeredUsers.get(username);
+    if (existingUser) {
+      // Update existing user (reconnect case)
+      registeredUsers.set(username, {
+        ...existingUser,
+        avatar: avatar || existingUser.avatar,
+        password: password || existingUser.password,
+        isOnline: isOnline || existingUser.isOnline,
+        lastSeen: Date.now()
+      });
+      console.log(`[REGISTER] Updated existing user: ${username}`);
+    } else {
+      // Create new user
+      registeredUsers.set(username, {
+        username: username,
+        password: password,
+        name: username,
+        avatar: avatar,
+        isOnline: isOnline || false,
+        lastSeen: Date.now()
+      });
+      console.log(`[REGISTER] Created new user: ${username}`);
+    }
+    
+    // Save to file
+    saveUsersToFile();
+    
+    // Broadcast to all clients to refresh user list
+    io.emit('users-updated');
+  });
+
+  // Handle user entering lobby (online but not in room)
+  socket.on('user-online', ({ username, avatar }) => {
+    console.log(`[ONLINE] User entered lobby: ${username}`);
+    socket.userName = username;
+    socket.userAvatar = avatar;
+    
+    // Update user status
+    registeredUsers.set(username, {
+      name: username,
+      avatar: avatar,
+      isOnline: true,
+      socketId: socket.id,
+      lastSeen: Date.now()
+    });
+    
+    // Broadcast to all clients
+    io.emit('users-updated');
+  });
+
+  socket.on('join-room', (roomId, userName, userAvatar, roomName, roomAvatar, callback) => {
     socket.join(roomId);
     socket.roomId = roomId;
     socket.userName = userName;
     socket.userAvatar = userAvatar;
+    
+    // Register/update user in global registry
+    registeredUsers.set(userName, {
+      name: userName,
+      avatar: userAvatar,
+      isOnline: true,
+      socketId: socket.id,
+      lastSeen: Date.now()
+    });
 
     // Check if room exists in persistent store
     let storedRoom = roomStore.get(roomId);
     
     if (!rooms.has(roomId)) {
       // If room exists in store, use that name
-      const displayName = storedRoom ? storedRoom.name : (roomName || roomId);
-      rooms.set(roomId, { name: displayName, users: new Set() });
+      // Only create if room exists in persistent store OR roomName is provided (explicit creation)
+      if (storedRoom || roomName) {
+        const displayName = storedRoom ? storedRoom.name : (roomName || roomId);
+        rooms.set(roomId, { 
+          name: displayName, 
+          users: new Set(), 
+          screenSharingUsers: new Set(),
+          channels: new Map([['general', { name: 'Общий', users: new Set() }]]) // Default channel
+        });
+      } else {
+        // Room doesn't exist anywhere and no name provided - reject join
+        socket.emit('room-error', { message: 'Комната не найдена' });
+        return;
+      }
     } else if (roomName && roomName !== roomId) {
       // Update room name if provided and different from ID
       rooms.get(roomId).name = roomName;
     }
     
     const room = rooms.get(roomId);
+    // Ensure screenSharingUsers Set exists
+    if (!room.screenSharingUsers) {
+      room.screenSharingUsers = new Set();
+    }
+    // Ensure channels Map exists - critical for channel system
+    if (!room.channels) {
+      room.channels = new Map();
+    }
+    // Always ensure general channel exists
+    if (!room.channels.has('general')) {
+      room.channels.set('general', { name: 'Общий', users: new Set() });
+    }
+
+    // ALWAYS load channels from stored room data - for new and existing rooms
+    // This ensures all users see the same channels
+    if (storedRoom && storedRoom.channels) {
+      const channelCount = Object.keys(storedRoom.channels).length;
+      console.log(`[CHANNELS] Loading ${channelCount} channels from stored room ${roomId}`);
+      console.log(`[CHANNELS] Current room.channels size before loading: ${room.channels.size}`);
+      Object.entries(storedRoom.channels).forEach(([channelId, channelData]) => {
+        if (!room.channels.has(channelId)) {
+          room.channels.set(channelId, {
+            name: channelData.name,
+            users: new Set(),
+            createdBy: channelData.createdBy,
+            createdAt: channelData.createdAt
+          });
+          console.log(`[CHANNELS] Loaded channel "${channelData.name}" (${channelId}) into room ${roomId}`);
+        } else {
+          console.log(`[CHANNELS] Channel "${channelData.name}" (${channelId}) already exists in room ${roomId}`);
+        }
+      });
+      console.log(`[CHANNELS] room.channels size after loading: ${room.channels.size}`);
+    } else {
+      console.log(`[CHANNELS] No stored channels found for room ${roomId} (storedRoom: ${storedRoom ? 'exists' : 'null'})`);
+    }
+    // Deduplicate: remove any existing entry with same socket.id OR same username (reconnect case)
+    const existingBySocketId = Array.from(room.users).find(u => u.id === socket.id);
+    if (existingBySocketId) {
+      room.users.delete(existingBySocketId);
+      console.log(`[DEDUP] Removed duplicate room.users entry for socket ${socket.id}`);
+    }
+    const existingByName = Array.from(room.users).find(u => u.name === userName);
+    if (existingByName) {
+      room.users.delete(existingByName);
+      console.log(`[DEDUP] Removed stale room.users entry for username ${userName} (old socket: ${existingByName.id})`);
+    }
     room.users.add({ id: socket.id, name: userName, avatar: userAvatar });
+    
+    // Join default channel
+    socket.currentChannel = 'general';
+    const generalChannel = room.channels.get('general');
+    if (generalChannel) {
+      // Deduplicate channel users by socket.id and username
+      const existingChannelBySocket = Array.from(generalChannel.users).find(u => u.id === socket.id);
+      if (existingChannelBySocket) {
+        generalChannel.users.delete(existingChannelBySocket);
+      }
+      const existingChannelByName = Array.from(generalChannel.users).find(u => u.name === userName);
+      if (existingChannelByName) {
+        generalChannel.users.delete(existingChannelByName);
+      }
+      generalChannel.users.add({ id: socket.id, name: userName });
+    }
+    
+    // Also clean stale entries from ALL channels (user may have been in a non-general channel before reconnect)
+    if (room.channels) {
+      room.channels.forEach((channel, channelId) => {
+        if (channelId === 'general') return; // Already handled above
+        const staleByName = Array.from(channel.users).find(u => u.name === userName);
+        if (staleByName) {
+          channel.users.delete(staleByName);
+          console.log(`[DEDUP] Removed stale entry for ${userName} from channel ${channelId}`);
+        }
+      });
+    }
+    
+    // Update screenSharingUsers if this user was screen sharing before reconnect
+    if (room.screenSharingUsers) {
+      room.users.forEach(u => {
+        if (u.name === userName && u.id !== socket.id && room.screenSharingUsers.has(u.id)) {
+          room.screenSharingUsers.delete(u.id);
+          room.screenSharingUsers.add(socket.id);
+          console.log(`[SCREEN] Updated screenSharingUsers for ${userName}: ${u.id} -> ${socket.id}`);
+        }
+      });
+    }
     
     // Store room metadata if this is a new room with a proper name
     let isNewRoom = false;
@@ -102,36 +374,51 @@ io.on('connection', (socket) => {
       });
       saveRoomsToFile();
       isNewRoom = true;
-      // Broadcast new room to all clients
-      io.emit('rooms-updated');
     }
+    
+    // Broadcast room update to all clients (for lobby sync)
+    io.emit('rooms-updated');
+    
+    // Broadcast user list update (online status changed)
+    io.emit('users-updated');
 
     const users = Array.from(room.users).filter(u => u.id !== socket.id);
     
     console.log(`[DEBUG] Room ${roomId} has ${room.users.size} total users, sending ${users.length} others to ${userName}`);
-    console.log(`[DEBUG] Users in room:`, Array.from(room.users).map(u => ({id: u.id, name: u.name})));
+    console.log(`[DEBUG] Users in room:`, Array.from(room.users).map(u => ({id: u.id, name: u.name, hasAvatar: !!u.avatar})));
     
     // Send room info with name from server (either stored or provided)
     const finalRoomName = storedRoom ? storedRoom.name : room.name;
     socket.emit('room-info', { id: roomId, name: finalRoomName, avatar: storedRoom?.avatar });
     socket.emit('users-in-room', users);
+    
+    // Send list of users who are currently screen sharing
+    const screenSharingUsers = Array.from(room.screenSharingUsers || []);
+    if (screenSharingUsers.length > 0) {
+      console.log(`[SCREEN] Sending ${screenSharingUsers.length} active screen shares to new user`);
+      socket.emit('active-screen-shares', screenSharingUsers);
+    }
+    
     socket.to(roomId).emit('user-joined', { id: socket.id, name: userName, avatar: userAvatar });
 
     console.log(`${userName} joined room ${roomId} (${finalRoomName})`);
+    
+    // Send callback for reconnect support
+    if (callback) callback({ success: true });
   });
   
   socket.on('get-available-rooms', (callback) => {
     const availableRooms = Array.from(roomStore.values()).map(r => {
-      // Check if room has active users
+      // Check if room has active users - deduplicate by name
       const activeRoom = rooms.get(r.id);
-      const activeUsersCount = activeRoom ? activeRoom.users.size : 0;
+      const uniqueNames = activeRoom ? [...new Set(Array.from(activeRoom.users).map(u => u.name))] : [];
       return {
         id: r.id,
         name: r.name,
         avatar: r.avatar,
         creator: r.creator,
-        active: activeUsersCount > 0,
-        userCount: activeUsersCount
+        active: uniqueNames.length > 0,
+        userCount: uniqueNames.length
       };
     });
     callback(availableRooms);
@@ -141,14 +428,14 @@ io.on('connection', (socket) => {
     const storedRoom = roomStore.get(roomId);
     if (storedRoom) {
       const activeRoom = rooms.get(roomId);
-      const activeUsersCount = activeRoom ? activeRoom.users.size : 0;
+      const uniqueNames = activeRoom ? [...new Set(Array.from(activeRoom.users).map(u => u.name))] : [];
       callback({
         id: storedRoom.id,
         name: storedRoom.name,
         avatar: storedRoom.avatar,
         creator: storedRoom.creator,
-        active: activeUsersCount > 0,
-        userCount: activeUsersCount
+        active: uniqueNames.length > 0,
+        userCount: uniqueNames.length
       });
     } else {
       callback(null);
@@ -183,44 +470,164 @@ io.on('connection', (socket) => {
   });
 
   socket.on('chat-message', (message) => {
-    socket.to(socket.roomId).emit('chat-message', {
+    const messageData = {
       sender: socket.userName,
       text: message,
-      time: new Date().toLocaleTimeString()
-    });
+      time: new Date().toLocaleTimeString(),
+      timestamp: Date.now()
+    };
+    
+    // Save to room message history
+    if (socket.roomId && rooms.has(socket.roomId)) {
+      const room = rooms.get(socket.roomId);
+      if (!room.messages) room.messages = [];
+      room.messages.push(messageData);
+      // Keep only last 100 messages
+      if (room.messages.length > 100) {
+        room.messages.shift();
+      }
+    }
+    
+    socket.to(socket.roomId).emit('chat-message', messageData);
+  });
+  
+  // Handle request for room message history
+  socket.on('get-room-messages', (roomId, callback) => {
+    if (rooms.has(roomId)) {
+      const room = rooms.get(roomId);
+      callback(room.messages || []);
+    } else {
+      callback([]);
+    }
   });
 
   socket.on('screen-share-started', () => {
+    // Track this user as screen sharing
+    if (socket.roomId && rooms.has(socket.roomId)) {
+      const room = rooms.get(socket.roomId);
+      if (!room.screenSharingUsers) {
+        room.screenSharingUsers = new Set();
+      }
+      // Deduplicate: remove old socket.id for this username (reconnect case)
+      room.users.forEach(u => {
+        if (u.name === socket.userName && u.id !== socket.id) {
+          room.screenSharingUsers.delete(u.id);
+          console.log(`[SCREEN] Removed old screen share entry for ${socket.userName} (old socket: ${u.id})`);
+        }
+      });
+      room.screenSharingUsers.add(socket.id);
+      console.log(`[SCREEN] User ${socket.userName} started screen share in room ${socket.roomId}`);
+    }
     socket.to(socket.roomId).emit('screen-share-started', socket.id);
   });
 
   socket.on('screen-share-stopped', () => {
+    // Remove user from screen sharing tracking
+    if (socket.roomId && rooms.has(socket.roomId)) {
+      const room = rooms.get(socket.roomId);
+      if (room.screenSharingUsers) {
+        room.screenSharingUsers.delete(socket.id);
+      }
+      console.log(`[SCREEN] User ${socket.userName} stopped screen share in room ${socket.roomId}`);
+    }
     socket.to(socket.roomId).emit('screen-share-stopped', socket.id);
+  });
+
+  // Handle request for fresh screen stream (when new user joins and others are sharing)
+  socket.on('request-screen-stream', (targetUserId) => {
+    console.log(`[SCREEN] User ${socket.userName} requested stream from ${targetUserId}`);
+    // Notify the target user to re-offer their screen stream
+    socket.to(socket.roomId).emit('refresh-screen-offer', {
+      requesterId: socket.id,
+      targetId: targetUserId
+    });
+  });
+
+  // Handle theme changes - broadcast to other users in room
+  socket.on('theme-changed', ({ roomId, theme }) => {
+    console.log(`[THEME] User ${socket.userName} changed theme to ${theme} in room ${roomId}`);
+    // Broadcast to all other users in the room
+    socket.to(roomId).emit('theme-changed', { theme });
+  });
+
+  // Handle user mute state changes
+  socket.on('user-mute-state', ({ roomId, isMicMuted, isSoundMuted }) => {
+    // Broadcast to other users in room
+    socket.to(roomId).emit('user-mute-state', {
+      userId: socket.id,
+      isMicMuted: isMicMuted,
+      isSoundMuted: isSoundMuted
+    });
+  });
+
+  // Ping handler for latency measurement
+  socket.on('ping-check', (callback) => {
+    if (typeof callback === 'function') {
+      callback(Date.now());
+    }
   });
 
   socket.on('leave-room', (roomId) => {
     socket.leave(roomId);
     if (rooms.has(roomId)) {
       const room = rooms.get(roomId);
-      // Find and remove user from Set
+      // Find and remove user from room.users Set
       const userToRemove = Array.from(room.users).find(u => u.id === socket.id);
       if (userToRemove) {
         room.users.delete(userToRemove);
         console.log(`User ${socket.userName} removed from room ${roomId}`);
+      }
+      // Remove from ALL channel.users Sets
+      if (room.channels) {
+        room.channels.forEach((channel, channelId) => {
+          const channelUser = Array.from(channel.users).find(u => u.id === socket.id);
+          if (channelUser) {
+            channel.users.delete(channelUser);
+            console.log(`[CHANNEL] Removed ${socket.userName} from channel ${channelId} on leave-room`);
+          }
+        });
       }
       if (room.users.size === 0) {
         rooms.delete(roomId);
         // Don't delete from roomStore so room persists for rejoining
       }
       socket.to(roomId).emit('user-left', socket.id);
+      
+      // Broadcast updated channel counts after user removal
+      if (room.channels && room.users.size > 0) {
+        const updatedChannels = Array.from(room.channels.entries()).map(([id, ch]) => ({
+          channelId: id,
+          channelName: ch.name,
+          userCount: ch.users ? ch.users.size : 0,
+          isGeneral: id === 'general'
+        }));
+        io.to(roomId).emit('channels-updated', updatedChannels);
+      }
+      
+      // Notify all clients to refresh room list (for lobby users)
+      io.emit('rooms-updated');
+      
+      // Broadcast user list update (online status changed)
+      io.emit('users-updated');
     }
     console.log(`User left room ${roomId}`);
   });
   
   socket.on('delete-room', (roomId) => {
-    // Only creator can delete
     const storedRoom = roomStore.get(roomId);
-    if (storedRoom && storedRoom.creator === socket.userName) {
+    const activeRoom = rooms.get(roomId);
+    
+    console.log(`[DELETE] Room ${roomId} delete attempt by ${socket.userName}`);
+    console.log(`[DELETE] storedRoom:`, storedRoom);
+    console.log(`[DELETE] activeRoom:`, activeRoom ? { name: activeRoom.name, creator: activeRoom.creator } : null);
+    
+    // Check both stored room and active room for creator
+    const creator = storedRoom?.creator || activeRoom?.creator;
+    
+    // Allow deletion if:
+    // 1. User is the creator, OR
+    // 2. No creator is set (orphaned room) - first user to delete becomes "owner"
+    if (creator === socket.userName || !creator) {
       roomStore.delete(roomId);
       if (rooms.has(roomId)) {
         rooms.delete(roomId);
@@ -228,7 +635,10 @@ io.on('connection', (socket) => {
       saveRoomsToFile();
       io.emit('room-deleted', roomId);
       io.emit('rooms-updated');
-      console.log(`Room ${roomId} deleted by ${socket.userName}`);
+      console.log(`[DELETE] Room ${roomId} deleted by ${socket.userName}`);
+    } else {
+      console.log(`[DELETE] Rejected: ${socket.userName} is not creator (creator=${creator})`);
+      socket.emit('room-error', { message: 'Только создатель может удалить комнату' });
     }
   });
 
@@ -246,20 +656,369 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Handle user deletion request
+  socket.on('delete-user', (username, callback) => {
+    if (registeredUsers.has(username)) {
+      registeredUsers.delete(username);
+      console.log(`[DELETE] User ${username} deleted by ${socket.userName}`);
+      io.emit('user-deleted', username);
+      io.emit('users-updated');
+      if (callback) callback({ success: true });
+    } else {
+      if (callback) callback({ success: false, error: 'User not found' });
+    }
+  });
+
+  // ========== CHANNEL/SUBGROUP MANAGEMENT ==========
+  
+  // Create a new channel in the room
+  socket.on('create-channel', (channelName, callback) => {
+    console.log(`[CHANNEL] create-channel called by ${socket.userName}, roomId: ${socket.roomId}, name: ${channelName}`);
+    
+    try {
+      if (!socket.roomId) {
+        console.log(`[CHANNEL] Error: socket.roomId is undefined`);
+        if (callback) callback({ success: false, error: 'Not in a room' });
+        return;
+      }
+      
+      if (!rooms.has(socket.roomId)) {
+        console.log(`[CHANNEL] Error: room ${socket.roomId} not found`);
+        if (callback) callback({ success: false, error: 'Room not found' });
+        return;
+      }
+      
+      const room = rooms.get(socket.roomId);
+      
+      // Ensure channels exists
+      if (!room.channels) {
+        console.log(`[CHANNEL] Creating channels Map for room ${socket.roomId}`);
+        room.channels = new Map([['general', { name: 'Общий', users: new Set() }]]);
+      }
+      
+      const channelId = 'ch_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+      
+      room.channels.set(channelId, {
+        name: channelName,
+        users: new Set(),
+        createdBy: socket.userName,
+        createdAt: Date.now()
+      });
+      
+      console.log(`[CHANNEL] ${socket.userName} created channel "${channelName}" (${channelId}) in room ${socket.roomId}`);
+      
+      // Save channels to roomStore for persistence
+      const storedRoom = roomStore.get(socket.roomId);
+      if (storedRoom) {
+        if (!storedRoom.channels) storedRoom.channels = {};
+        storedRoom.channels[channelId] = {
+          name: channelName,
+          createdBy: socket.userName,
+          createdAt: Date.now()
+        };
+        saveRoomsToFile();
+        console.log(`[CHANNEL] Saved channel "${channelName}" to roomStore`);
+      }
+      
+      // Notify all users in room about new channel
+      io.to(socket.roomId).emit('channel-created', {
+        channelId,
+        channelName,
+        createdBy: socket.userName
+      });
+      
+      if (callback) callback({ success: true, channelId, channelName });
+    } catch (err) {
+      console.error(`[CHANNEL] Error creating channel:`, err);
+      if (callback) callback({ success: false, error: 'Server error: ' + err.message });
+    }
+  });
+  
+  // Join a channel
+  socket.on('join-channel', (channelId, callback) => {
+    console.log(`[CHANNEL] join-channel called by ${socket.userName}, roomId: ${socket.roomId}, channelId: ${channelId}`);
+    
+    try {
+      // Try to recover roomId from socket.rooms if socket.roomId is not set
+      if (!socket.roomId && socket.rooms) {
+        for (const room of socket.rooms) {
+          if (room !== socket.id && rooms.has(room)) {
+            socket.roomId = room;
+            console.log(`[CHANNEL] Recovered roomId from socket.rooms: ${room}`);
+            break;
+          }
+        }
+      }
+      
+      if (!socket.roomId) {
+        console.log(`[CHANNEL] Error: socket.roomId is undefined`);
+        if (callback) callback({ success: false, error: 'Not in a room' });
+        return;
+      }
+      
+      if (!rooms.has(socket.roomId)) {
+        console.log(`[CHANNEL] Error: room ${socket.roomId} not found`);
+        if (callback) callback({ success: false, error: 'Room not found' });
+        return;
+      }
+      
+      const room = rooms.get(socket.roomId);
+      
+      // Ensure channels exists
+      if (!room.channels) {
+        console.log(`[CHANNEL] Creating channels Map for room ${socket.roomId}`);
+        room.channels = new Map([['general', { name: 'Общий', users: new Set() }]]);
+      }
+      
+      if (!room.channels.has(channelId)) {
+        console.log(`[CHANNEL] Error: channel ${channelId} not found`);
+        if (callback) callback({ success: false, error: 'Channel not found' });
+        return;
+      }
+      
+      // Leave current channel
+      if (socket.currentChannel && room.channels.has(socket.currentChannel)) {
+        const oldChannel = room.channels.get(socket.currentChannel);
+        const oldUser = Array.from(oldChannel.users).find(u => u.id === socket.id);
+        if (oldUser) oldChannel.users.delete(oldUser);
+      }
+      
+      // Join new channel
+      const channel = room.channels.get(channelId);
+      // Deduplicate: remove existing entry with same socket.id
+      const existingInChannel = Array.from(channel.users).find(u => u.id === socket.id);
+      if (existingInChannel) {
+        channel.users.delete(existingInChannel);
+        console.log(`[CHANNEL] Dedup: removed existing entry for socket ${socket.id} in channel ${channelId}`);
+      }
+      channel.users.add({ id: socket.id, name: socket.userName });
+      
+      // Store old channel for notification
+      const oldChannelId = socket.currentChannel;
+      socket.currentChannel = channelId;
+      socket.join(`${socket.roomId}_${channelId}`); // Join channel-specific room
+      
+      console.log(`[CHANNEL] ${socket.userName} joined channel "${channel.name}" (${channelId})`);
+      
+      // Notify old channel users that user left
+      if (oldChannelId && oldChannelId !== channelId) {
+        io.to(`${socket.roomId}_${oldChannelId}`).emit('user-left-channel', {
+          userId: socket.id,
+          userName: socket.userName,
+          channelId: oldChannelId
+        });
+      }
+      
+      // Notify new channel users that user joined
+      io.to(`${socket.roomId}_${channelId}`).emit('user-joined-channel', {
+        userId: socket.id,
+        userName: socket.userName,
+        channelId,
+        channelName: channel.name
+      });
+      
+      // Send list of users in this channel (include current user)
+      const channelUsers = Array.from(channel.users).map(u => ({
+        userId: u.id,
+        userName: u.name
+      }));
+      
+      // Ensure current user is in the list
+      if (!channelUsers.find(u => u.userId === socket.id)) {
+        channelUsers.push({
+          userId: socket.id,
+          userName: socket.userName
+        });
+      }
+      
+      console.log(`[CHANNEL] Sending ${channelUsers.length} users in channel ${channelId}:`, channelUsers.map(u => u.userName));
+      if (callback) callback({ success: true, channelName: channel.name, channelUsers });
+      
+      // Broadcast updated channel counts to all users in room
+      const updatedChannels = Array.from(room.channels.entries()).map(([id, ch]) => ({
+        channelId: id,
+        channelName: ch.name,
+        userCount: ch.users ? ch.users.size : 0,
+        isGeneral: id === 'general'
+      }));
+      io.to(socket.roomId).emit('channels-updated', updatedChannels);
+    } catch (err) {
+      console.error(`[CHANNEL] Error in join-channel:`, err);
+      if (callback) callback({ success: false, error: 'Server error: ' + err.message });
+    }
+  });
+  
+  // Leave a channel
+  socket.on('leave-channel', (channelId, callback) => {
+    if (!socket.roomId || !rooms.has(socket.roomId)) return;
+    
+    const room = rooms.get(socket.roomId);
+    if (!room.channels.has(channelId)) return;
+    
+    const channel = room.channels.get(channelId);
+    const user = Array.from(channel.users).find(u => u.id === socket.id);
+    if (user) {
+      channel.users.delete(user);
+      socket.leave(`${socket.roomId}_${channelId}`);
+    }
+    
+    if (socket.currentChannel === channelId) {
+      socket.currentChannel = 'general';
+      const generalChannel = room.channels.get('general');
+      if (generalChannel) {
+        // Deduplicate before adding
+        const existingInGeneral = Array.from(generalChannel.users).find(u => u.id === socket.id);
+        if (existingInGeneral) generalChannel.users.delete(existingInGeneral);
+        generalChannel.users.add({ id: socket.id, name: socket.userName });
+        socket.join(`${socket.roomId}_general`);
+      }
+    }
+    
+    if (callback) callback({ success: true });
+    
+    // Broadcast updated channel counts to all users in room
+    const updatedChannels = Array.from(room.channels.entries()).map(([id, ch]) => ({
+      channelId: id,
+      channelName: ch.name,
+      userCount: ch.users ? ch.users.size : 0,
+      isGeneral: id === 'general'
+    }));
+    io.to(socket.roomId).emit('channels-updated', updatedChannels);
+  });
+  
+  // Get list of channels in current room
+  socket.on('get-channels', (callback) => {
+    console.log(`[CHANNELS] get-channels called by ${socket.userName}, roomId: ${socket.roomId}, socket.rooms:`, socket.rooms ? Array.from(socket.rooms) : 'undefined');
+    
+    // Try to recover roomId from socket.rooms if socket.roomId is not set
+    if (!socket.roomId && socket.rooms) {
+      for (const room of socket.rooms) {
+        if (room !== socket.id) { // Skip default room (socket.id)
+          socket.roomId = room;
+          console.log(`[CHANNELS] Recovered roomId from socket.rooms: ${room}`);
+          break;
+        }
+      }
+    }
+    
+    if (!socket.roomId) {
+      console.log(`[CHANNELS] Error: socket.roomId is undefined`);
+      if (callback) callback({ success: false, error: 'Not in a room', channels: [] });
+      return;
+    }
+    
+    if (!rooms.has(socket.roomId)) {
+      console.log(`[CHANNELS] Error: room ${socket.roomId} not found`);
+      if (callback) callback({ success: false, error: 'Room not found', channels: [] });
+      return;
+    }
+    
+    const room = rooms.get(socket.roomId);
+
+    // Ensure channels exists
+    if (!room.channels) {
+      console.log(`[CHANNELS] Creating channels Map for room ${socket.roomId}`);
+      room.channels = new Map([['general', { name: 'Общий', users: new Set() }]]);
+    }
+
+    // DEBUG: Log detailed channel info
+    console.log(`[CHANNELS DEBUG] room.channels size: ${room.channels.size}`);
+    console.log(`[CHANNELS DEBUG] room.channels entries:`, Array.from(room.channels.keys()));
+
+    // Check stored room channels
+    const storedRoom = roomStore.get(socket.roomId);
+    if (storedRoom) {
+      console.log(`[CHANNELS DEBUG] storedRoom exists: true`);
+      console.log(`[CHANNELS DEBUG] storedRoom.channels:`, storedRoom.channels ? Object.keys(storedRoom.channels) : 'undefined');
+    } else {
+      console.log(`[CHANNELS DEBUG] storedRoom exists: false`);
+    }
+
+    const channels = Array.from(room.channels.entries()).map(([id, ch]) => ({
+      channelId: id,
+      channelName: ch.name,
+      userCount: ch.users ? ch.users.size : 0,
+      isGeneral: id === 'general',
+      channelUsers: ch.users ? Array.from(ch.users).map(u => ({ userId: u.id, userName: u.name })) : []
+    }));
+
+    console.log(`[CHANNELS] Returning ${channels.length} channels for room ${socket.roomId}`);
+    if (callback) callback({ success: true, channels, currentChannel: socket.currentChannel || 'general' });
+  });
+  
+  // Channel-specific chat message
+  socket.on('channel-message', (channelId, message) => {
+    if (!socket.roomId || !rooms.has(socket.roomId)) return;
+    if (!socket.currentChannel || socket.currentChannel !== channelId) return;
+    
+    const room = rooms.get(socket.roomId);
+    if (!room.channels.has(channelId)) return;
+    
+    const channel = room.channels.get(channelId);
+    
+    io.to(`${socket.roomId}_${channelId}`).emit('channel-message', {
+      sender: socket.userName,
+      text: message,
+      channelId,
+      channelName: channel.name,
+      time: new Date().toLocaleTimeString()
+    });
+  });
+
   socket.on('disconnect', () => {
+    // Mark user as offline in registered users
+    if (socket.userName && registeredUsers.has(socket.userName)) {
+      const user = registeredUsers.get(socket.userName);
+      user.isOnline = false;
+      user.lastSeen = Date.now();
+      registeredUsers.set(socket.userName, user);
+    }
+    
     if (socket.roomId && rooms.has(socket.roomId)) {
       const room = rooms.get(socket.roomId);
-      // Find and remove user from Set
+      // Find and remove user from room.users Set
       const userToRemove = Array.from(room.users).find(u => u.id === socket.id);
       if (userToRemove) {
         room.users.delete(userToRemove);
         console.log(`User ${socket.userName} removed from room ${socket.roomId} on disconnect`);
       }
+      // Remove from ALL channel.users Sets
+      if (room.channels) {
+        room.channels.forEach((channel, channelId) => {
+          const channelUser = Array.from(channel.users).find(u => u.id === socket.id);
+          if (channelUser) {
+            channel.users.delete(channelUser);
+            console.log(`[CHANNEL] Removed ${socket.userName} from channel ${channelId} on disconnect`);
+          }
+        });
+      }
+      // Remove from screen sharing tracking
+      if (room.screenSharingUsers) {
+        room.screenSharingUsers.delete(socket.id);
+      }
       if (room.users.size === 0) {
         rooms.delete(socket.roomId);
       }
       socket.to(socket.roomId).emit('user-left', socket.id);
+      
+      // Broadcast updated channel counts after user removal
+      if (room.channels && room.users.size > 0) {
+        const updatedChannels = Array.from(room.channels.entries()).map(([id, ch]) => ({
+          channelId: id,
+          channelName: ch.name,
+          userCount: ch.users ? ch.users.size : 0,
+          isGeneral: id === 'general'
+        }));
+        io.to(socket.roomId).emit('channels-updated', updatedChannels);
+      }
+      
+      // Notify all clients to refresh room list (for lobby users)
+      io.emit('rooms-updated');
     }
+    
+    // Broadcast user list update (online status changed)
+    io.emit('users-updated');
+    
     console.log('User disconnected:', socket.id);
   });
 });
