@@ -176,6 +176,27 @@ function updateDeviceSelectors() {
 
   if (!audioInputSelect || !audioOutputSelect || !videoInputSelect) return;
 
+  // Check if selected devices are still available, reset if not
+  const audioInputIds = availableDevices.audioinput.map(d => d.deviceId);
+  const audioOutputIds = availableDevices.audiooutput.map(d => d.deviceId);
+  const videoInputIds = availableDevices.videoinput.map(d => d.deviceId);
+
+  if (selectedAudioInput && !audioInputIds.includes(selectedAudioInput)) {
+    console.log('[DEVICES] Selected audio input no longer available, resetting to default');
+    selectedAudioInput = null;
+    localStorage.removeItem('keroschat_audioInput');
+  }
+  if (selectedAudioOutput && !audioOutputIds.includes(selectedAudioOutput)) {
+    console.log('[DEVICES] Selected audio output no longer available, resetting to default');
+    selectedAudioOutput = null;
+    localStorage.removeItem('keroschat_audioOutput');
+  }
+  if (selectedVideoInput && !videoInputIds.includes(selectedVideoInput)) {
+    console.log('[DEVICES] Selected video input no longer available, resetting to default');
+    selectedVideoInput = null;
+    localStorage.removeItem('keroschat_videoInput');
+  }
+
   // Audio input (microphone)
   audioInputSelect.innerHTML = '<option value="">Default</option>';
   availableDevices.audioinput.forEach(device => {
