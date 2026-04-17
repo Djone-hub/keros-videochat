@@ -76,3 +76,14 @@ CREATE POLICY "videochat_users_all_policy" ON videochat_users FOR ALL USING (tru
 
 -- Устанавливаем KEROS как суперадмина
 UPDATE videochat_users SET role = 'superadmin' WHERE username = 'KEROS';
+
+-- Дополнительная проверка - если KEROS существует, гарантируем роль superadmin
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM videochat_users WHERE username = 'KEROS') THEN
+    UPDATE videochat_users SET role = 'superadmin' WHERE username = 'KEROS';
+    RAISE NOTICE 'KEROS role set to superadmin';
+  ELSE
+    RAISE NOTICE 'KEROS user not found';
+  END IF;
+END $$;
