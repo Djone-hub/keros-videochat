@@ -67,6 +67,11 @@ DROP POLICY IF EXISTS "videochat_users_update_policy" ON videochat_users;
 DROP POLICY IF EXISTS "videochat_users_delete_policy" ON videochat_users;
 
 -- Создаём ОДНУ политику для ВСЕХ операций
+-- Эта политика покрывает:
+-- - SELECT (вход, проверка существования пользователя)
+-- - INSERT (регистрация новых пользователей)
+-- - UPDATE (обновление данных, статуса онлайн, мутов, киков)
+-- - DELETE (удаление пользователей)
 CREATE POLICY "videochat_users_all_policy" ON videochat_users FOR ALL USING (true);
 
 -- Устанавливаем KEROS как суперадмина
