@@ -288,6 +288,17 @@ io.on('connection', (socket) => {
       });
     }
     
+    // Update screenSharingUsers if this user was screen sharing before reconnect
+    if (room.screenSharingUsers) {
+      room.users.forEach(u => {
+        if (u.name === userName && u.id !== socket.id && room.screenSharingUsers.has(u.id)) {
+          room.screenSharingUsers.delete(u.id);
+          room.screenSharingUsers.add(socket.id);
+          console.log(`[SCREEN] Updated screenSharingUsers for ${userName}: ${u.id} -> ${socket.id}`);
+        }
+      });
+    }
+    
     // Store room metadata if this is a new room with a proper name
     let isNewRoom = false;
     if (roomName && !storedRoom) {
@@ -434,6 +445,13 @@ io.on('connection', (socket) => {
       if (!room.screenSharingUsers) {
         room.screenSharingUsers = new Set();
       }
+      // Deduplicate: remove old socket.id for this username (reconnect case)
+      room.users.forEach(u => {
+        if (u.name === socket.userName && u.id !== socket.id) {
+          room.screenSharingUsers.delete(u.id);
+          console.log(`[SCREEN] Removed old screen share entry for ${socket.userName} (old socket: ${u.id})`);
+        }
+      });
       room.screenSharingUsers.add(socket.id);
       console.log(`[SCREEN] User ${socket.userName} started screen share in room ${socket.roomId}`);
     }

@@ -942,6 +942,9 @@ function resetRoomStateAndUI() {
 }
 
 function leaveRoom() {
+  // Close any open screen share modals
+  closeAllScreenModals();
+  
   // Stop streams
   if (localStream) {
     localStream.getTracks().forEach(t => t.stop());
@@ -967,6 +970,9 @@ function leaveRoom() {
 }
 
 function disconnectAndJoinAnother() {
+  // Close any open screen share modals
+  closeAllScreenModals();
+  
   // Just disconnect and return to lobby without stopping streams
   // Leave socket room
   socket.emit('leave-room', currentRoom);
@@ -984,6 +990,9 @@ function disconnectAndJoinAnother() {
 }
 
 function disconnectAndShowLobby() {
+  // Close any open screen share modals
+  closeAllScreenModals();
+  
   // Leave socket room
   socket.emit('leave-room', currentRoom);
   
@@ -2039,7 +2048,22 @@ function toggleScreenSharePreview(videoId) {
   }
 }
 
+function closeAllScreenModals() {
+  const modal = document.getElementById('screenShareModal');
+  if (modal) {
+    modal.remove();
+    console.log('[SCREEN] Closed all screen share modals');
+  }
+}
+
 function openScreenModal(videoId) {
+  // Check if user is in the same channel as the screen sharing user
+  if (!currentChannelUsers.has(videoId) && videoId !== 'local') {
+    console.log('[SCREEN] Cannot open modal: user', videoId, 'is not in current channel');
+    addSystemMessage('Вы не можете просматривать демонстрацию экрана пользователя из другого канала');
+    return;
+  }
+  
   // Find the screen share video element by id
   const container = document.getElementById(`video-${videoId}`);
   if (!container) {
@@ -2316,6 +2340,9 @@ function switchChannel(channelId) {
     if (response && response.success) {
       const oldChannel = currentChannel;
       currentChannel = channelId;
+      
+      // Close any open screen share modals when switching channels
+      closeAllScreenModals();
       
       // Update UI
       document.querySelectorAll('.channel-item').forEach(item => {
