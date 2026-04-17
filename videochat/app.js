@@ -3261,10 +3261,6 @@ function setRemoteVolume(userId, value) {
   }
 }
 
-function setMicVolume(value) {
-  localStorage.setItem('micVolume', value);
-}
-
 function uploadAvatar(input) {
   const file = input.files[0];
   if (!file) return;
