@@ -73,7 +73,10 @@ async function loadUsersFromSupabase() {
         avatar: u.avatar,
         isOnline: u.is_online,
         lastSeen: u.last_seen,
-        role: u.role || 'user'  // Default role is 'user'
+        role: u.role || 'user',
+        isMuted: u.is_muted || false,
+        muteUntil: u.mute_until || 0,
+        kickedRooms: u.kicked_rooms || '[]'
       });
     });
 
@@ -106,7 +109,10 @@ async function saveUsersToSupabase() {
       avatar: u.avatar,
       is_online: u.isOnline,
       last_seen: u.lastSeen,
-      role: u.role || 'user'  // Default role is 'user'
+      role: u.role || 'user',
+      is_muted: u.isMuted || false,
+      mute_until: u.muteUntil || 0,
+      kicked_rooms: u.kickedRooms || '[]'
     }));
 
     // Use upsert to insert or update
@@ -310,6 +316,140 @@ app.put('/api/users/:username/role', async (req, res) => {
   console.log(`[ROLE] User ${username} role changed to ${role} by ${requester}`);
   io.emit('users-updated');
   res.json({ success: true, message: `User ${username} role updated to ${role}` });
+});
+
+// REST API endpoint to mute/unmute user
+app.put('/api/users/:username/mute', async (req, res) => {
+  const username = req.params.username;
+  const { isMuted, duration } = req.body;  // duration in minutes, 0 for permanent
+  const requester = req.headers['x-username'];
+
+  // Check if requester is admin or moderator
+  const requesterUser = registeredUsers.get(requester);
+  const isAdmin = requesterUser && (requesterUser.role === 'admin' || requesterUser.role === 'superadmin');
+  const isModerator = requesterUser && requesterUser.role === 'moderator';
+
+  if (!isAdmin && !isModerator) {
+    return res.status(403).json({ success: false, message: 'Only admins and moderators can mute users' });
+  }
+
+  const user = registeredUsers.get(username);
+  if (!user) {
+    return res.status(404).json({ success: false, message: 'User not found' });
+  }
+
+  // Prevent muting admins/superadmins
+  if (user.role === 'admin' || user.role === 'superadmin') {
+    return res.status(403).json({ success: false, message: 'Cannot mute admins or superadmins' });
+  }
+
+  // Calculate mute until time
+  const muteUntil = duration > 0 ? Date.now() + (duration * 60 * 1000) : 0;
+
+  // Update user in memory
+  user.isMuted = isMuted;
+  user.muteUntil = muteUntil;
+  registeredUsers.set(username, user);
+
+  // Update user in Supabase
+  const { error } = await supabase
+    .from('videochat_users')
+    .update({ is_muted: isMuted, mute_until: muteUntil })
+    .eq('username', username);
+
+  if (error) {
+    console.error('[MUTE] Error updating user mute status in Supabase:', error);
+    return res.status(500).json({ success: false, message: 'Error updating mute status' });
+  }
+
+  console.log(`[MUTE] User ${username} ${isMuted ? 'muted' : 'unmuted'} by ${requester} for ${duration} minutes`);
+  io.emit('users-updated');
+
+  // Notify user
+  io.emit('user-muted', { username, isMuted, duration });
+
+  res.json({ success: true, message: `User ${username} ${isMuted ? 'muted' : 'unmuted'}` });
+});
+
+// REST API endpoint to kick user from room
+app.post('/api/users/:username/kick', async (req, res) => {
+  const username = req.params.username;
+  const { roomId } = req.body;
+  const requester = req.headers['x-username'];
+
+  // Check if requester is admin or moderator
+  const requesterUser = registeredUsers.get(requester);
+  const isAdmin = requesterUser && (requesterUser.role === 'admin' || requesterUser.role === 'superadmin');
+  const isModerator = requesterUser && requesterUser.role === 'moderator';
+
+  if (!isAdmin && !isModerator) {
+    return res.status(403).json({ success: false, message: 'Only admins and moderators can kick users' });
+  }
+
+  const user = registeredUsers.get(username);
+  if (!user) {
+    return res.status(404).json({ success: false, message: 'User not found' });
+  }
+
+  // Prevent kicking admins/superadmins
+  if (user.role === 'admin' || user.role === 'superadmin') {
+    return res.status(403).json({ success: false, message: 'Cannot kick admins or superadmins' });
+  }
+
+  // Update user's kicked rooms in memory
+  let kickedRooms = JSON.parse(user.kickedRooms || '[]');
+  if (!kickedRooms.includes(roomId)) {
+    kickedRooms.push(roomId);
+    user.kickedRooms = JSON.stringify(kickedRooms);
+    registeredUsers.set(username, user);
+  }
+
+  // Update user in Supabase
+  const { error } = await supabase
+    .from('videochat_users')
+    .update({ kicked_rooms: user.kickedRooms })
+    .eq('username', username);
+
+  if (error) {
+    console.error('[KICK] Error updating user kicked rooms in Supabase:', error);
+    return res.status(500).json({ success: false, message: 'Error kicking user' });
+  }
+
+  console.log(`[KICK] User ${username} kicked from room ${roomId} by ${requester}`);
+
+  // Force disconnect user from room
+  io.to(roomId).emit('user-kicked', { username, roomId });
+
+  // Find user's socket and disconnect from room
+  io.sockets.sockets.forEach(socket => {
+    if (socket.userName === username && socket.roomId === roomId) {
+      socket.leave(roomId);
+      socket.emit('kicked-from-room', { roomId });
+    }
+  });
+
+  res.json({ success: true, message: `User ${username} kicked from room ${roomId}` });
+});
+
+// REST API endpoint to delete message
+app.delete('/api/messages/:messageId', (req, res) => {
+  const messageId = req.params.messageId;
+  const requester = req.headers['x-username'];
+
+  // Check if requester is admin or moderator
+  const requesterUser = registeredUsers.get(requester);
+  const isAdmin = requesterUser && (requesterUser.role === 'admin' || requesterUser.role === 'superadmin');
+  const isModerator = requesterUser && requesterUser.role === 'moderator';
+
+  if (!isAdmin && !isModerator) {
+    return res.status(403).json({ success: false, message: 'Only admins and moderators can delete messages' });
+  }
+
+  // Emit event to delete message on all clients
+  io.emit('message-deleted', { messageId });
+
+  console.log(`[DELETE MESSAGE] Message ${messageId} deleted by ${requester}`);
+  res.json({ success: true, message: 'Message deleted' });
 });
 
 io.on('connection', (socket) => {

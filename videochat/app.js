@@ -45,6 +45,36 @@ socket.on('users-updated', () => {
   loadRegisteredUsers();
 });
 
+// Listen for mute event
+socket.on('user-muted', ({ username, isMuted, duration }) => {
+  if (currentUser && currentUser.username === username) {
+    if (isMuted) {
+      const durationText = duration > 0 ? `${duration} минут` : 'навсегда';
+      alert(`🔇 Вы были замучены на ${durationText}`);
+    } else {
+      alert('🔊 Ваш мут был снят');
+    }
+    // Reload user data to get updated mute status
+    loadRegisteredUsers();
+  }
+});
+
+// Listen for kick event
+socket.on('kicked-from-room', ({ roomId }) => {
+  if (currentRoom === roomId) {
+    alert(`👢 Вы были выгнаны из комнаты`);
+    leaveRoom();
+  }
+});
+
+// Listen for message deleted event
+socket.on('message-deleted', ({ messageId }) => {
+  const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+  if (messageElement) {
+    messageElement.remove();
+  }
+});
+
 // State
 let currentUser = null;
 let currentRoom = null;
@@ -564,7 +594,7 @@ function loadRoomsList(filter = '') {
 // Load and display registered users in lobby
 async function loadRegisteredUsers() {
   let users = [];
-  
+
   try {
     // Try to fetch from API first
     const response = await fetch('/api/users');
@@ -575,6 +605,17 @@ async function loadRegisteredUsers() {
         avatar: u.avatar,
         isOnline: u.isOnline
       }));
+
+      // Update current user with mute and kick status
+      if (currentUser) {
+        const currentUserData = apiUsers.find(u => u.username === currentUser.username);
+        if (currentUserData) {
+          currentUser.isMuted = currentUserData.isMuted;
+          currentUser.muteUntil = currentUserData.muteUntil;
+          currentUser.kickedRooms = currentUserData.kickedRooms;
+          currentUser.role = currentUserData.role;
+        }
+      }
     }
   } catch (err) {
     // API failed, use localStorage fallback
@@ -837,7 +878,16 @@ function generateRoomId() {
 
 async function joinRoomById(roomId) {
   currentRoom = roomId;
-  
+
+  // Check if user is kicked from this room
+  if (currentUser && currentUser.kickedRooms) {
+    const kickedRooms = JSON.parse(currentUser.kickedRooms || '[]');
+    if (kickedRooms.includes(roomId)) {
+      alert('👢 Вы были выгнаны из этой комнаты и не можете вернуться');
+      return;
+    }
+  }
+
   // Find room name from stored rooms (local or server)
   const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
   const localRoom = rooms.find(r => r.id === roomId);
@@ -847,11 +897,11 @@ async function joinRoomById(roomId) {
   currentRoomAvatar = room ? room.avatar : null;
 
   addLogEntry('Комната', `"${currentRoomName}" - вы подключились`);
-  
+
   // Request media
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    
+
     // Set default microphone volume to 50%
     const audioTrack = localStream.getAudioTracks()[0];
     if (audioTrack) {
@@ -869,10 +919,10 @@ async function joinRoomById(roomId) {
     alert('Ошибка доступа к камере/микрофону: ' + err.message);
     return;
   }
-  
+
   // Join socket room with avatar, room name and room avatar
   socket.emit('join-room', roomId, currentUser.username, userAvatar, currentRoomName, currentRoomAvatar);
-  
+
   // Play sound for local user entering room
   sounds.userJoin();
   
@@ -2289,6 +2339,24 @@ function sendMessage() {
   const input = document.getElementById('chatInput');
   const text = input.value.trim();
   if (text && currentRoom) {
+    // Check if user is muted
+    if (currentUser && (currentUser.isMuted === true || currentUser.isMuted === 'true')) {
+      // Check if mute has expired
+      if (currentUser.muteUntil && currentUser.muteUntil > Date.now()) {
+        const remainingMinutes = Math.ceil((currentUser.muteUntil - Date.now()) / 60000);
+        alert(`🔇 Вы замучены. Осталось ${remainingMinutes} минут`);
+        return;
+      } else if (currentUser.muteUntil && currentUser.muteUntil <= Date.now()) {
+        // Mute has expired, auto-unmute
+        currentUser.isMuted = false;
+        currentUser.muteUntil = 0;
+      } else if (!currentUser.muteUntil || currentUser.muteUntil === 0) {
+        // Permanent mute
+        alert('🔇 Вы замучены навсегда');
+        return;
+      }
+    }
+
     // Send to current channel if in a channel, otherwise to room
     if (currentChannel && currentChannel !== 'general') {
       socket.emit('channel-message', currentChannel, text);

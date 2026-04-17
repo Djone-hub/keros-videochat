@@ -415,9 +415,14 @@ function loadAdminUsersList() {
                 <div class="admin-room-meta" style="font-size: 12px; margin-top: 4px;">
                   Роль: <span style="color: ${getRoleColor(user.role)}; font-weight: bold;">${getRoleLabel(user.role)}</span>
                 </div>
+                ${user.isMuted ? `
+                <div class="admin-room-meta" style="font-size: 12px; margin-top: 4px; color: #faa61a;">
+                  🔇 Замучен ${user.muteUntil && user.muteUntil > 0 ? `до ${new Date(user.muteUntil).toLocaleTimeString()}` : 'навсегда'}
+                </div>
+                ` : ''}
               </div>
             </div>
-            <div style="display: flex; gap: 8px;">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
               ${canChangeRole ? `
                 <select onchange="changeUserRole('${user.username}', this.value)" class="admin-btn" style="padding: 6px 10px; font-size: 12px;">
                   <option value="user" ${user.role === 'user' ? 'selected' : ''}>Пользователь</option>
@@ -425,6 +430,10 @@ function loadAdminUsersList() {
                   <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Админ</option>
                   <option value="superadmin" ${user.role === 'superadmin' ? 'selected' : ''}>Суперадмин</option>
                 </select>
+              ` : ''}
+              ${isAdmin ? `
+                <button onclick="muteUser('${user.username}', ${user.isMuted ? 'false' : 'true'})" class="admin-btn" style="padding: 6px 10px; font-size: 12px;" title="${user.isMuted ? 'Размутить' : 'Замутить'}">${user.isMuted ? '🔊' : '🔇'}</button>
+                <button onclick="kickUser('${user.username}')" class="admin-btn" style="padding: 6px 10px; font-size: 12px;" title="Кикнуть из комнаты">👢</button>
               ` : ''}
               ${canDelete ? `
                 <button onclick="deleteUser('${user.username}')" class="admin-btn danger" title="Удалить пользователя">🗑️</button>
@@ -504,9 +513,14 @@ function filterAdminUsers(searchTerm) {
             <div class="admin-room-meta" style="font-size: 12px; margin-top: 4px;">
               Роль: <span style="color: ${getRoleColor(user.role)}; font-weight: bold;">${getRoleLabel(user.role)}</span>
             </div>
+            ${user.isMuted ? `
+            <div class="admin-room-meta" style="font-size: 12px; margin-top: 4px; color: #faa61a;">
+              🔇 Замучен ${user.muteUntil && user.muteUntil > 0 ? `до ${new Date(user.muteUntil).toLocaleTimeString()}` : 'навсегда'}
+            </div>
+            ` : ''}
           </div>
         </div>
-        <div style="display: flex; gap: 8px;">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
           ${canChangeRole ? `
             <select onchange="changeUserRole('${user.username}', this.value)" class="admin-btn" style="padding: 6px 10px; font-size: 12px;">
               <option value="user" ${user.role === 'user' ? 'selected' : ''}>Пользователь</option>
@@ -514,6 +528,10 @@ function filterAdminUsers(searchTerm) {
               <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Админ</option>
               <option value="superadmin" ${user.role === 'superadmin' ? 'selected' : ''}>Суперадмин</option>
             </select>
+          ` : ''}
+          ${isAdmin ? `
+            <button onclick="muteUser('${user.username}', ${user.isMuted ? 'false' : 'true'})" class="admin-btn" style="padding: 6px 10px; font-size: 12px;" title="${user.isMuted ? 'Размутить' : 'Замутить'}">${user.isMuted ? '🔊' : '🔇'}</button>
+            <button onclick="kickUser('${user.username}')" class="admin-btn" style="padding: 6px 10px; font-size: 12px;" title="Кикнуть из комнаты">👢</button>
           ` : ''}
           ${canDelete ? `
             <button onclick="deleteUser('${user.username}')" class="admin-btn danger" title="Удалить пользователя">🗑️</button>
@@ -553,6 +571,62 @@ function deleteUser(username) {
     .catch(err => {
       console.error('Error deleting user:', err);
       alert('❌ Ошибка при удалении пользователя');
+    });
+}
+
+function muteUser(username, isMuted) {
+  const duration = isMuted ? prompt('На сколько минут замутить? (0 = навсегда)', '10') : '0';
+  if (duration === null) return;
+
+  fetch(`/api/users/${encodeURIComponent(username)}/mute`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Username': currentUser?.username || 'unknown'
+    },
+    body: JSON.stringify({ isMuted, duration: parseInt(duration) || 0 })
+  })
+    .then(res => res.json())
+    .then(result => {
+      if (result.success) {
+        alert(`✅ Пользователь "${username}" ${isMuted ? 'замучен' : 'размучен'}`);
+        loadAdminUsersList();
+      } else {
+        alert(`❌ Ошибка: ${result.message}`);
+      }
+    })
+    .catch(err => {
+      console.error('Error muting user:', err);
+      alert('❌ Ошибка при изменении мута');
+    });
+}
+
+function kickUser(username) {
+  const roomId = prompt('Введите ID комнаты для кика:');
+  if (!roomId) return;
+
+  if (!confirm(`Кикнуть пользователя "${username}" из комнаты "${roomId}"?`)) return;
+
+  fetch(`/api/users/${encodeURIComponent(username)}/kick`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Username': currentUser?.username || 'unknown'
+    },
+    body: JSON.stringify({ roomId })
+  })
+    .then(res => res.json())
+    .then(result => {
+      if (result.success) {
+        alert(`✅ Пользователь "${username}" кикнут из комнаты`);
+        loadAdminUsersList();
+      } else {
+        alert(`❌ Ошибка: ${result.message}`);
+      }
+    })
+    .catch(err => {
+      console.error('Error kicking user:', err);
+      alert('❌ Ошибка при кике пользователя');
     });
 }
 
