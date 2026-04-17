@@ -114,6 +114,11 @@ let availableDevices = {
   videoinput: []
 };
 
+// Microphone level indicator
+let micLevelAnalyzer = null;
+let micLevelInterval = null;
+let micLevelCallback = null;
+
 // Load saved device preferences
 function loadDevicePreferences() {
   selectedAudioInput = localStorage.getItem('keroschat_audioInput') || null;
@@ -201,6 +206,10 @@ function selectDevice(type, deviceId) {
   switch (type) {
     case 'audioinput':
       selectedAudioInput = deviceId;
+      // Restart mic level monitoring with new device
+      if (localStream) {
+        startMicLevelMonitoring();
+      }
       break;
     case 'audiooutput':
       selectedAudioOutput = deviceId;
@@ -219,6 +228,108 @@ function selectDevice(type, deviceId) {
   }
 
   saveDevicePreferences();
+}
+
+// Start microphone level monitoring
+function startMicLevelMonitoring() {
+  stopMicLevelMonitoring();
+
+  if (!localStream) return;
+
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioContext.createMediaStreamSource(localStream);
+    const analyzer = audioContext.createAnalyser();
+    analyzer.fftSize = 256;
+    source.connect(analyzer);
+    micLevelAnalyzer = analyzer;
+
+    const dataArray = new Uint8Array(analyzer.frequencyBinCount);
+
+    micLevelInterval = setInterval(() => {
+      analyzer.getByteFrequencyData(dataArray);
+
+      // Calculate average volume
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i];
+      }
+      const average = sum / dataArray.length;
+      const level = Math.min(100, Math.round((average / 128) * 100));
+
+      // Update UI
+      updateMicLevelIndicator(level);
+
+      // Call callback if set
+      if (micLevelCallback) {
+        micLevelCallback(level);
+      }
+    }, 100);
+
+    console.log('[MIC LEVEL] Monitoring started');
+  } catch (err) {
+    console.error('[MIC LEVEL] Error starting monitoring:', err);
+  }
+}
+
+// Stop microphone level monitoring
+function stopMicLevelMonitoring() {
+  if (micLevelInterval) {
+    clearInterval(micLevelInterval);
+    micLevelInterval = null;
+  }
+  if (micLevelAnalyzer) {
+    micLevelAnalyzer = null;
+  }
+  console.log('[MIC LEVEL] Monitoring stopped');
+}
+
+// Update microphone level indicator UI
+function updateMicLevelIndicator(level) {
+  const indicator = document.getElementById('micLevelIndicator');
+  if (!indicator) return;
+
+  // Create bars based on level
+  const barsCount = 5;
+  const activeBars = Math.ceil((level / 100) * barsCount);
+  let html = '';
+
+  for (let i = 0; i < barsCount; i++) {
+    const isActive = i < activeBars;
+    const color = isActive ? (level > 80 ? '#ed4245' : level > 50 ? '#faa61a' : '#3ba55d') : '#40444b';
+    html += `<div style="width: 8px; height: 4px; background: ${color}; margin: 2px 0; border-radius: 2px;"></div>`;
+  }
+
+  indicator.innerHTML = html;
+}
+
+// Test audio output
+async function testAudioOutput() {
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.value = 440; // A4 note
+    oscillator.type = 'sine';
+    gainNode.gain.value = 0.3; // 30% volume
+
+    oscillator.start();
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
+
+    setTimeout(() => {
+      oscillator.stop();
+      audioContext.close();
+    }, 500);
+
+    console.log('[AUDIO TEST] Played test sound');
+  } catch (err) {
+    console.error('[AUDIO TEST] Error:', err);
+    showAlertModal('Ошибка теста звука: ' + err.message, 'error');
+  }
 }
 let userAvatar = null;
 let pingInterval = null;
@@ -1164,13 +1275,16 @@ async function joinRoomById(roomId) {
   
   // Show room UI
   showRoomUI();
-  
+
   // Add local video
   addVideoStream('local', localStream, currentUser.username, true, false);
   updateActiveUsers();
-  
+
   // Start speaking detection
   startSpeakingDetection();
+
+  // Start microphone level monitoring
+  startMicLevelMonitoring();
 }
 
 function showRoomUI() {
@@ -1251,12 +1365,15 @@ function resetRoomStateAndUI() {
 function leaveRoom() {
   // Close any open screen share modals
   closeAllScreenModals();
-  
+
   // Stop screen sharing if active
   if (isScreenSharing) {
     toggleScreen();
   }
-  
+
+  // Stop microphone level monitoring
+  stopMicLevelMonitoring();
+
   // Stop streams
   if (localStream) {
     localStream.getTracks().forEach(t => t.stop());
@@ -1266,17 +1383,17 @@ function leaveRoom() {
     screenStream.getTracks().forEach(t => t.stop());
     screenStream = null;
   }
-  
+
   // Stop ping measurement
   stopPingMeasurement();
-  
+
   // Leave socket room
   socket.emit('leave-room', currentRoom);
   resetRoomStateAndUI();
-  
+
   // Show settings panel if open
   document.getElementById('settingsPanel').classList.remove('active');
-  
+
   // Back to lobby
   showLobby();
 }
