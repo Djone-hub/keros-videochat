@@ -803,6 +803,50 @@ app.post('/api/admin/reload-users', async (req, res) => {
   res.json({ success: true, message: `Reloaded ${freshUsers.size} users from Supabase` });
 });
 
+// REST API endpoint to delete room
+app.delete('/api/rooms/:roomId', async (req, res) => {
+  const roomId = req.params.roomId;
+  const requester = req.headers['x-username'];
+
+  if (!requester) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+
+  // Fetch user role from Supabase
+  const { data: requesterData, error: requesterError } = await supabase
+    .from('videochat_users')
+    .select('role')
+    .eq('username', requester)
+    .single();
+
+  if (requesterError || !requesterData) {
+    return res.status(403).json({ success: false, message: 'User not found' });
+  }
+
+  const storedRoom = roomStore.get(roomId);
+  const creator = storedRoom?.creator;
+  const isSuperAdmin = requesterData.role === 'superadmin';
+
+  // Allow deletion if:
+  // 1. User is the creator, OR
+  // 2. No creator is set (orphaned room), OR
+  // 3. User is superadmin
+  if (creator === requester || !creator || isSuperAdmin) {
+    roomStore.delete(roomId);
+    if (rooms.has(roomId)) {
+      rooms.delete(roomId);
+    }
+    await saveRoomsToSupabase();
+    io.emit('room-deleted', roomId);
+    io.emit('rooms-updated');
+    console.log(`[DELETE API] Room ${roomId} deleted by ${requester} (role: ${requesterData.role})`);
+    res.json({ success: true, message: 'Room deleted' });
+  } else {
+    console.log(`[DELETE API] Rejected: ${requester} is not creator (creator=${creator}, role=${requesterData.role})`);
+    res.status(403).json({ success: false, message: 'Только создатель может удалить комнату' });
+  }
+});
+
 // REST API endpoint to clean ghost users from room metadata
 app.post('/api/admin/clean-ghost-users', async (req, res) => {
   const requester = req.headers['x-username'];

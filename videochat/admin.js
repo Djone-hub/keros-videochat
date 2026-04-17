@@ -229,9 +229,25 @@ function filterAdminRooms(searchTerm) {
 }
 
 function adminDeleteRoom(roomId) {
-  showConfirmModal(`Вы уверены, что хотите удалить комнату ${roomId}?`, () => {
-    socket.emit('delete-room', roomId);
-    setTimeout(renderAdminPanel, 300);
+  showConfirmModal(`Вы уверены, что хотите удалить комнату ${roomId}?`, async () => {
+    try {
+      const response = await fetch(`/api/rooms/${roomId}`, {
+        method: 'DELETE',
+        headers: {
+          'X-Username': currentUser?.username || 'unknown'
+        }
+      });
+      const result = await response.json();
+      if (result.success) {
+        showAlertModal('Комната удалена!', 'success');
+        setTimeout(renderAdminPanel, 300);
+      } else {
+        showAlertModal('Ошибка: ' + result.message, 'error');
+      }
+    } catch (err) {
+      console.error('Error deleting room:', err);
+      showAlertModal('Ошибка удаления комнаты', 'error');
+    }
   });
 }
 
@@ -246,9 +262,22 @@ function clearGhostRooms() {
     showAlertModal('Призрачные комнаты не найдены.', 'info');
     return;
   }
-  showConfirmModal(`Найдено ${ghostRooms.length} призрачных комнат. Удалить их?`, () => {
-    ghostRooms.forEach(room => socket.emit('delete-room', room.id));
-    setTimeout(renderAdminPanel, 500);
+  showConfirmModal(`Найдено ${ghostRooms.length} призрачных комнат. Удалить их?`, async () => {
+    try {
+      for (const room of ghostRooms) {
+        const response = await fetch(`/api/rooms/${room.id}`, {
+          method: 'DELETE',
+          headers: {
+            'X-Username': currentUser?.username || 'unknown'
+          }
+        });
+      }
+      showAlertModal('Призрачные комнаты удалены!', 'success');
+      setTimeout(renderAdminPanel, 500);
+    } catch (err) {
+      console.error('Error deleting ghost rooms:', err);
+      showAlertModal('Ошибка удаления призрачных комнат', 'error');
+    }
   });
 }
 
@@ -259,9 +288,22 @@ function deleteAllEmptyRooms() {
     showAlertModal('Пустые комнаты не найдены.', 'info');
     return;
   }
-  showConfirmModal(`Найдено ${emptyRooms.length} пустых комнат. Удалить их все?`, () => {
-    emptyRooms.forEach(room => socket.emit('delete-room', room.id));
-    setTimeout(renderAdminPanel, 500);
+  showConfirmModal(`Найдено ${emptyRooms.length} пустых комнат. Удалить их все?`, async () => {
+    try {
+      for (const room of emptyRooms) {
+        const response = await fetch(`/api/rooms/${room.id}`, {
+          method: 'DELETE',
+          headers: {
+            'X-Username': currentUser?.username || 'unknown'
+          }
+        });
+      }
+      showAlertModal('Пустые комнаты удалены!', 'success');
+      setTimeout(renderAdminPanel, 500);
+    } catch (err) {
+      console.error('Error deleting empty rooms:', err);
+      showAlertModal('Ошибка удаления пустых комнат', 'error');
+    }
   });
 }
 
