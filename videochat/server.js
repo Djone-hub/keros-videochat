@@ -194,16 +194,49 @@ app.get('/api/rooms', (req, res) => {
 });
 
 // REST API endpoint for registered users with online status
-app.get('/api/users', (req, res) => {
-  const users = Array.from(registeredUsers.values()).map(u => ({
-    username: u.username,
-    name: u.name,
-    avatar: u.avatar,
-    isOnline: u.isOnline,
-    lastSeen: u.lastSeen,
-    role: u.role || 'user'
-  }));
-  res.json(users);
+app.get('/api/users', async (req, res) => {
+  try {
+    // Fetch fresh data from Supabase
+    const { data, error } = await supabase
+      .from('videochat_users')
+      .select('*');
+
+    if (error) {
+      console.error('[API] Error fetching users from Supabase:', error);
+      // Fallback to memory cache
+      const users = Array.from(registeredUsers.values()).map(u => ({
+        username: u.username,
+        name: u.name,
+        avatar: u.avatar,
+        isOnline: u.isOnline,
+        lastSeen: u.lastSeen,
+        role: u.role || 'user'
+      }));
+      res.json(users);
+      return;
+    }
+
+    // Map Supabase data to API format, merging with online status from memory
+    const users = data.map(su => {
+      const memoryUser = registeredUsers.get(su.username);
+      return {
+        username: su.username,
+        name: su.name,
+        avatar: su.avatar,
+        isOnline: memoryUser ? memoryUser.isOnline : su.is_online,
+        lastSeen: memoryUser ? memoryUser.lastSeen : su.last_seen,
+        role: su.role || 'user',
+        isMuted: su.is_muted || false,
+        muteUntil: su.mute_until || 0,
+        kickedRooms: su.kicked_rooms || '[]'
+      };
+    });
+
+    res.json(users);
+  } catch (err) {
+    console.error('[API] Error in /api/users:', err);
+    res.status(500).json({ error: 'Error fetching users' });
+  }
 });
 
 // REST API endpoint to check if user exists
