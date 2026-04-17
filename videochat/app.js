@@ -329,8 +329,9 @@ window.addEventListener('load', () => {
         .then(res => res.json())
         .then(users => {
           const freshUserData = users.find(u => u.username === currentUser.username);
-          if (freshUserData && freshUserData.role) {
-            currentUser.role = freshUserData.role;
+          if (freshUserData) {
+            // Always update role from fresh data
+            currentUser.role = freshUserData.role || 'user';
             currentUser.isMuted = freshUserData.isMuted;
             currentUser.muteUntil = freshUserData.muteUntil;
             currentUser.kickedRooms = freshUserData.kickedRooms;
