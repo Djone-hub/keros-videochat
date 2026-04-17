@@ -995,6 +995,12 @@ async function joinRoomById(roomId) {
   // Request media
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+
+    // Ensure all tracks are enabled
+    localStream.getTracks().forEach(track => {
+      track.enabled = true;
+      console.log(`[TRACK] Local track ${track.kind} enabled:`, track.enabled);
+    });
   } catch (err) {
     showAlertModal('Ошибка доступа к камере/микрофону: ' + err.message, 'error');
     return;
@@ -1220,8 +1226,8 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
       label.appendChild(volumeControl);
       // Set default volume to 50%
       video.volume = 0.5;
-      // Mute if sound is turned off globally
-      video.muted = !isSoundOn;
+      // IMPORTANT: Never mute remote videos - user controls via volume slider
+      video.muted = false;
     }
     
     // Add fullscreen button for screen share (only for REMOTE users, not local)
@@ -2023,9 +2029,10 @@ function toggleSound() {
     label.textContent = 'Звук выкл';
   }
   
-  // Mute/unmute all remote videos
+  // Change volume instead of muting to ensure audio can always be heard
   document.querySelectorAll('.video-container:not(.local) video').forEach(video => {
-    video.muted = !isSoundOn;
+    video.volume = isSoundOn ? 0.5 : 0;
+    video.muted = false; // Never mute, just use volume
   });
   
   // Notify other users about sound state
