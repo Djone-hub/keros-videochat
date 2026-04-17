@@ -2999,13 +2999,30 @@ function clearLogs() {
   }
 }
 
-function clearAllCache() {
-  if (confirm('Удалить все локальные комнаты? Это не удалит их с сервера, только почистит ваш кэш.')) {
-    localStorage.removeItem('keroschat_rooms');
-    console.log('Local rooms cache cleared');
-    alert('Кэш очищен! Страница перезагрузится.');
-    location.reload();
-  }
+async function clearAllCache() {
+  showConfirmModal('Очистить весь кэш браузера? Это удалит все сохранённые данные (аватары, темы, настройки, комнаты).', async () => {
+    try {
+      // Clear all localStorage
+      localStorage.clear();
+
+      // Clear sessionStorage
+      sessionStorage.clear();
+
+      // Clear IndexedDB (for larger data)
+      if (window.indexedDB) {
+        const databases = await indexedDB.databases();
+        databases.forEach(db => {
+          indexedDB.deleteDatabase(db.name);
+        });
+      }
+
+      showAlertModal('✅ Кэш очищен! Страница перезагрузится.', 'success');
+      setTimeout(() => location.reload(), 1500);
+    } catch (err) {
+      console.error('Error clearing cache:', err);
+      showAlertModal('❌ Ошибка очистки кэша', 'error');
+    }
+  });
 }
 
 // Admin panel functions are now in admin.js

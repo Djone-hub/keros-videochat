@@ -599,6 +599,7 @@ function loadAdminUsersList() {
         </div>
         ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin') ? `
         <button onclick="reloadUsersFromSupabase()" class="admin-btn" style="margin-bottom: 15px; padding: 8px 16px;">🔄 Перезагрузить пользователей из Supabase</button>
+        <button onclick="clearBrowserCache()" class="admin-btn danger" style="margin-bottom: 15px; padding: 8px 16px;">🗑️ Очистить кэш браузера</button>
         ` : ''}
         ${listHtml}
       `;
@@ -632,6 +633,32 @@ function reloadUsersFromSupabase() {
       console.error('Error reloading users:', err);
       showAlertModal('❌ Ошибка при перезагрузке пользователей', 'error');
     });
+}
+
+async function clearBrowserCache() {
+  showConfirmModal('Очистить весь кэш браузера? Это удалит все сохранённые данные (аватары, темы, настройки).', async () => {
+    try {
+      // Clear all localStorage
+      localStorage.clear();
+
+      // Clear sessionStorage
+      sessionStorage.clear();
+
+      // Clear IndexedDB (for larger data)
+      if (window.indexedDB) {
+        const databases = await indexedDB.databases();
+        databases.forEach(db => {
+          indexedDB.deleteDatabase(db.name);
+        });
+      }
+
+      showAlertModal('✅ Кэш очищен! Страница перезагрузится.', 'success');
+      setTimeout(() => location.reload(), 1500);
+    } catch (err) {
+      console.error('Error clearing cache:', err);
+      showAlertModal('❌ Ошибка очистки кэша', 'error');
+    }
+  });
 }
 
 function filterAdminUsers(searchTerm) {
@@ -739,6 +766,7 @@ function filterAdminUsers(searchTerm) {
     </div>
     ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin') ? `
     <button onclick="reloadUsersFromSupabase()" class="admin-btn" style="margin-bottom: 15px; padding: 8px 16px;">🔄 Перезагрузить пользователей из Supabase</button>
+    <button onclick="clearBrowserCache()" class="admin-btn danger" style="margin-bottom: 15px; padding: 8px 16px;">🗑️ Очистить кэш браузера</button>
     ` : ''}
     ${listHtml}
   `;
