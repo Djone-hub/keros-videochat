@@ -1463,6 +1463,9 @@ function resetRoomStateAndUI() {
 }
 
 function leaveRoom() {
+  // Play sound for local user leaving room
+  sounds.userLeave();
+
   // Close any open screen share modals
   closeAllScreenModals();
 
@@ -1990,7 +1993,7 @@ socket.on('user-deleted', (username) => {
 });
 
 socket.on('user-left', (userId) => {
-  sounds.userLeave();
+  // REMOVED: sounds.userLeave() - sound should only play for the user who left, not everyone in room
   const user = activeUsers.get(userId);
   removeVideoStream(userId);
   if (peers.has(userId)) {
