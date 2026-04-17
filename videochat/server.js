@@ -96,7 +96,13 @@ function saveRoomsToFile() {
 async function saveUsersToSupabase() {
   try {
     const usersArray = Array.from(registeredUsers.values());
-    
+
+    // Log users before saving
+    console.log('[USERS] Before save:');
+    usersArray.forEach(u => {
+      console.log(`  ${u.username}: hasPassword=${!!u.password}, passwordLength=${u.password?.length || 0}`);
+    });
+
     // Convert to Supabase format
     const supabaseUsers = usersArray.map(u => ({
       username: u.username,
@@ -106,17 +112,23 @@ async function saveUsersToSupabase() {
       is_online: u.isOnline,
       last_seen: u.lastSeen
     }));
-    
+
     // Use upsert to insert or update
     const { data, error } = await supabase
       .from('videochat_users')
       .upsert(supabaseUsers, { onConflict: 'username' });
-    
+
     if (error) {
       console.error('[USERS] Error saving users to Supabase:', error);
     } else {
       console.log(`[USERS] Saved ${usersArray.length} users to Supabase`);
     }
+
+    // Log users after saving
+    console.log('[USERS] After save:');
+    usersArray.forEach(u => {
+      console.log(`  ${u.username}: hasPassword=${!!u.password}, passwordLength=${u.password?.length || 0}`);
+    });
   } catch (err) {
     console.error('[USERS] Error saving users to Supabase:', err);
   }
