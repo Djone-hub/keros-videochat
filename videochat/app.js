@@ -2,6 +2,21 @@
 const socket = io();
 let socketConnected = false;
 
+// Hide screen share button on devices that don't support getDisplayMedia
+if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+  const hideScreenBtn = () => {
+    const screenBtn = document.getElementById('screenBtn');
+    if (screenBtn) {
+      screenBtn.style.display = 'none';
+      console.log('[SCREEN] Screen share button hidden - not supported on this device');
+    }
+  };
+  hideScreenBtn();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', hideScreenBtn);
+  }
+}
+
 // Socket connection event
 socket.on('connect', () => {
   // Connected - only log on localhost
