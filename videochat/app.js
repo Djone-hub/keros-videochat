@@ -959,6 +959,11 @@ function generateRoomId() {
 async function joinRoomById(roomId) {
   currentRoom = roomId;
 
+  // Ensure screen sharing is disabled when joining a new room
+  if (isScreenSharing) {
+    toggleScreen();
+  }
+
   // Check if user is kicked from this room
   if (currentUser && currentUser.kickedRooms) {
     const kickedRooms = JSON.parse(currentUser.kickedRooms || '[]');
@@ -1096,6 +1101,11 @@ function leaveRoom() {
   // Close any open screen share modals
   closeAllScreenModals();
   
+  // Stop screen sharing if active
+  if (isScreenSharing) {
+    toggleScreen();
+  }
+  
   // Stop streams
   if (localStream) {
     localStream.getTracks().forEach(t => t.stop());
@@ -1124,6 +1134,11 @@ function disconnectAndJoinAnother() {
   // Close any open screen share modals
   closeAllScreenModals();
   
+  // Stop screen sharing if active
+  if (isScreenSharing) {
+    toggleScreen();
+  }
+  
   // Just disconnect and return to lobby without stopping streams
   // Leave socket room
   socket.emit('leave-room', currentRoom);
@@ -1137,12 +1152,17 @@ function disconnectAndJoinAnother() {
   showLobby();
   
   // Show message to select another room
-  alert('Вы отключены от комнаты. Выберите другую комнату из списка или создайте новую.');
+  showAlertModal('Вы отключены от комнаты. Выберите другую комнату из списка или создайте новую.', 'info');
 }
 
 function disconnectAndShowLobby() {
   // Close any open screen share modals
   closeAllScreenModals();
+  
+  // Stop screen sharing if active
+  if (isScreenSharing) {
+    toggleScreen();
+  }
   
   // Leave socket room
   socket.emit('leave-room', currentRoom);

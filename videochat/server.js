@@ -1065,6 +1065,11 @@ io.on('connection', (socket) => {
         room.users.delete(userToRemove);
         console.log(`User ${socket.userName} removed from room ${roomId}`);
       }
+      // Remove from screen sharing tracking
+      if (room.screenSharingUsers) {
+        room.screenSharingUsers.delete(socket.id);
+        console.log(`[SCREEN] Removed ${socket.userName} from screen sharing in room ${roomId}`);
+      }
       // Remove from ALL channel.users Sets
       if (room.channels) {
         room.channels.forEach((channel, channelId) => {
