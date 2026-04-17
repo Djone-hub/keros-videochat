@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  videochat:
+    build: .
+    ports:
+      - "10000:10000"
+    environment:
+      - NODE_ENV=production
+      - PORT=10000
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+    restart: unless-stopped
