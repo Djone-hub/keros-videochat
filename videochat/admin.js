@@ -367,6 +367,9 @@ function loadAdminUsersList() {
       const currentUserData = users.find(u => u.username === currentUser?.username);
       if (currentUserData && currentUserData.role) {
         currentUser.role = currentUserData.role;
+        console.log(`[ADMIN] Updated current user role from API: ${currentUser.role}`);
+      } else {
+        console.log(`[ADMIN] Current user data not found or no role:`, currentUserData);
       }
 
       if (users.length === 0) {
