@@ -1270,35 +1270,55 @@ function previewRoomAvatar(input) {
   reader.readAsDataURL(file);
 }
 
-function createRoom() {
+async function createRoom() {
   const name = document.getElementById('newRoomName').value.trim();
   if (!name) {
     showAlertModal('Введите название комнаты!', 'error');
     return;
   }
-  
-  // Prevent creating ghost rooms (name that looks like ID)
-  if (/^[A-Z0-9]{8}$/.test(name)) {
-    showAlertModal('Название комнаты не должно выглядеть как ID (8 заглавных букв/цифр)! Придумайте нормальное название.', 'error');
-    return;
+
+  // Generate random 8-character room ID
+  const roomId = generateRandomId(8);
+
+  try {
+    // Create room via REST API for synchronization
+    const response = await fetch('/api/rooms', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-username': currentUser.username
+      },
+      body: JSON.stringify({
+        id: roomId,
+        name: name,
+        avatar: newRoomAvatar
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to create room');
+    }
+
+    const result = await response.json();
+    console.log('[CREATE ROOM] Room created:', result);
+
+    // Also store locally for immediate access
+    const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+    rooms.push({ id: roomId, name, creator: currentUser.username, avatar: newRoomAvatar });
+    localStorage.setItem('keroschat_rooms', JSON.stringify(rooms));
+
+    hideCreateRoomModal();
+    loadServerRooms();
+    joinRoomById(roomId);
+  } catch (err) {
+    console.error('[CREATE ROOM] Error:', err);
+    showAlertModal('Ошибка создания комнаты: ' + err.message, 'error');
   }
-  
-  const roomId = generateRoomId();
-  const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
-  const newRoom = { id: roomId, name, created: Date.now(), creator: currentUser.username, avatar: newRoomAvatar };
-  rooms.push(newRoom);
-  localStorage.setItem('keroschat_rooms', JSON.stringify(rooms));
-  
-  // Also store room info for server-side search
-  allRooms.push({ id: roomId, name, creator: currentUser.username, avatar: newRoomAvatar });
-  
-  hideCreateRoomModal();
-  loadServerRooms();
-  joinRoomById(roomId);
 }
 
-function generateRoomId() {
-  return Math.random().toString(36).substring(2, 10).toUpperCase();
+function generateRandomId(length) {
+  return Math.random().toString(36).substring(2, length + 2).toUpperCase();
 }
 
 // ========== ROOM ==========
@@ -2004,6 +2024,47 @@ socket.on('user-left', (userId) => {
   const userName = user ? user.name : 'Участник';
   addChatMessage('Система', `Комната "${currentRoomName}" - отключился ${userName}`, true);
   updateActiveUsers();
+});
+
+// Room synchronization events
+socket.on('room-created', (room) => {
+  console.log('[SYNC] Room created:', room.name);
+  loadServerRooms();
+});
+
+socket.on('room-deleted', (roomId) => {
+  console.log('[SYNC] Room deleted:', roomId);
+  // Remove from local storage
+  const localRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+  const filtered = localRooms.filter(r => r.id !== roomId);
+  localStorage.setItem('keroschat_rooms', JSON.stringify(filtered));
+  loadServerRooms();
+});
+
+socket.on('rooms-updated', () => {
+  console.log('[SYNC] Rooms updated');
+  loadServerRooms();
+});
+
+// Channel synchronization events
+socket.on('channel-created', (channel) => {
+  console.log('[SYNC] Channel created:', channel.name);
+  // Channels are disabled, but log for debugging
+});
+
+socket.on('channel-updated', (channel) => {
+  console.log('[SYNC] Channel updated:', channel.name);
+  // Channels are disabled, but log for debugging
+});
+
+socket.on('channel-deleted', (channelId) => {
+  console.log('[SYNC] Channel deleted:', channelId);
+  // Channels are disabled, but log for debugging
+});
+
+socket.on('channels-updated', () => {
+  console.log('[SYNC] Channels updated');
+  // Channels are disabled, but log for debugging
 });
 
 socket.on('offer', async (userId, offer) => {

@@ -297,6 +297,37 @@ loadUsersFromSupabase().then(users => {
   console.log('========================================');
 });
 
+// REST API endpoint to create room
+app.post('/api/rooms', async (req, res) => {
+  const { id, name, avatar } = req.body;
+  const creator = req.headers['x-username'];
+
+  if (!id || !name) {
+    return res.status(400).json({ success: false, message: 'Room ID and name are required' });
+  }
+
+  if (!creator) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+
+  const newRoom = {
+    id,
+    name,
+    avatar: avatar || null,
+    creator,
+    created: Date.now()
+  };
+
+  roomStore.set(id, newRoom);
+  await saveRoomsToSupabase();
+
+  io.emit('room-created', newRoom);
+  io.emit('rooms-updated');
+
+  console.log(`[CREATE API] Room ${id} created by ${creator}`);
+  res.json({ success: true, room: newRoom });
+});
+
 // REST API endpoint for rooms - returns ALL rooms (stored + active) with user list
 app.get('/api/rooms', (req, res) => {
   const allRoomsMap = new Map();
@@ -976,6 +1007,8 @@ app.post('/api/vip-channels', async (req, res) => {
 
   const saved = await saveVIPChannelToSupabase(newChannel);
   if (saved) {
+    io.emit('channel-created', newChannel);
+    io.emit('channels-updated');
     res.json({ success: true, channel: newChannel });
   } else {
     res.status(500).json({ success: false, message: 'Error saving VIP channel' });
@@ -1003,6 +1036,8 @@ app.put('/api/vip-channels/:id', async (req, res) => {
   const saved = await saveVIPChannelToSupabase(channel);
 
   if (saved) {
+    io.emit('channel-updated', channel);
+    io.emit('channels-updated');
     res.json({ success: true, channel });
   } else {
     res.status(500).json({ success: false, message: 'Error updating VIP channel' });
@@ -1028,6 +1063,8 @@ app.delete('/api/vip-channels/:id', async (req, res) => {
   const deleted = await deleteVIPChannelFromSupabase(channelId);
 
   if (deleted) {
+    io.emit('channel-deleted', channelId);
+    io.emit('channels-updated');
     res.json({ success: true, message: 'Channel deleted' });
   } else {
     res.status(500).json({ success: false, message: 'Error deleting VIP channel' });
