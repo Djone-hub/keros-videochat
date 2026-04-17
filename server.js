@@ -857,7 +857,8 @@ io.on('connection', (socket) => {
       channelId: id,
       channelName: ch.name,
       userCount: ch.users ? ch.users.size : 0,
-      isGeneral: id === 'general'
+      isGeneral: id === 'general',
+      channelUsers: ch.users ? Array.from(ch.users).map(u => ({ userId: u.id, userName: u.name })) : []
     }));
 
     console.log(`[CHANNELS] Returning ${channels.length} channels for room ${socket.roomId}`);

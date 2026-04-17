@@ -2331,6 +2331,22 @@ function switchChannel(channelId) {
         chatHeader.innerHTML = `&#128172; Чат: ${response.channelName}`;
       }
       
+      // Update currentChannelUsers from response
+      currentChannelUsers.clear();
+      if (response.channelUsers) {
+        response.channelUsers.forEach(u => {
+          currentChannelUsers.set(u.userId, { userName: u.userName });
+        });
+        console.log('[CHANNEL] Updated currentChannelUsers with', currentChannelUsers.size, 'users');
+        
+        // Update video visibility based on new channel users
+        const channelUsers = Array.from(currentChannelUsers.entries()).map(([userId, user]) => ({
+          userId,
+          userName: user.userName || (activeUsers.get(userId)?.name) || 'Участник'
+        }));
+        updateVideoVisibilityForChannel(channelUsers);
+      }
+      
       // Refresh channel list to update user counts
       loadChannels();
       
@@ -2428,6 +2444,28 @@ function loadChannels() {
       updateChannelList(response.channels);
       currentChannel = response.currentChannel || 'general';
       console.log('[CHANNELS] Loaded successfully, currentChannel:', currentChannel);
+      
+      // Update currentChannelUsers based on channelUsers from server
+      currentChannelUsers.clear();
+      const currentChannelData = response.channels.find(ch => ch.channelId === currentChannel);
+      if (currentChannelData && currentChannelData.channelUsers) {
+        currentChannelData.channelUsers.forEach(u => {
+          currentChannelUsers.set(u.userId, { userName: u.userName });
+        });
+        console.log('[CHANNELS] Updated currentChannelUsers with', currentChannelUsers.size, 'users');
+        
+        // Update video visibility based on current channel users
+        const channelUsers = Array.from(currentChannelUsers.entries()).map(([userId, user]) => ({
+          userId,
+          userName: user.userName || (activeUsers.get(userId)?.name) || 'Участник'
+        }));
+        // Add current user
+        channelUsers.push({
+          userId: socket.id,
+          userName: currentUser.username
+        });
+        updateVideoVisibilityForChannel(channelUsers);
+      }
     } else {
       console.error('[CHANNELS] Failed to load:', response?.error || 'Unknown error');
       // Show default channel even if server fails
