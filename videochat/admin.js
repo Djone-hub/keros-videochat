@@ -413,10 +413,19 @@ function renderAdminUsersList(users) {
           <div>
             <div class="admin-room-name">${user.name}</div>
             <div class="admin-room-meta" style="color: ${statusColor};">${statusText}</div>
+            <div class="admin-room-meta" style="font-size: 12px; margin-top: 4px;">
+              Роль: <span style="color: ${getRoleColor(user.role)}; font-weight: bold;">${getRoleLabel(user.role)}</span>
+            </div>
           </div>
         </div>
         <div style="display: flex; gap: 8px;">
-          <button onclick="deleteUser('${user.name}')" class="admin-btn danger" title="Удалить пользователя">🗑️ Удалить</button>
+          <select onchange="changeUserRole('${user.username}', this.value)" class="admin-btn" style="padding: 6px 10px; font-size: 12px;">
+            <option value="user" ${user.role === 'user' ? 'selected' : ''}>Пользователь</option>
+            <option value="moderator" ${user.role === 'moderator' ? 'selected' : ''}>Модератор</option>
+            <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Админ</option>
+            <option value="superadmin" ${user.role === 'superadmin' ? 'selected' : ''}>Суперадмин</option>
+          </select>
+          <button onclick="deleteUser('${user.username}')" class="admin-btn danger" title="Удалить пользователя">🗑️</button>
         </div>
       </div>
     `;
@@ -460,6 +469,50 @@ function deleteUser(username) {
     .catch(err => {
       console.error('Error deleting user:', err);
       alert('❌ Ошибка при удалении пользователя');
+    });
+}
+
+function getRoleColor(role) {
+  const colors = {
+    'user': '#b9bbbe',
+    'moderator': '#faa61a',
+    'admin': '#ed4245',
+    'superadmin': '#5865f2'
+  };
+  return colors[role] || '#b9bbbe';
+}
+
+function getRoleLabel(role) {
+  const labels = {
+    'user': 'Пользователь',
+    'moderator': 'Модератор',
+    'admin': 'Админ',
+    'superadmin': 'Суперадмин'
+  };
+  return labels[role] || 'Пользователь';
+}
+
+function changeUserRole(username, newRole) {
+  fetch(`/api/users/${encodeURIComponent(username)}/role`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Username': currentUser?.username || 'unknown'
+    },
+    body: JSON.stringify({ role: newRole })
+  })
+    .then(res => res.json())
+    .then(result => {
+      if (result.success) {
+        alert(`✅ Роль пользователя "${username}" изменена на "${getRoleLabel(newRole)}"`);
+        loadAdminUsersList();
+      } else {
+        alert(`❌ Ошибка: ${result.message}`);
+      }
+    })
+    .catch(err => {
+      console.error('Error changing user role:', err);
+      alert('❌ Ошибка изменения роли');
     });
 }
 

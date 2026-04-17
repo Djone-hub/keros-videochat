@@ -58,12 +58,12 @@ async function loadUsersFromSupabase() {
     const { data, error } = await supabase
       .from('videochat_users')
       .select('*');
-    
+
     if (error) {
       console.error('[USERS] Error loading users from Supabase:', error);
       return new Map();
     }
-    
+
     const map = new Map();
     data.forEach(u => {
       map.set(u.username, {
@@ -72,10 +72,11 @@ async function loadUsersFromSupabase() {
         name: u.name,
         avatar: u.avatar,
         isOnline: u.is_online,
-        lastSeen: u.last_seen
+        lastSeen: u.last_seen,
+        role: u.role || 'user'  // Default role is 'user'
       });
     });
-    
+
     console.log(`[USERS] Loaded ${data.length} users from Supabase`);
     return map;
   } catch (err) {
@@ -104,7 +105,8 @@ async function saveUsersToSupabase() {
       name: u.name,
       avatar: u.avatar,
       is_online: u.isOnline,
-      last_seen: u.lastSeen
+      last_seen: u.lastSeen,
+      role: u.role || 'user'  // Default role is 'user'
     }));
 
     // Use upsert to insert or update
@@ -187,10 +189,12 @@ app.get('/api/rooms', (req, res) => {
 // REST API endpoint for registered users with online status
 app.get('/api/users', (req, res) => {
   const users = Array.from(registeredUsers.values()).map(u => ({
+    username: u.username,
     name: u.name,
     avatar: u.avatar,
     isOnline: u.isOnline,
-    lastSeen: u.lastSeen
+    lastSeen: u.lastSeen,
+    role: u.role || 'user'
   }));
   res.json(users);
 });
@@ -222,29 +226,81 @@ app.post('/api/login', (req, res) => {
 app.delete('/api/users/:username', async (req, res) => {
   const username = req.params.username;
   const requester = req.headers['x-username'];
-  
-  // Simple authorization: only allow deletion if requester is the same user or an admin
-  // For now, anyone can delete any user (you can add admin check later)
+
+  // Check if requester is admin
+  const requesterUser = registeredUsers.get(requester);
+  const isAdmin = requesterUser && (requesterUser.role === 'admin' || requesterUser.role === 'superadmin');
+
+  // Only allow deletion if requester is admin or deleting own account
+  if (!isAdmin && requester !== username) {
+    return res.status(403).json({ success: false, message: 'Only admins can delete other users' });
+  }
+
   if (registeredUsers.has(username)) {
     registeredUsers.delete(username);
-    
+
     // Delete from Supabase
     const { error } = await supabase
       .from('videochat_users')
       .delete()
       .eq('username', username);
-    
+
     if (error) {
       console.error('[DELETE] Error deleting user from Supabase:', error);
     }
-    
-    console.log(`[DELETE] User ${username} deleted by ${requester || 'unknown'}`);
+
+    console.log(`[DELETE] User ${username} deleted by ${requester || 'unknown'} (role: ${requesterUser?.role})`);
     io.emit('user-deleted', username);
     io.emit('users-updated');
     res.json({ success: true, message: `User ${username} deleted` });
   } else {
     res.status(404).json({ success: false, message: 'User not found' });
   }
+});
+
+// REST API endpoint to update user role
+app.put('/api/users/:username/role', async (req, res) => {
+  const username = req.params.username;
+  const { role } = req.body;
+  const requester = req.headers['x-username'];
+
+  // Check if requester is admin
+  const requesterUser = registeredUsers.get(requester);
+  const isAdmin = requesterUser && (requesterUser.role === 'admin' || requesterUser.role === 'superadmin');
+
+  if (!isAdmin) {
+    return res.status(403).json({ success: false, message: 'Only admins can change user roles' });
+  }
+
+  // Validate role
+  const validRoles = ['user', 'moderator', 'admin', 'superadmin'];
+  if (!validRoles.includes(role)) {
+    return res.status(400).json({ success: false, message: 'Invalid role' });
+  }
+
+  const user = registeredUsers.get(username);
+  if (!user) {
+    return res.status(404).json({ success: false, message: 'User not found' });
+  }
+
+  // Update role in memory
+  user.role = role;
+  registeredUsers.set(username, user);
+
+  // Update role in Supabase
+  const { error } = await supabase
+    .from('videochat_users')
+    .update({ role })
+    .eq('username', username);
+
+  if (error) {
+    console.error('[ROLE] Error updating user role in Supabase:', error);
+    return res.status(500).json({ success: false, message: 'Error updating role' });
+  }
+
+  console.log(`[ROLE] User ${username} role changed to ${role} by ${requester}`);
+  io.emit('users-updated');
+  res.json({ success: true, message: `User ${username} role updated to ${role}` });
 });
 
 io.on('connection', (socket) => {
@@ -278,7 +334,8 @@ io.on('connection', (socket) => {
         name: username,
         avatar: avatar,
         isOnline: isOnline || false,
-        lastSeen: Date.now()
+        lastSeen: Date.now(),
+        role: 'user'  // Default role for new users
       });
       console.log(`[REGISTER] Created new user: ${username}, hasPassword: ${!!password}`);
     }
