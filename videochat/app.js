@@ -1032,20 +1032,6 @@ async function joinRoomById(roomId) {
   // Request media
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-
-    // Set default microphone volume to 50%
-    const audioTrack = localStream.getAudioTracks()[0];
-    if (audioTrack) {
-      // Apply constraints to set volume (browser support varies)
-      try {
-        const capabilities = audioTrack.getCapabilities();
-        if (capabilities.volume) {
-          await audioTrack.applyConstraints({ volume: 0.5 });
-        }
-      } catch (e) {
-        console.log('Could not set default mic volume via constraints');
-      }
-    }
   } catch (err) {
     showAlertModal('Ошибка доступа к камере/микрофону: ' + err.message, 'error');
     return;
@@ -1450,18 +1436,7 @@ async function createPeerConnection(userId) {
     rtcpMuxPolicy: 'require',
     sdpSemantics: 'unified-plan'
   });
-  
-  // Enable low latency for audio
-  pc.getSenders().forEach(sender => {
-    if (sender.track && sender.track.kind === 'audio') {
-      const params = sender.getParameters();
-      if (params.encodings && params.encodings.length > 0) {
-        params.encodings[0].ptime = 20; // 20ms packet time for lower latency
-        sender.setParameters(params).catch(e => {});
-      }
-    }
-  });
-  
+
   localStream.getTracks().forEach(track => {
     pc.addTrack(track, localStream);
   });
