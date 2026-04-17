@@ -26,7 +26,8 @@ CREATE INDEX IF NOT EXISTS idx_videochat_users_role ON videochat_users(role);
 ALTER TABLE videochat_users ENABLE ROW LEVEL SECURITY;
 
 -- Create policy for videochat_users (allows all operations for now)
-CREATE POLICY IF NOT EXISTS "videochat_users_all_policy" ON videochat_users FOR ALL USING (true);
+DROP POLICY IF EXISTS "videochat_users_all_policy" ON videochat_users;
+CREATE POLICY "videochat_users_all_policy" ON videochat_users FOR ALL USING (true);
 
 -- Table: videochat_rooms
 -- Stores room metadata and channels
