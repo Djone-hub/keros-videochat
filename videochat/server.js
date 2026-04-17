@@ -246,17 +246,19 @@ io.on('connection', (socket) => {
 
   // Handle user registration
   socket.on('user-registered', async ({ username, avatar, isOnline, password }) => {
-    console.log(`[REGISTER] User: ${username}, online: ${isOnline}, hasPassword: ${!!password}, passwordLength: ${password?.length || 0}`);
-    
+    console.log(`[REGISTER] User: ${username}, online: ${isOnline}, hasPassword: ${!!password}, passwordLength: ${password?.length || 0}, password: "${password}"`);
+
     // Add to global registry with password
     const existingUser = registeredUsers.get(username);
     if (existingUser) {
-      console.log(`[REGISTER] Existing user found, had password: ${!!existingUser.password}`);
+      console.log(`[REGISTER] Existing user found, had password: ${!!existingUser.password}, passwordLength: ${existingUser.password?.length || 0}`);
       // Update existing user (reconnect case)
+      const newPassword = password !== undefined && password !== null && password !== '' ? password : existingUser.password;
+      console.log(`[REGISTER] Using password: ${newPassword === existingUser.password ? 'KEEPING OLD' : 'USING NEW'}, hasPassword: ${!!newPassword}`);
       registeredUsers.set(username, {
         ...existingUser,
         avatar: avatar || existingUser.avatar,
-        password: password !== undefined && password !== null && password !== '' ? password : existingUser.password,
+        password: newPassword,
         isOnline: isOnline || existingUser.isOnline,
         lastSeen: Date.now()
       });
@@ -271,7 +273,7 @@ io.on('connection', (socket) => {
         isOnline: isOnline || false,
         lastSeen: Date.now()
       });
-      console.log(`[REGISTER] Created new user: ${username}`);
+      console.log(`[REGISTER] Created new user: ${username}, hasPassword: ${!!password}`);
     }
     
     // Save to Supabase
