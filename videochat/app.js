@@ -297,7 +297,7 @@ function updateMicLevelIndicator(level) {
   for (let i = 0; i < barsCount; i++) {
     const isActive = i < activeBars;
     const color = isActive ? (level > 80 ? '#ed4245' : level > 50 ? '#faa61a' : '#3ba55d') : '#40444b';
-    html += `<div style="width: 8px; height: 4px; background: ${color}; margin: 2px 0; border-radius: 2px;"></div>`;
+    html += `<div style="width: 8px; height: 4px; background: ${color}; border-radius: 2px;"></div>`;
   }
 
   indicator.innerHTML = html;
@@ -3135,6 +3135,13 @@ function toggleSettings() {
   if (panel.classList.contains('active')) {
     updateRemoteVolumeControls();
     enumerateDevices();
+    // Start mic level monitoring if in room
+    if (localStream) {
+      startMicLevelMonitoring();
+    }
+  } else {
+    // Stop monitoring when closing settings
+    stopMicLevelMonitoring();
   }
 }
 
