@@ -596,8 +596,16 @@ async function loadServerRooms() {
     isLoadingRooms = false; // Reset on error
   }
 
-  // SIMPLIFIED: Only use server rooms to avoid duplicates
-  allRooms = serverRooms;
+  // Deduplicate rooms by name (keep first occurrence, prefer active rooms)
+  const roomsMap = new Map();
+  serverRooms.forEach(room => {
+    if (!roomsMap.has(room.name) || (room.active && !roomsMap.get(room.name).active)) {
+      roomsMap.set(room.name, room);
+    }
+  });
+  allRooms = Array.from(roomsMap.values());
+
+  console.log(`[ROOMS] Deduplicated from ${serverRooms.length} to ${allRooms.length} rooms`);
 
   // Sort: rooms with active users first, then by creation date
   allRooms.sort((a, b) => {
