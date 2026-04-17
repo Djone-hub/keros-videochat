@@ -1545,11 +1545,17 @@ socket.on('user-left-channel', (data) => {
     // Remove from current channel users
     if (data.channelId === currentChannel) {
       currentChannelUsers.delete(data.userId);
-      // Remove video from channel container
-      const channelVideo = document.getElementById(`channel-video-${data.userId}`);
-      if (channelVideo) {
-        channelVideo.remove();
-      }
+      // Update video visibility to hide this user's video
+      const channelUsers = Array.from(currentChannelUsers.entries()).map(([userId, user]) => ({
+        userId,
+        userName: user.userName || (activeUsers.get(userId)?.name) || 'Участник'
+      }));
+      // Add current user
+      channelUsers.push({
+        userId: socket.id,
+        userName: currentUser.username
+      });
+      updateVideoVisibilityForChannel(channelUsers);
     }
   }
   updateChannelParticipants();
@@ -1671,60 +1677,82 @@ socket.on('screen-share-stopped', (userId) => {
 socket.on('active-screen-shares', (userIds) => {
   console.log('[SCREEN] Received active screen shares on join:', userIds);
   
-  userIds.forEach(userId => {
+  userIds.forEach(async (userId) => {
     // Track this user as screen sharing
     screenShareUsers.add(userId);
     const user = activeUsers.get(userId);
     const userName = user ? user.name : 'Участник';
     addLogEntry('Демонстрация', `${userName} демонстрирует экран`);
     
-    // Check if video container already exists and add buttons
-    const container = document.getElementById(`video-${userId}`);
-    if (container) {
-      // Add screen-share class
-      container.classList.add('screen-share');
-      
-      // Add preview toggle button if not exists
-      if (!container.querySelector('.preview-toggle-btn')) {
-        const previewToggleBtn = document.createElement('button');
-        previewToggleBtn.className = 'preview-toggle-btn';
-        previewToggleBtn.innerHTML = '👁️ Превью';
-        previewToggleBtn.title = 'Переключить режим превью (экономия ресурсов)';
-        previewToggleBtn.onclick = () => toggleScreenSharePreview(userId);
-        container.appendChild(previewToggleBtn);
-      }
-      
-      // Add fullscreen button if not exists
-      if (!container.querySelector('.fullscreen-btn')) {
-        const fullscreenBtn = document.createElement('button');
-        fullscreenBtn.className = 'fullscreen-btn';
-        fullscreenBtn.innerHTML = '🔍';
-        fullscreenBtn.title = 'Увеличить демонстрацию экрана';
-        fullscreenBtn.onclick = () => openScreenModal(userId);
-        container.appendChild(fullscreenBtn);
-      }
-      
-      // Add double-click handler to video
-      const video = container.querySelector('video');
-      if (video) {
-        video.style.cursor = 'pointer';
-        video.title = 'Двойной клик для увеличения';
-        video.ondblclick = () => openScreenModal(userId);
-        // Refresh video stream by re-setting srcObject
-        const currentStream = video.srcObject;
-        if (currentStream) {
-          video.srcObject = null;
-          setTimeout(() => {
-            video.srcObject = currentStream;
-            video.play().catch(e => console.log('[SCREEN] Refresh play error:', e));
-          }, 100);
-        }
+    // Ensure peer connection exists before requesting screen stream
+    if (!peers.has(userId) && !activeUsers.has(userId)) {
+      // Create user entry if not exists
+      activeUsers.set(userId, { name: userName, avatar: user?.avatar });
+    }
+    
+    // Create peer connection if not exists
+    if (!peers.has(userId)) {
+      try {
+        console.log(`[SCREEN] Creating peer connection for screen share user: ${userId}`);
+        const pc = await createPeerConnection(userId);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit('offer', userId, offer);
+      } catch (e) {
+        console.error('[SCREEN] Error creating peer connection for screen share:', e);
       }
     }
     
-    // Request fresh video stream from server for this user
-    console.log(`[SCREEN] Requesting fresh stream from user: ${userId}`);
-    socket.emit('request-screen-stream', userId);
+    // Wait a bit for peer connection to establish before requesting screen stream
+    setTimeout(() => {
+      // Check if video container already exists and add buttons
+      const container = document.getElementById(`video-${userId}`);
+      if (container) {
+        // Add screen-share class
+        container.classList.add('screen-share');
+        
+        // Add preview toggle button if not exists
+        if (!container.querySelector('.preview-toggle-btn')) {
+          const previewToggleBtn = document.createElement('button');
+          previewToggleBtn.className = 'preview-toggle-btn';
+          previewToggleBtn.innerHTML = '👁️ Превью';
+          previewToggleBtn.title = 'Переключить режим превью (экономия ресурсов)';
+          previewToggleBtn.onclick = () => toggleScreenSharePreview(userId);
+          container.appendChild(previewToggleBtn);
+        }
+        
+        // Add fullscreen button if not exists
+        if (!container.querySelector('.fullscreen-btn')) {
+          const fullscreenBtn = document.createElement('button');
+          fullscreenBtn.className = 'fullscreen-btn';
+          fullscreenBtn.innerHTML = '🔍';
+          fullscreenBtn.title = 'Увеличить демонстрацию экрана';
+          fullscreenBtn.onclick = () => openScreenModal(userId);
+          container.appendChild(fullscreenBtn);
+        }
+        
+        // Add double-click handler to video
+        const video = container.querySelector('video');
+        if (video) {
+          video.style.cursor = 'pointer';
+          video.title = 'Двойной клик для увеличения';
+          video.ondblclick = () => openScreenModal(userId);
+          // Refresh video stream by re-setting srcObject
+          const currentStream = video.srcObject;
+          if (currentStream) {
+            video.srcObject = null;
+            setTimeout(() => {
+              video.srcObject = currentStream;
+              video.play().catch(e => console.log('[SCREEN] Refresh play error:', e));
+            }, 100);
+          }
+        }
+      }
+      
+      // Request fresh video stream from server for this user
+      console.log(`[SCREEN] Requesting fresh stream from user: ${userId}`);
+      socket.emit('request-screen-stream', userId);
+    }, 500); // Wait 500ms for peer connection to establish
   });
 });
 
@@ -1734,15 +1762,22 @@ socket.on('refresh-screen-offer', async ({ requesterId, targetId }) => {
   // Only respond if we are the target and we're screen sharing
   if (targetId === socket.id && isScreenSharing) {
     console.log(`[SCREEN] Re-sending screen stream to ${requesterId}`);
-    // Re-create peer connection or re-offer to this specific user
-    const pc = peers.get(requesterId);
-    if (pc) {
-      // Create new offer to trigger renegotiation
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socket.emit('offer', requesterId, offer);
-      console.log(`[SCREEN] Re-sent offer to ${requesterId}`);
+    // Create peer connection if not exists
+    let pc = peers.get(requesterId);
+    if (!pc) {
+      try {
+        console.log(`[SCREEN] Creating new peer connection for ${requesterId}`);
+        pc = await createPeerConnection(requesterId);
+      } catch (e) {
+        console.error('[SCREEN] Error creating peer connection:', e);
+        return;
+      }
     }
+    // Create new offer to trigger renegotiation
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit('offer', requesterId, offer);
+    console.log(`[SCREEN] Re-sent offer to ${requesterId}`);
   }
 });
 
