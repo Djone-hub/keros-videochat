@@ -227,15 +227,30 @@ window.addEventListener('load', () => {
   if (savedUser) {
     currentUser = JSON.parse(savedUser);
     userAvatar = localStorage.getItem(`keroschat_avatar_${currentUser.username}`);
-    
-    // Only auto-join if explicit invite in URL (not from sessionStorage)
-    if (inviteRoomId) {
-      // Store invite for auto-join after lobby loads
-      sessionStorage.setItem('pendingRoomInvite', inviteRoomId);
-      showLobby();
-      
-      // Wait for server rooms to load, then auto-join
-      setTimeout(() => {
+    console.log('[AUTO-LOGIN] Loaded user from localStorage:', currentUser.username);
+
+    // Refresh user data from API to get fresh role
+    fetch('/api/users')
+      .then(res => res.json())
+      .then(users => {
+        const freshUserData = users.find(u => u.username === currentUser.username);
+        if (freshUserData && freshUserData.role) {
+          currentUser.role = freshUserData.role;
+          currentUser.isMuted = freshUserData.isMuted;
+          currentUser.muteUntil = freshUserData.muteUntil;
+          currentUser.kickedRooms = freshUserData.kickedRooms;
+          localStorage.setItem('keroschat_user', JSON.stringify(currentUser));
+          console.log('[AUTO-LOGIN] Refreshed user data from API, role:', currentUser.role);
+        }
+      })
+      .catch(err => {
+        console.error('[AUTO-LOGIN] Error refreshing user data:', err);
+      })
+      .finally(() => {
+        showLobby();
+      });
+
+    setTimeout(() => {
         const pendingRoom = sessionStorage.getItem('pendingRoomInvite');
         if (pendingRoom) {
           sessionStorage.removeItem('pendingRoomInvite');
