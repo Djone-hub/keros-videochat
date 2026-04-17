@@ -189,20 +189,21 @@ io.on('connection', (socket) => {
 
   // Handle user registration
   socket.on('user-registered', ({ username, avatar, isOnline, password }) => {
-    console.log(`[REGISTER] User: ${username}, online: ${isOnline}, hasPassword: ${!!password}`);
+    console.log(`[REGISTER] User: ${username}, online: ${isOnline}, hasPassword: ${!!password}, passwordLength: ${password?.length || 0}`);
     
     // Add to global registry with password
     const existingUser = registeredUsers.get(username);
     if (existingUser) {
+      console.log(`[REGISTER] Existing user found, had password: ${!!existingUser.password}`);
       // Update existing user (reconnect case)
       registeredUsers.set(username, {
         ...existingUser,
         avatar: avatar || existingUser.avatar,
-        password: password || existingUser.password,
+        password: password !== undefined && password !== null && password !== '' ? password : existingUser.password,
         isOnline: isOnline || existingUser.isOnline,
         lastSeen: Date.now()
       });
-      console.log(`[REGISTER] Updated existing user: ${username}`);
+      console.log(`[REGISTER] Updated existing user: ${username}, new hasPassword: ${!!registeredUsers.get(username).password}`);
     } else {
       // Create new user
       registeredUsers.set(username, {
