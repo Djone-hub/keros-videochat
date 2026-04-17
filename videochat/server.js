@@ -300,16 +300,19 @@ io.on('connection', (socket) => {
     console.log(`[ONLINE] User entered lobby: ${username}`);
     socket.userName = username;
     socket.userAvatar = avatar;
-    
-    // Update user status
+
+    // Update user status - preserve existing password
+    const existingUser = registeredUsers.get(username);
     registeredUsers.set(username, {
+      username: username,
+      password: existingUser?.password || null,
       name: username,
       avatar: avatar,
       isOnline: true,
       socketId: socket.id,
       lastSeen: Date.now()
     });
-    
+
     // Broadcast to all clients
     io.emit('users-updated');
   });
@@ -320,8 +323,11 @@ io.on('connection', (socket) => {
     socket.userName = userName;
     socket.userAvatar = userAvatar;
     
-    // Register/update user in global registry
+    // Register/update user in global registry - preserve existing password
+    const existingUser = registeredUsers.get(userName);
     registeredUsers.set(userName, {
+      username: userName,
+      password: existingUser?.password || null,
       name: userName,
       avatar: userAvatar,
       isOnline: true,
