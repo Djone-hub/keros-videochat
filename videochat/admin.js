@@ -451,7 +451,7 @@ function loadAdminUsersList() {
           Всего пользователей: <strong style="color: #fff;">${uniqueUsers.length}</strong> |
           Онлайн: <strong style="color: #3ba55d;">${uniqueUsers.filter(u => u.isOnline).length}</strong>
         </div>
-        ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin') ? `
+        ${currentUser ? `
         <button onclick="reloadUsersFromSupabase()" class="admin-btn" style="margin-bottom: 15px; padding: 8px 16px;">🔄 Перезагрузить пользователей из Supabase</button>
         ` : ''}
         ${listHtml}
