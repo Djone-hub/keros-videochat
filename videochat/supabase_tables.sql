@@ -65,7 +65,9 @@ ALTER TABLE videochat_rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE videochat_vip_channels ENABLE ROW LEVEL SECURITY;
 
 -- Allow all operations (for now - can be restricted later)
+DROP POLICY IF EXISTS "Enable all access for videochat_rooms" ON videochat_rooms;
 CREATE POLICY "Enable all access for videochat_rooms" ON videochat_rooms FOR ALL USING (true);
+DROP POLICY IF EXISTS "Enable all access for videochat_vip_channels" ON videochat_vip_channels;
 CREATE POLICY "Enable all access for videochat_vip_channels" ON videochat_vip_channels FOR ALL USING (true);
 
 -- ============================================
