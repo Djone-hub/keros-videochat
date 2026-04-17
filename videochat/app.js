@@ -1980,17 +1980,43 @@ socket.on('room-error', (error) => {
 });
 
 socket.on('user-joined', async (user) => {
-  // Skip if already connected to this user (prevent duplicates)
+  console.log('[USER-JOINED] Received user-joined:', user.id, user.name);
+
+  // Check if user with same name already exists (reconnect case)
+  let existingUserId = null;
+  for (const [id, existingUser] of activeUsers.entries()) {
+    if (existingUser.name === user.name && id !== user.id) {
+      existingUserId = id;
+      console.log('[USER-JOINED] Found existing user with same name, removing old entry:', existingUserId);
+      break;
+    }
+  }
+
+  // Remove old entry if found
+  if (existingUserId) {
+    activeUsers.delete(existingUserId);
+    // Also remove peer connection if exists
+    if (peers.has(existingUserId)) {
+      peers.get(existingUserId).close();
+      peers.delete(existingUserId);
+    }
+    // Remove video stream
+    removeVideoStream(existingUserId);
+  }
+
+  // Skip if already connected with this exact socket.id
   if (activeUsers.has(user.id) || peers.has(user.id)) {
-    console.log('User already connected:', user.id);
+    console.log('[USER-JOINED] User already connected with this socket.id, skipping:', user.id);
     return;
   }
+
   // Avatar sync debug - disabled for production performance
   // console.log('[AVATAR] User joined:', user.name, 'has avatar:', !!user.avatar);
   // REMOVED: sounds.userJoin() - sound should only play for the user who joined, not everyone in room
   activeUsers.set(user.id, user);
   addChatMessage('Система', `Комната "${currentRoomName}" - подключился ${user.name}`, true);
   updateActiveUsers();
+  console.log('[USER-JOINED] User added to activeUsers:', user.id, user.name);
 });
 
 socket.on('user-deleted', (username) => {
