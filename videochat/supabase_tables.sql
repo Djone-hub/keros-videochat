@@ -2,6 +2,32 @@
 -- KEROS VIDEOCHAT - SUPABASE TABLES
 -- ============================================
 
+-- Table: videochat_users
+-- Stores user accounts and authentication data
+CREATE TABLE IF NOT EXISTS videochat_users (
+  username TEXT PRIMARY KEY,
+  password TEXT NOT NULL,
+  name TEXT,
+  avatar TEXT,
+  is_online BOOLEAN DEFAULT false,
+  last_seen BIGINT,
+  role TEXT DEFAULT 'user',
+  is_muted BOOLEAN DEFAULT false,
+  mute_until BIGINT DEFAULT 0,
+  kicked_rooms TEXT DEFAULT '[]',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+-- Index for faster user lookups
+CREATE INDEX IF NOT EXISTS idx_videochat_users_username ON videochat_users(username);
+CREATE INDEX IF NOT EXISTS idx_videochat_users_role ON videochat_users(role);
+
+-- Row Level Security (RLS) Policies
+ALTER TABLE videochat_users ENABLE ROW LEVEL SECURITY;
+
+-- Create policy for videochat_users (allows all operations for now)
+CREATE POLICY IF NOT EXISTS "videochat_users_all_policy" ON videochat_users FOR ALL USING (true);
+
 -- Table: videochat_rooms
 -- Stores room metadata and channels
 CREATE TABLE IF NOT EXISTS videochat_rooms (
@@ -42,37 +68,8 @@ CREATE POLICY "Enable all access for videochat_rooms" ON videochat_rooms FOR ALL
 CREATE POLICY "Enable all access for videochat_vip_channels" ON videochat_vip_channels FOR ALL USING (true);
 
 -- ============================================
--- USER TABLE POLICIES AND ROLE SYSTEM
+-- USER TABLE ROLE SYSTEM
 -- ============================================
-
--- Добавляем поля для системы ролей
-ALTER TABLE videochat_users ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'user';
-
--- Добавляем поля для мута и кика
-ALTER TABLE videochat_users ADD COLUMN IF NOT EXISTS is_muted BOOLEAN DEFAULT false;
-ALTER TABLE videochat_users ADD COLUMN IF NOT EXISTS mute_until BIGINT DEFAULT 0;
-ALTER TABLE videochat_users ADD COLUMN IF NOT EXISTS kicked_rooms TEXT DEFAULT '[]';
-
--- Обновляем существующих пользователей
-UPDATE videochat_users SET role = 'user' WHERE role IS NULL;
-UPDATE videochat_users SET is_muted = false WHERE is_muted IS NULL;
-UPDATE videochat_users SET mute_until = 0 WHERE mute_until IS NULL;
-UPDATE videochat_users SET kicked_rooms = '[]' WHERE kicked_rooms IS NULL;
-
--- Удаляем ВСЕ политики
-DROP POLICY IF EXISTS "videochat_users_all_policy" ON videochat_users;
-DROP POLICY IF EXISTS "videochat_users_select_policy" ON videochat_users;
-DROP POLICY IF EXISTS "videochat_users_insert_policy" ON videochat_users;
-DROP POLICY IF EXISTS "videochat_users_update_policy" ON videochat_users;
-DROP POLICY IF EXISTS "videochat_users_delete_policy" ON videochat_users;
-
--- Создаём ОДНУ политику для ВСЕХ операций
--- Эта политика покрывает:
--- - SELECT (вход, проверка существования пользователя)
--- - INSERT (регистрация новых пользователей)
--- - UPDATE (обновление данных, статуса онлайн, мутов, киков)
--- - DELETE (удаление пользователей)
-CREATE POLICY "videochat_users_all_policy" ON videochat_users FOR ALL USING (true);
 
 -- Устанавливаем KEROS как суперадмина
 UPDATE videochat_users SET role = 'superadmin' WHERE username = 'KEROS';
