@@ -803,6 +803,62 @@ app.post('/api/admin/reload-users', async (req, res) => {
   res.json({ success: true, message: `Reloaded ${freshUsers.size} users from Supabase` });
 });
 
+// REST API endpoint to clean ghost users from room metadata
+app.post('/api/admin/clean-ghost-users', async (req, res) => {
+  const requester = req.headers['x-username'];
+
+  // Fetch fresh data from Supabase to verify requester role
+  const { data: requesterData, error: requesterError } = await supabase
+    .from('videochat_users')
+    .select('role')
+    .eq('username', requester)
+    .single();
+
+  if (requesterError || !requesterData) {
+    return res.status(403).json({ success: false, message: 'Requester not found' });
+  }
+
+  if (requesterData.role !== 'admin' && requesterData.role !== 'superadmin') {
+    return res.status(403).json({ success: false, message: 'Only admins can clean ghost users' });
+  }
+
+  console.log(`[CLEAN] Cleaning ghost users from room metadata (requested by: ${requester})...`);
+
+  // Get all valid usernames from registered users
+  const validUsernames = new Set(registeredUsers.keys());
+  let totalCleaned = 0;
+  let roomsCleaned = 0;
+
+  // Clean ghost users from all rooms in memory
+  for (const [roomId, room] of rooms) {
+    if (room.channels) {
+      let roomCleaned = false;
+      for (const [channelId, channel] of Object.entries(room.channels)) {
+        if (channel.users && Array.isArray(channel.users)) {
+          const originalLength = channel.users.length;
+          channel.users = channel.users.filter(u => validUsernames.has(u));
+          const removed = originalLength - channel.users.length;
+          if (removed > 0) {
+            totalCleaned += removed;
+            roomCleaned = true;
+            console.log(`[CLEAN] Removed ${removed} ghost users from room ${roomId}, channel ${channelId}`);
+          }
+        }
+      }
+      if (roomCleaned) {
+        roomsCleaned++;
+      }
+    }
+  }
+
+  // Save cleaned rooms to Supabase
+  await saveRoomsToSupabase();
+
+  console.log(`[CLEAN] Cleaned ${totalCleaned} ghost users from ${roomsCleaned} rooms`);
+
+  res.json({ success: true, message: `Cleaned ${totalCleaned} ghost users from ${roomsCleaned} rooms` });
+});
+
 // REST API endpoint for VIP channels
 app.get('/api/vip-channels', async (req, res) => {
   try {

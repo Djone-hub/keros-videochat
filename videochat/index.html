@@ -1821,15 +1821,19 @@
           <div class="admin-actions-bar">
             <button onclick="forceRefreshRooms()" class="admin-btn primary">🔄 Обновить</button>
             <button onclick="clearGhostRooms()" class="admin-btn warning">👻 Очистить призраки</button>
-            <button onclick="deleteAllEmptyRooms()" class="admin-btn danger">🗑️ Удалить пустые</button>
           </div>
         </div>
-        
+
         <!-- Rooms Tab -->
         <div id="adminTab-rooms" class="admin-tab-content">
           <div class="admin-room-controls">
             <input type="text" id="adminRoomSearch" placeholder="🔍 Поиск комнаты..." oninput="filterAdminRooms(this.value)" style="flex: 1; padding: 10px 12px; background: #40444b; border: 1px solid #202225; border-radius: 4px; color: #fff; font-size: 14px;">
             <button onclick="showCreateRoomFromAdmin()" class="admin-btn success">➕ Создать комнату</button>
+          </div>
+          <div style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
+            <button onclick="clearGhostRooms()" class="admin-btn danger" style="padding: 8px 16px; font-size: 12px;">👻 Очистить призрачные комнаты</button>
+            <button onclick="deleteAllEmptyRooms()" class="admin-btn" style="padding: 8px 16px; font-size: 12px;">🗑️ Удалить пустые комнаты</button>
+            <button onclick="cleanGhostUsersFromRooms()" class="admin-btn danger" style="padding: 8px 16px; font-size: 12px;">👤 Очистить призрачных пользователей</button>
           </div>
           <div id="adminRoomList" class="admin-room-list">
             <div style="text-align: center; padding: 40px; color: #72767d;">⏳ Загрузка...</div>

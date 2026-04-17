@@ -265,6 +265,68 @@ function deleteAllEmptyRooms() {
   });
 }
 
+function cleanGhostUsersFromRooms() {
+  if (!window.allAdminRooms || !window.allAdminUsers) {
+    showAlertModal('Сначала загрузите комнаты и пользователей.', 'error');
+    return;
+  }
+
+  const validUsernames = new Set(window.allAdminUsers.map(u => u.username));
+  let totalGhostUsers = 0;
+  const roomsWithGhosts = [];
+
+  window.allAdminRooms.forEach(room => {
+    if (room.channels) {
+      Object.values(room.channels).forEach(channel => {
+        if (channel.users && Array.isArray(channel.users)) {
+          const ghostUsers = channel.users.filter(u => !validUsernames.has(u));
+          if (ghostUsers.length > 0) {
+            totalGhostUsers += ghostUsers.length;
+            roomsWithGhosts.push({
+              roomId: room.id,
+              roomName: room.name,
+              channelName: channel.name,
+              ghostUsers: ghostUsers
+            });
+          }
+        }
+      });
+    }
+  });
+
+  if (roomsWithGhosts.length === 0) {
+    showAlertModal('Призрачные пользователи не найдены.', 'info');
+    return;
+  }
+
+  const message = `Найдено ${totalGhostUsers} призрачных пользователей в ${roomsWithGhosts.length} комнатах.\n\n` +
+    roomsWithGhosts.map(r => `- ${r.roomName}: ${r.ghostUsers.join(', ')}`).join('\n') +
+    '\n\nОчистить их?';
+
+  showConfirmModal(message, () => {
+    fetch('/api/admin/clean-ghost-users', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Username': currentUser?.username || 'unknown'
+      }
+    })
+      .then(res => res.json())
+      .then(result => {
+        if (result.success) {
+          showAlertModal(`✅ ${result.message}`, 'success');
+          setTimeout(renderAdminPanel, 500);
+        } else {
+          showAlertModal(`❌ Ошибка: ${result.message}`, 'error');
+        }
+      })
+      .catch(err => {
+        console.error('Error cleaning ghost users:', err);
+        showAlertModal('❌ Ошибка очистки призрачных пользователей', 'error');
+      });
+  });
+}
+
 function showCreateRoomFromAdmin() {
   hideAdminPanel();
   showCreateRoomModal();
