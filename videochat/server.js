@@ -433,7 +433,7 @@ app.post('/api/users/:username/kick', async (req, res) => {
   res.json({ success: true, message: `User ${username} kicked from room ${roomId}` });
 });
 
-// REST API endpoint to delete message
+// REST API endpoint to delete a message
 app.delete('/api/messages/:messageId', (req, res) => {
   const messageId = req.params.messageId;
   const requester = req.headers['x-username'];
@@ -452,6 +452,31 @@ app.delete('/api/messages/:messageId', (req, res) => {
 
   console.log(`[DELETE MESSAGE] Message ${messageId} deleted by ${requester}`);
   res.json({ success: true, message: 'Message deleted' });
+});
+
+// REST API endpoint to force reload users from Supabase
+app.post('/api/admin/reload-users', async (req, res) => {
+  const requester = req.headers['x-username'];
+
+  // Check if requester is admin
+  const requesterUser = registeredUsers.get(requester);
+  if (!requesterUser || (requesterUser.role !== 'admin' && requesterUser.role !== 'superadmin')) {
+    return res.status(403).json({ success: false, message: 'Only admins can reload users' });
+  }
+
+  console.log('[RELOAD] Force reloading users from Supabase...');
+  const freshUsers = await loadUsersFromSupabase();
+
+  // Replace registered users with fresh data
+  registeredUsers.clear();
+  freshUsers.forEach((user, username) => {
+    registeredUsers.set(username, user);
+  });
+
+  console.log(`[RELOAD] Reloaded ${freshUsers.size} users from Supabase`);
+  io.emit('users-updated');
+
+  res.json({ success: true, message: `Reloaded ${freshUsers.size} users from Supabase` });
 });
 
 io.on('connection', (socket) => {

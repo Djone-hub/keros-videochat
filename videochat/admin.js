@@ -451,6 +451,9 @@ function loadAdminUsersList() {
           Всего пользователей: <strong style="color: #fff;">${uniqueUsers.length}</strong> |
           Онлайн: <strong style="color: #3ba55d;">${uniqueUsers.filter(u => u.isOnline).length}</strong>
         </div>
+        ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin') ? `
+        <button onclick="reloadUsersFromSupabase()" class="admin-btn" style="margin-bottom: 15px; padding: 8px 16px;">🔄 Перезагрузить пользователей из Supabase</button>
+        ` : ''}
         ${listHtml}
       `;
     })
@@ -459,6 +462,29 @@ function loadAdminUsersList() {
       if (listEl) {
         listEl.innerHTML = '<div style="color: #ed4245; text-align: center; padding: 20px;">Ошибка загрузки пользователей</div>';
       }
+    });
+}
+
+function reloadUsersFromSupabase() {
+  fetch('/api/admin/reload-users', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Username': currentUser?.username || 'unknown'
+    }
+  })
+    .then(res => res.json())
+    .then(result => {
+      if (result.success) {
+        alert(`✅ ${result.message}`);
+        loadAdminUsersList();
+      } else {
+        alert(`❌ Ошибка: ${result.message}`);
+      }
+    })
+    .catch(err => {
+      console.error('Error reloading users:', err);
+      alert('❌ Ошибка при перезагрузке пользователей');
     });
 }
 
