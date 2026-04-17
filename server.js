@@ -26,10 +26,11 @@ app.use(express.static(path.join(__dirname)));
 app.use(express.json());
 
 const rooms = new Map();
-const registeredUsers = new Map(); // Track all registered users with online status
+// registeredUsers will be initialized from file below
 
-// File-based persistence for rooms
+// File-based persistence for rooms and users
 const ROOMS_FILE = path.join(__dirname, 'rooms.json');
+const USERS_FILE = path.join(__dirname, 'users.json');
 
 function loadRoomsFromFile() {
   try {
@@ -47,6 +48,22 @@ function loadRoomsFromFile() {
   return new Map();
 }
 
+function loadUsersFromFile() {
+  try {
+    if (fs.existsSync(USERS_FILE)) {
+      const data = fs.readFileSync(USERS_FILE, 'utf8');
+      const usersArray = JSON.parse(data);
+      const map = new Map();
+      usersArray.forEach(u => map.set(u.username, u));
+      console.log(`Loaded ${usersArray.length} users from file`);
+      return map;
+    }
+  } catch (err) {
+    console.error('Error loading users file:', err);
+  }
+  return new Map();
+}
+
 function saveRoomsToFile() {
   try {
     const roomsArray = Array.from(roomStore.values());
@@ -56,7 +73,17 @@ function saveRoomsToFile() {
   }
 }
 
+function saveUsersToFile() {
+  try {
+    const usersArray = Array.from(registeredUsers.values());
+    fs.writeFileSync(USERS_FILE, JSON.stringify(usersArray, null, 2));
+  } catch (err) {
+    console.error('Error saving users file:', err);
+  }
+}
+
 const roomStore = loadRoomsFromFile();
+const registeredUsers = loadUsersFromFile();
 
 // REST API endpoint for rooms - returns ALL rooms (stored + active) with user list
 app.get('/api/rooms', (req, res) => {
@@ -114,6 +141,18 @@ app.get('/api/users', (req, res) => {
   res.json(users);
 });
 
+// REST API endpoint for user login
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
+  const user = registeredUsers.get(username);
+  
+  if (user && user.password === password) {
+    res.json({ success: true, user: { username: user.username, name: user.name, avatar: user.avatar } });
+  } else {
+    res.status(401).json({ success: false, message: 'Invalid username or password' });
+  }
+});
+
 // REST API endpoint to delete a registered user
 app.delete('/api/users/:username', (req, res) => {
   const username = req.params.username;
@@ -123,6 +162,7 @@ app.delete('/api/users/:username', (req, res) => {
   // For now, anyone can delete any user (you can add admin check later)
   if (registeredUsers.has(username)) {
     registeredUsers.delete(username);
+    saveUsersToFile();
     console.log(`[DELETE] User ${username} deleted by ${requester || 'unknown'}`);
     io.emit('user-deleted', username);
     io.emit('users-updated');
@@ -137,16 +177,34 @@ io.on('connection', (socket) => {
   console.log('Current rooms in store:', roomStore.size);
 
   // Handle user registration
-  socket.on('user-registered', ({ username, avatar, isOnline }) => {
+  socket.on('user-registered', ({ username, avatar, isOnline, password }) => {
     console.log(`[REGISTER] User: ${username}, online: ${isOnline}`);
     
-    // Add to global registry
-    registeredUsers.set(username, {
-      name: username,
-      avatar: avatar,
-      isOnline: isOnline || false,
-      lastSeen: Date.now()
-    });
+    // Add to global registry with password
+    const existingUser = registeredUsers.get(username);
+    if (existingUser) {
+      // Update existing user (reconnect case)
+      registeredUsers.set(username, {
+        ...existingUser,
+        avatar: avatar || existingUser.avatar,
+        password: password || existingUser.password,
+        isOnline: isOnline || existingUser.isOnline,
+        lastSeen: Date.now()
+      });
+    } else {
+      // Create new user
+      registeredUsers.set(username, {
+        username: username,
+        password: password,
+        name: username,
+        avatar: avatar,
+        isOnline: isOnline || false,
+        lastSeen: Date.now()
+      });
+    }
+    
+    // Save to file
+    saveUsersToFile();
     
     // Broadcast to all clients to refresh user list
     io.emit('users-updated');
