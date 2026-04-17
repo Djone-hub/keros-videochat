@@ -826,22 +826,26 @@ app.post('/api/admin/clean-ghost-users', async (req, res) => {
 
   // Get all valid usernames from registered users
   const validUsernames = new Set(registeredUsers.keys());
+  console.log(`[CLEAN] Valid usernames:`, Array.from(validUsernames));
+  console.log(`[CLEAN] Total rooms in roomStore: ${roomStore.size}`);
+
   let totalCleaned = 0;
   let roomsCleaned = 0;
 
-  // Clean ghost users from all rooms in memory
-  for (const [roomId, room] of rooms) {
+  // Clean ghost users from ALL rooms in roomStore (stored rooms from Supabase)
+  for (const [roomId, room] of roomStore) {
     if (room.channels) {
       let roomCleaned = false;
       for (const [channelId, channel] of Object.entries(room.channels)) {
         if (channel.users && Array.isArray(channel.users)) {
+          console.log(`[CLEAN] Room ${roomId}, channel ${channelId}, users: ${JSON.stringify(channel.users)}`);
           const originalLength = channel.users.length;
           channel.users = channel.users.filter(u => validUsernames.has(u));
           const removed = originalLength - channel.users.length;
           if (removed > 0) {
             totalCleaned += removed;
             roomCleaned = true;
-            console.log(`[CLEAN] Removed ${removed} ghost users from room ${roomId}, channel ${channelId}`);
+            console.log(`[CLEAN] Removed ${removed} ghost users from room ${roomId}, channel ${channelId}: ${channel.users}`);
           }
         }
       }
