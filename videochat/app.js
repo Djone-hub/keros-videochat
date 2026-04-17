@@ -909,18 +909,11 @@ function renderRoomsList(roomsToRender) {
   roomsToRender.forEach(room => {
     const item = document.createElement('div');
     item.className = 'room-item' + (room.active ? ' active-room' : '');
-    item.onclick = (e) => {
-      if (e.target.closest('.room-actions')) return;
-      joinRoomById(room.id);
-    };
+    item.onclick = () => joinRoomById(room.id);
     
     const isCreator = room.creator === currentUser?.username;
-    const actionsHtml = isCreator ? `
-      <div class="room-actions" onclick="event.stopPropagation()">
-        <button onclick="editRoom('${room.id}', '${room.name}', '${room.avatar || ''}')" title="Редактировать">✏️</button>
-        <button onclick="deleteRoom('${room.id}')" title="Удалить">🗑️</button>
-      </div>
-    ` : '';
+    // REMOVED: Edit and delete buttons from lobby - use admin panel instead
+    const actionsHtml = '';
     
     const iconHtml = room.avatar ? 
       `<img src="${room.avatar}" alt="${room.name}">` : 
