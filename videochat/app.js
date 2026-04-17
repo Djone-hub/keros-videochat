@@ -155,6 +155,84 @@ const iceServers = {
   ]
 };
 
+// Helper functions for custom modals
+function showConfirmModal(message, onConfirm) {
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
+    z-index: 10000;
+  `;
+  modal.innerHTML = `
+    <div style="background: #36393f; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%;">
+      <p style="color: #fff; margin-bottom: 20px; white-space: pre-line;">${message}</p>
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button class="cancel-btn" style="padding: 10px 20px; background: #4f545c; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Отмена</button>
+        <button class="confirm-btn" style="padding: 10px 20px; background: #ed4245; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Подтвердить</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  modal.querySelector('.cancel-btn').addEventListener('click', () => modal.remove());
+  modal.querySelector('.confirm-btn').addEventListener('click', () => {
+    modal.remove();
+    onConfirm();
+  });
+}
+
+function showAlertModal(message, type = 'info') {
+  const colors = {
+    info: '#5865f2',
+    success: '#3ba55d',
+    error: '#ed4245'
+  };
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
+    z-index: 10000;
+  `;
+  modal.innerHTML = `
+    <div style="background: #36393f; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%;">
+      <p style="color: #fff; margin-bottom: 20px; white-space: pre-line;">${message}</p>
+      <button class="close-btn" style="width: 100%; padding: 10px 20px; background: ${colors[type]}; color: #fff; border: none; border-radius: 4px; cursor: pointer;">OK</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  modal.querySelector('.close-btn').addEventListener('click', () => modal.remove());
+}
+
+function showPromptModal(message, defaultValue = '', onConfirm) {
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
+    z-index: 10000;
+  `;
+  modal.innerHTML = `
+    <div style="background: #36393f; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%;">
+      <p style="color: #b9bbbe; margin-bottom: 15px;">${message}</p>
+      <input type="text" id="promptInput" value="${defaultValue}" style="width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 4px; border: none; background: #40444b; color: #fff;">
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button class="cancel-btn" style="padding: 10px 20px; background: #4f545c; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Отмена</button>
+        <button class="confirm-btn" style="padding: 10px 20px; background: #5865f2; color: #fff; border: none; border-radius: 4px; cursor: pointer;">OK</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  modal.querySelector('.cancel-btn').addEventListener('click', () => modal.remove());
+  modal.querySelector('.confirm-btn').addEventListener('click', () => {
+    const value = document.getElementById('promptInput').value;
+    modal.remove();
+    onConfirm(value);
+  });
+
+  setTimeout(() => document.getElementById('promptInput').focus(), 100);
+}
+
 // ========== SOUND SYSTEM ==========
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -738,40 +816,37 @@ async function searchRooms(query) {
 }
 
 function editRoom(roomId, currentName, currentAvatar) {
-  // Create custom modal for editing room
-  const newName = prompt('Введите новое название комнаты:', currentName);
-  if (!newName || newName.trim() === '') return;
-  
-  const changeAvatar = confirm('Хотите изменить аватар комнаты?');
-  let newAvatar = currentAvatar;
-  
-  if (changeAvatar) {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        if (file.size > 2 * 1024 * 1024) {
-          alert('Файл слишком большой! Максимум 2MB');
-          return;
-        }
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          newAvatar = ev.target.result;
-          saveRoomEdit(roomId, newName.trim(), newAvatar);
+  showPromptModal('Введите новое название комнаты:', currentName, (newName) => {
+    if (!newName || newName.trim() === '') return;
+
+    showConfirmModal('Хотите изменить аватар комнаты?', (changeAvatar) => {
+      let newAvatar = currentAvatar;
+
+      if (changeAvatar) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = (e) => {
+          const file = e.target.files[0];
+          if (file) {
+            if (file.size > 2 * 1024 * 1024) {
+              showAlertModal('Файл слишком большой! Максимум 2MB', 'error');
+              return;
+            }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              newAvatar = e.target.result;
+              updateRoomInStorage(roomId, newName, newAvatar);
+            };
+            reader.readAsDataURL(file);
+          }
         };
-        reader.readAsDataURL(file);
+        input.click();
       } else {
-        saveRoomEdit(roomId, newName.trim(), currentAvatar);
+        updateRoomInStorage(roomId, newName, newAvatar);
       }
-    };
-    input.click();
-  } else {
-    if (newName !== currentName) {
-      saveRoomEdit(roomId, newName.trim(), currentAvatar);
-    }
-  }
+    });
+  });
 }
 
 function saveRoomEdit(roomId, newName, newAvatar) {
@@ -798,29 +873,21 @@ function saveRoomEdit(roomId, newName, newAvatar) {
     }
     
     addLogEntry('Комната', `Комната ${roomId} обновлена: название "${newName}"`);
-    alert('Комната обновлена!');
+    showAlertModal('Комната обновлена!', 'success');
   }
 }
 
 function deleteRoom(roomId) {
-  if (!confirm('Удалить эту комнату? Все участники будут отключены.')) return;
-  
-  const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
-  const filteredRooms = rooms.filter(r => r.id !== roomId);
-  
-  // Always update localStorage if room was found
-  if (filteredRooms.length !== rooms.length) {
+  showConfirmModal('Удалить эту комнату? Все участники будут отключены.', () => {
+    const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+    const filteredRooms = rooms.filter(r => r.id !== roomId);
     localStorage.setItem('keroschat_rooms', JSON.stringify(filteredRooms));
-    console.log(`[DELETE] Room ${roomId} removed from localStorage`);
-  }
-  
-  // Always notify server to delete (even if not in localStorage, might be on server)
-  socket.emit('delete-room', roomId);
-  
-  // Reload room list immediately
-  loadServerRooms();
-  addLogEntry('Комната', `Комната ${roomId} удалена`);
-  alert('Комната удалена!');
+
+    // Reload room list immediately
+    loadServerRooms();
+    addLogEntry('Комната', `Комната ${roomId} удалена`);
+    showAlertModal('Комната удалена!', 'success');
+  });
 }
 
 function showCreateRoomModal() {

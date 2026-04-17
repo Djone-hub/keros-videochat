@@ -1,5 +1,83 @@
 // ========== ADMIN PANEL FUNCTIONS ==========
 
+// Helper functions for custom modals
+function showConfirmModal(message, onConfirm) {
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
+    z-index: 10000;
+  `;
+  modal.innerHTML = `
+    <div style="background: #36393f; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%;">
+      <p style="color: #fff; margin-bottom: 20px; white-space: pre-line;">${message}</p>
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button class="cancel-btn" style="padding: 10px 20px; background: #4f545c; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Отмена</button>
+        <button class="confirm-btn" style="padding: 10px 20px; background: #ed4245; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Подтвердить</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  modal.querySelector('.cancel-btn').addEventListener('click', () => modal.remove());
+  modal.querySelector('.confirm-btn').addEventListener('click', () => {
+    modal.remove();
+    onConfirm();
+  });
+}
+
+function showAlertModal(message, type = 'info') {
+  const colors = {
+    info: '#5865f2',
+    success: '#3ba55d',
+    error: '#ed4245'
+  };
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
+    z-index: 10000;
+  `;
+  modal.innerHTML = `
+    <div style="background: #36393f; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%;">
+      <p style="color: #fff; margin-bottom: 20px; white-space: pre-line;">${message}</p>
+      <button class="close-btn" style="width: 100%; padding: 10px 20px; background: ${colors[type]}; color: #fff; border: none; border-radius: 4px; cursor: pointer;">OK</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  modal.querySelector('.close-btn').addEventListener('click', () => modal.remove());
+}
+
+function showPromptModal(message, defaultValue = '', onConfirm) {
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
+    z-index: 10000;
+  `;
+  modal.innerHTML = `
+    <div style="background: #36393f; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%;">
+      <p style="color: #b9bbbe; margin-bottom: 15px;">${message}</p>
+      <input type="text" id="promptInput" value="${defaultValue}" style="width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 4px; border: none; background: #40444b; color: #fff;">
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button class="cancel-btn" style="padding: 10px 20px; background: #4f545c; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Отмена</button>
+        <button class="confirm-btn" style="padding: 10px 20px; background: #5865f2; color: #fff; border: none; border-radius: 4px; cursor: pointer;">OK</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  modal.querySelector('.cancel-btn').addEventListener('click', () => modal.remove());
+  modal.querySelector('.confirm-btn').addEventListener('click', () => {
+    const value = document.getElementById('promptInput').value;
+    modal.remove();
+    onConfirm(value);
+  });
+
+  setTimeout(() => document.getElementById('promptInput').focus(), 100);
+}
+
 // Show/hide admin panel
 function showAdminPanel() {
   const panel = document.getElementById('adminPanelModal');
@@ -151,9 +229,10 @@ function filterAdminRooms(searchTerm) {
 }
 
 function adminDeleteRoom(roomId) {
-  if (!confirm(`Вы уверены, что хотите удалить комнату ${roomId}?`)) return;
-  socket.emit('delete-room', roomId);
-  setTimeout(renderAdminPanel, 300);
+  showConfirmModal(`Вы уверены, что хотите удалить комнату ${roomId}?`, () => {
+    socket.emit('delete-room', roomId);
+    setTimeout(renderAdminPanel, 300);
+  });
 }
 
 function forceRefreshRooms() {
@@ -612,27 +691,27 @@ function filterAdminUsers(searchTerm) {
 }
 
 function deleteUser(username) {
-  if (!confirm(`Удалить пользователя "${username}"?\n\nЭто действие нельзя отменить!`)) return;
-  
-  fetch(`/api/users/${encodeURIComponent(username)}`, {
-    method: 'DELETE',
-    headers: {
-      'X-Username': currentUser?.username || 'unknown'
-    }
-  })
-    .then(res => res.json())
-    .then(result => {
-      if (result.success) {
-        alert(`✅ Пользователь "${username}" удалён`);
-        loadAdminUsersList();
-      } else {
-        alert(`❌ Ошибка: ${result.message}`);
+  showConfirmModal(`Удалить пользователя "${username}"?\n\nЭто действие нельзя отменить!`, () => {
+    fetch(`/api/users/${encodeURIComponent(username)}`, {
+      method: 'DELETE',
+      headers: {
+        'X-Username': currentUser?.username || 'unknown'
       }
     })
-    .catch(err => {
-      console.error('Error deleting user:', err);
-      alert('❌ Ошибка при удалении пользователя');
-    });
+      .then(res => res.json())
+      .then(result => {
+        if (result.success) {
+          showAlertModal(`✅ Пользователь "${username}" удалён`, 'success');
+          loadAdminUsersList();
+        } else {
+          showAlertModal(`❌ Ошибка: ${result.message}`, 'error');
+        }
+      })
+      .catch(err => {
+        console.error('Error deleting user:', err);
+        showAlertModal('❌ Ошибка при удалении пользователя', 'error');
+      });
+  });
 }
 
 function muteUser(username, isMuted) {
