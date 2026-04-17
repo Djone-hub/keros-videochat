@@ -320,6 +320,12 @@ function updateMicLevelIndicator(level) {
   const indicator = document.getElementById('micLevelIndicator');
   if (!indicator) return;
 
+  // If microphone is muted, show no level
+  if (!isMicOn) {
+    resetMicLevelIndicator();
+    return;
+  }
+
   // Create bars based on level (increased sensitivity to use all 5 bars)
   const barsCount = 5;
   // Use logarithmic scale for better sensitivity: level 0-100 maps to 0-5 bars
@@ -2319,14 +2325,14 @@ function toggleMic() {
     if (audioTrack) {
       audioTrack.enabled = !audioTrack.enabled;
       isMicOn = audioTrack.enabled;
-      
+
       // Play sound
       if (isMicOn) {
         sounds.micOn();
       } else {
         sounds.micOff();
       }
-      
+
       const btn = document.getElementById('micBtn');
       if (isMicOn) {
         btn.classList.remove('danger');
@@ -2334,8 +2340,10 @@ function toggleMic() {
       } else {
         btn.classList.add('danger');
         btn.querySelector('.label').textContent = 'Мик выкл';
+        // Reset mic level indicator when muting
+        resetMicLevelIndicator();
       }
-      
+
       // Notify other users about mic state
       if (currentRoom) {
         socket.emit('user-mute-state', { roomId: currentRoom, isMicMuted: !isMicOn });
