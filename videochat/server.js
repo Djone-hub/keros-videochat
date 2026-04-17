@@ -151,11 +151,15 @@ app.get('/api/users', (req, res) => {
 // REST API endpoint for user login
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
+  console.log(`[LOGIN] Attempt: username=${username}, hasPassword=${!!password}`);
   const user = registeredUsers.get(username);
+  console.log(`[LOGIN] User found in registry: ${!!user}, hasPassword: ${!!user?.password}`);
   
   if (user && user.password === password) {
+    console.log(`[LOGIN] SUCCESS: ${username}`);
     res.json({ success: true, user: { username: user.username, name: user.name, avatar: user.avatar } });
   } else {
+    console.log(`[LOGIN] FAILED: ${username} - user not found or wrong password`);
     res.status(401).json({ success: false, message: 'Invalid username or password' });
   }
 });
