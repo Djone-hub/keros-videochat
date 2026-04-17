@@ -242,11 +242,10 @@ window.addEventListener('load', () => {
           localStorage.setItem('keroschat_user', JSON.stringify(currentUser));
           console.log('[AUTO-LOGIN] Refreshed user data from API, role:', currentUser.role);
         }
+        showLobby();
       })
       .catch(err => {
         console.error('[AUTO-LOGIN] Error refreshing user data:', err);
-      })
-      .finally(() => {
         showLobby();
       });
 
@@ -254,11 +253,11 @@ window.addEventListener('load', () => {
         const pendingRoom = sessionStorage.getItem('pendingRoomInvite');
         if (pendingRoom) {
           sessionStorage.removeItem('pendingRoomInvite');
-          
+
           // Check if room exists in server rooms or locally
           const localRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
           const localRoom = localRooms.find(r => r.id === pendingRoom);
-          
+
           if (localRoom) {
             // Room exists locally, join it
             joinRoomById(pendingRoom);
@@ -289,9 +288,8 @@ window.addEventListener('load', () => {
           }
         }
       }, 800);
-    } else {
-      showLobby();
-    }
+  } else {
+    showLobby();
   }
 });
 
