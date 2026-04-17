@@ -34,8 +34,8 @@ socket.on('connect', () => {
     socket.emit('join-room', currentRoom, currentUser.username, userAvatar, currentRoomName, currentRoomAvatar, (response) => {
       if (response && response.success) {
         console.log('[RECONNECT] Successfully rejoined room:', currentRoom);
-        // Reload channels after rejoin
-        loadChannels();
+        // DISABLED: Reload channels after rejoin
+        // loadChannels();
       } else {
         console.error('[RECONNECT] Failed to rejoin room:', response?.error);
       }
@@ -309,19 +309,37 @@ async function testAudioOutput() {
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
+    const destination = audioContext.createMediaStreamDestination();
 
     oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
+    gainNode.connect(destination);
 
     oscillator.frequency.value = 440; // A4 note
     oscillator.type = 'sine';
     gainNode.gain.value = 0.3; // 30% volume
+
+    // Create audio element to play the sound with selected output device
+    const audioElement = new Audio();
+    audioElement.srcObject = destination.stream;
+    audioElement.autoplay = true;
+
+    // Apply selected output device if available
+    if (selectedAudioOutput && typeof audioElement.setSinkId === 'function') {
+      try {
+        await audioElement.setSinkId(selectedAudioOutput);
+        console.log('[AUDIO TEST] Using selected output device:', selectedAudioOutput);
+      } catch (err) {
+        console.error('[AUDIO TEST] Error setting sink ID:', err);
+      }
+    }
 
     oscillator.start();
     gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
 
     setTimeout(() => {
       oscillator.stop();
+      audioElement.pause();
+      audioElement.remove();
       audioContext.close();
     }, 500);
 
@@ -1294,16 +1312,17 @@ function showRoomUI() {
   
   // Reset current channel
   currentChannel = 'general';
-  
-  // Load channels list - wait for socket to be fully connected
-  const checkAndLoad = () => {
-    if (socketConnected && currentRoom) {
-      loadChannels();
-    } else {
-      setTimeout(checkAndLoad, 300);
-    }
-  };
-  setTimeout(checkAndLoad, 500);
+
+  // DISABLED: Load channels list
+  // const checkAndLoad = () => {
+  //   if (socketConnected && currentRoom) {
+  //     loadChannels();
+  //   } else {
+  //     setTimeout(checkAndLoad, 300);
+  //   }
+  // };
+  // checkAndLoad();
+
   // Always show room name, not ID
   const displayName = currentRoomName && currentRoomName !== currentRoom ? currentRoomName : currentRoom;
   document.getElementById('displayRoomId').textContent = displayName;
@@ -1955,14 +1974,15 @@ socket.on('channel-message', (msg) => {
 socket.on('channel-created', (data) => {
   console.log('[CHANNEL DEBUG] Received channel-created event:', data);
   addLogEntry('Канал', `${data.createdBy} создал канал "${data.channelName}"`);
-  // Refresh channel list
-  loadChannelsForRoom();
+  // DISABLED: Refresh channel list
+  // loadChannelsForRoom();
 });
 
 // Channels updated (counts changed)
 socket.on('channels-updated', (channels) => {
   console.log('[CHANNEL] Received updated channel counts:', channels);
-  updateChannelList(channels);
+  // DISABLED: Update channel list
+  // updateChannelList(channels);
 });
 
 // User joined channel
@@ -2822,10 +2842,10 @@ function switchChannel(channelId) {
         }));
         updateVideoVisibilityForChannel(channelUsers);
       }
-      
-      // Refresh channel list to update user counts
-      loadChannels();
-      
+
+      // DISABLED: Refresh channel list to update user counts
+      // loadChannels();
+
       // Clear chat messages when switching channels
       const chatMessages = document.getElementById('chatMessages');
       if (chatMessages) {
