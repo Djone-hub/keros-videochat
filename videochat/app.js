@@ -576,11 +576,11 @@ async function loadServerRooms() {
   if (isLoadingRooms || (now - lastLoadTime < 2000)) {
     return;
   }
-  
+
   isLoadingRooms = true;
   const list = document.getElementById('roomsList');
   list.innerHTML = '<p style="color: #72767d; padding: 16px; text-align: center;">⏳ Загрузка комнат...</p>';
-  
+
   try {
     // Use REST API instead of socket (more reliable on Render)
     const response = await fetch('/api/rooms');
@@ -595,56 +595,19 @@ async function loadServerRooms() {
     serverRooms = [];
     isLoadingRooms = false; // Reset on error
   }
-  
-  // Get local rooms and clean up those not on server (old/deleted)
-  let localRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
-  const serverRoomIds = new Set(serverRooms.map(r => r.id));
-  
-  // Filter out "ghost" rooms - rooms where name looks like an ID (uppercase letters+numbers, 8 chars)
-  // These are auto-generated rooms that shouldn't exist
-  const isGhostRoom = (room) => {
-    // If name is same as ID and looks like random ID (8 uppercase chars/numbers)
-    if (room.name === room.id && /^[A-Z0-9]{8}$/.test(room.id)) {
-      return true;
-    }
-    // If name is empty or just the ID
-    if (!room.name || room.name === room.id) {
-      return true;
-    }
-    return false;
-  };
-  
-  // AGGRESSIVE: Remove ALL ghost rooms regardless of creator!
-  const cleanedLocalRooms = localRooms.filter(r => {
-    if (isGhostRoom(r)) {
-      console.log('[GHOST] DELETING ghost room:', r.id, 'creator:', r.creator);
-      return false;
-    }
-    return serverRoomIds.has(r.id) || r.creator === currentUser?.username;
-  });
-  
-  // Save cleaned list back
-  if (cleanedLocalRooms.length !== localRooms.length) {
-    localStorage.setItem('keroschat_rooms', JSON.stringify(cleanedLocalRooms));
-    console.log('Cleaned up', localRooms.length - cleanedLocalRooms.length, 'old rooms from localStorage');
-  }
-  
-  // Merge: server rooms take precedence (they have latest data like userCount)
-  const mergedMap = new Map();
-  cleanedLocalRooms.forEach(r => mergedMap.set(r.id, r));
-  serverRooms.forEach(r => mergedMap.set(r.id, r)); // Server overwrites local
-  
-  allRooms = Array.from(mergedMap.values());
-  
+
+  // SIMPLIFIED: Only use server rooms to avoid duplicates
+  allRooms = serverRooms;
+
   // Sort: rooms with active users first, then by creation date
   allRooms.sort((a, b) => {
     if (a.active && !b.active) return -1;
     if (!a.active && b.active) return 1;
     return (b.created || 0) - (a.created || 0);
   });
-  
+
   renderRoomsList(allRooms);
-  
+
   // Reset loading state
   isLoadingRooms = false;
   lastLoadTime = Date.now();
