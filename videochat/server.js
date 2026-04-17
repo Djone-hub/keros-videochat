@@ -56,7 +56,7 @@ function loadRoomsFromFile() {
 async function loadUsersFromSupabase() {
   try {
     const { data, error } = await supabase
-      .from('users')
+      .from('videochat_users')
       .select('*');
     
     if (error) {
@@ -109,7 +109,7 @@ async function saveUsersToSupabase() {
     
     // Use upsert to insert or update
     const { data, error } = await supabase
-      .from('users')
+      .from('videochat_users')
       .upsert(supabaseUsers, { onConflict: 'username' });
     
     if (error) {
@@ -223,7 +223,7 @@ app.delete('/api/users/:username', async (req, res) => {
     
     // Delete from Supabase
     const { error } = await supabase
-      .from('users')
+      .from('videochat_users')
       .delete()
       .eq('username', username);
     
