@@ -1433,11 +1433,7 @@ function startSpeakingDetection() {
 
 async function createPeerConnection(userId) {
   const pc = new RTCPeerConnection({
-    ...iceServers,
-    // Low latency configuration
-    bundlePolicy: 'max-bundle',
-    rtcpMuxPolicy: 'require',
-    sdpSemantics: 'unified-plan'
+    ...iceServers
   });
 
   localStream.getTracks().forEach(track => {
