@@ -16,6 +16,10 @@ socket.on('connect', () => {
 
   // Send all registered users to server
   localUsers.forEach(u => {
+    if (!u.username) {
+      console.warn('Skipping user without username:', u);
+      return;
+    }
     const avatar = localStorage.getItem(`keroschat_avatar_${u.username}`);
     socket.emit('user-registered', {
       username: u.username,
@@ -279,15 +283,15 @@ async function handleLogin(e) {
   e.preventDefault();
   const username = document.getElementById('loginUsername').value.trim();
   const password = document.getElementById('loginPassword').value;
-  
+
   try {
-    // Try server-side login first
+    // Server-side login only - no localStorage fallback
     const response = await fetch('/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
-    
+
     if (response.ok) {
       const data = await response.json();
       if (data.success) {
@@ -295,45 +299,22 @@ async function handleLogin(e) {
         localStorage.setItem('keroschat_user', JSON.stringify(currentUser));
         userAvatar = data.user.avatar || localStorage.getItem(`keroschat_avatar_${username}`);
         addLogEntry('Авторизация', `Пользователь ${username} вошёл в систему`);
-        
+
         // Notify server about user being online
         socket.emit('user-registered', { username, avatar: data.user.avatar, isOnline: true, password });
-        
+
         showLobby();
         return;
       }
     }
-    
-    // Fallback to localStorage if server login fails
-    const users = JSON.parse(localStorage.getItem('keroschat_users') || '[]');
-    const user = users.find(u => u.username === username && u.password === password);
-    
-    if (user) {
-      currentUser = user;
-      localStorage.setItem('keroschat_user', JSON.stringify(user));
-      userAvatar = localStorage.getItem(`keroschat_avatar_${username}`);
-      addLogEntry('Авторизация', `Пользователь ${username} вошел в систему (локально)`);
-      showLobby();
-    } else {
-      addLogEntry('Ошибка', `Неудачная попытка входа для ${username}`);
-      alert('Неверный никнейм или пароль!');
-    }
+
+    // Login failed
+    addLogEntry('Ошибка', `Неудачная попытка входа для ${username}`);
+    alert('Неверный никнейм или пароль!');
   } catch (err) {
     console.error('Login error:', err);
-    // Fallback to localStorage on error
-    const users = JSON.parse(localStorage.getItem('keroschat_users') || '[]');
-    const user = users.find(u => u.username === username && u.password === password);
-    
-    if (user) {
-      currentUser = user;
-      localStorage.setItem('keroschat_user', JSON.stringify(user));
-      userAvatar = localStorage.getItem(`keroschat_avatar_${username}`);
-      addLogEntry('Авторизация', `Пользователь ${username} вошел в систему (локально)`);
-      showLobby();
-    } else {
-      addLogEntry('Ошибка', `Неудачная попытка входа для ${username}`);
-      alert('Неверный никнейм или пароль!');
-    }
+    addLogEntry('Ошибка', `Неудачная попытка входа для ${username}`);
+    alert('Ошибка соединения с сервером. Попробуйте позже.');
   }
 }
 
@@ -418,6 +399,13 @@ function showLobby() {
   document.getElementById('lobbyScreen').style.display = 'flex';
   
   // Update user info
+  if (!currentUser || !currentUser.username) {
+    console.error('showLobby: currentUser or username is undefined', currentUser);
+    alert('Ошибка: пользователь не найден. Пожалуйста, войдите снова.');
+    showAuth();
+    return;
+  }
+
   document.getElementById('lobbyUsername').textContent = currentUser.username;
   const avatarEl = document.getElementById('lobbyAvatar');
   if (userAvatar) {
