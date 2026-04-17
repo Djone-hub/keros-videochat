@@ -1964,7 +1964,7 @@ socket.on('user-joined', async (user) => {
   }
   // Avatar sync debug - disabled for production performance
   // console.log('[AVATAR] User joined:', user.name, 'has avatar:', !!user.avatar);
-  sounds.userJoin();
+  // REMOVED: sounds.userJoin() - sound should only play for the user who joined, not everyone in room
   activeUsers.set(user.id, user);
   addChatMessage('Система', `Комната "${currentRoomName}" - подключился ${user.name}`, true);
   updateActiveUsers();
