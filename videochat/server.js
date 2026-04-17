@@ -130,20 +130,170 @@ async function saveUsersToSupabase() {
   }
 }
 
-const roomStore = loadRoomsFromFile();
+async function loadRoomsFromSupabase() {
+  try {
+    const { data, error } = await supabase
+      .from('videochat_rooms')
+      .select('*');
+
+    if (error) {
+      console.error('[ROOMS] Error loading rooms from Supabase:', error);
+      return new Map();
+    }
+
+    const map = new Map();
+    data.forEach(r => {
+      map.set(r.id, {
+        id: r.id,
+        name: r.name,
+        avatar: r.avatar,
+        creator: r.creator,
+        created: r.created,
+        channels: r.channels || { general: { name: 'Общий', users: [] } }
+      });
+    });
+
+    console.log(`[ROOMS] Loaded ${data.length} rooms from Supabase`);
+    return map;
+  } catch (err) {
+    console.error('[ROOMS] Error loading rooms from Supabase:', err);
+    return new Map();
+  }
+}
+
+async function saveRoomsToSupabase() {
+  try {
+    const roomsArray = Array.from(roomStore.values());
+
+    // Convert to Supabase format
+    const supabaseRooms = roomsArray.map(r => ({
+      id: r.id,
+      name: r.name,
+      avatar: r.avatar,
+      creator: r.creator,
+      created: r.created,
+      channels: r.channels || { general: { name: 'Общий', users: [] } }
+    }));
+
+    // Use upsert to insert or update
+    const { data, error } = await supabase
+      .from('videochat_rooms')
+      .upsert(supabaseRooms, { onConflict: 'id' });
+
+    if (error) {
+      console.error('[ROOMS] Error saving rooms to Supabase:', error);
+    } else {
+      console.log(`[ROOMS] Saved ${roomsArray.length} rooms to Supabase`);
+    }
+  } catch (err) {
+    console.error('[ROOMS] Error saving rooms to Supabase:', err);
+  }
+}
+
+async function loadVIPChannelsFromSupabase() {
+  try {
+    const { data, error } = await supabase
+      .from('videochat_vip_channels')
+      .select('*');
+
+    if (error) {
+      console.error('[VIP] Error loading VIP channels from Supabase:', error);
+      return [];
+    }
+
+    const channels = data.map(c => ({
+      id: c.id,
+      name: c.name,
+      password: c.password,
+      creator: c.creator,
+      created: c.created
+    }));
+
+    console.log(`[VIP] Loaded ${channels.length} VIP channels from Supabase`);
+    return channels;
+  } catch (err) {
+    console.error('[VIP] Error loading VIP channels from Supabase:', err);
+    return [];
+  }
+}
+
+async function saveVIPChannelToSupabase(channel) {
+  try {
+    const supabaseChannel = {
+      id: channel.id,
+      name: channel.name,
+      password: channel.password,
+      creator: channel.creator,
+      created: channel.created
+    };
+
+    const { data, error } = await supabase
+      .from('videochat_vip_channels')
+      .upsert(supabaseChannel, { onConflict: 'id' });
+
+    if (error) {
+      console.error('[VIP] Error saving VIP channel to Supabase:', error);
+      return false;
+    }
+
+    console.log(`[VIP] Saved VIP channel ${channel.name} to Supabase`);
+    return true;
+  } catch (err) {
+    console.error('[VIP] Error saving VIP channel to Supabase:', err);
+    return false;
+  }
+}
+
+async function deleteVIPChannelFromSupabase(channelId) {
+  try {
+    const { error } = await supabase
+      .from('videochat_vip_channels')
+      .delete()
+      .eq('id', channelId);
+
+    if (error) {
+      console.error('[VIP] Error deleting VIP channel from Supabase:', error);
+      return false;
+    }
+
+    console.log(`[VIP] Deleted VIP channel ${channelId} from Supabase`);
+    return true;
+  } catch (err) {
+    console.error('[VIP] Error deleting VIP channel from Supabase:', err);
+    return false;
+  }
+}
+
+const roomStore = new Map();
 const registeredUsers = new Map();
+
+// Load rooms from Supabase asynchronously
+loadRoomsFromSupabase().then(rooms => {
+  // Copy all rooms to roomStore
+  rooms.forEach((value, key) => roomStore.set(key, value));
+  console.log('========================================');
+  console.log('[VERSION] Server v3.1 - Supabase room & user persistence enabled');
+  console.log('========================================');
+}).catch(err => {
+  console.error('[ROOMS] Failed to load rooms from Supabase, falling back to file:', err);
+  const fileRooms = loadRoomsFromFile();
+  fileRooms.forEach((value, key) => roomStore.set(key, value));
+  console.log('========================================');
+  console.log('[VERSION] Server v3.1 - Loaded rooms from file as fallback');
+  console.log('========================================');
+});
 
 // Load users from Supabase asynchronously
 loadUsersFromSupabase().then(users => {
   // Copy all users to registeredUsers
   users.forEach((value, key) => registeredUsers.set(key, value));
   console.log('========================================');
-  console.log('[VERSION] Server v3.0 - Supabase user persistence enabled');
+  console.log('[USERS] Loaded users from Supabase');
   console.log('========================================');
 }).catch(err => {
   console.error('[USERS] Failed to load users from Supabase:', err);
   console.log('========================================');
-  console.log('[VERSION] Server v3.0 - Starting with empty user registry');
+  console.log('[VERSION] Server v3.1 - Starting with empty user registry');
   console.log('========================================');
 });
 
@@ -653,6 +803,93 @@ app.post('/api/admin/reload-users', async (req, res) => {
   res.json({ success: true, message: `Reloaded ${freshUsers.size} users from Supabase` });
 });
 
+// REST API endpoint for VIP channels
+app.get('/api/vip-channels', async (req, res) => {
+  try {
+    const channels = await loadVIPChannelsFromSupabase();
+    res.json(channels);
+  } catch (err) {
+    console.error('[VIP] Error loading VIP channels:', err);
+    res.status(500).json({ error: 'Error loading VIP channels' });
+  }
+});
+
+app.post('/api/vip-channels', async (req, res) => {
+  const { name, password } = req.body;
+  const creator = req.headers['x-username'];
+
+  if (!name) {
+    return res.status(400).json({ success: false, message: 'Channel name is required' });
+  }
+
+  const newChannel = {
+    id: 'vip-' + Date.now(),
+    name,
+    password: password || '',
+    creator,
+    created: Date.now()
+  };
+
+  const saved = await saveVIPChannelToSupabase(newChannel);
+  if (saved) {
+    res.json({ success: true, channel: newChannel });
+  } else {
+    res.status(500).json({ success: false, message: 'Error saving VIP channel' });
+  }
+});
+
+app.put('/api/vip-channels/:id', async (req, res) => {
+  const channelId = req.params.id;
+  const { password } = req.body;
+  const creator = req.headers['x-username'];
+
+  const channels = await loadVIPChannelsFromSupabase();
+  const channel = channels.find(c => c.id === channelId);
+
+  if (!channel) {
+    return res.status(404).json({ success: false, message: 'Channel not found' });
+  }
+
+  // Only creator can update
+  if (channel.creator !== creator) {
+    return res.status(403).json({ success: false, message: 'Only creator can update channel' });
+  }
+
+  channel.password = password || '';
+  const saved = await saveVIPChannelToSupabase(channel);
+
+  if (saved) {
+    res.json({ success: true, channel });
+  } else {
+    res.status(500).json({ success: false, message: 'Error updating VIP channel' });
+  }
+});
+
+app.delete('/api/vip-channels/:id', async (req, res) => {
+  const channelId = req.params.id;
+  const creator = req.headers['x-username'];
+
+  const channels = await loadVIPChannelsFromSupabase();
+  const channel = channels.find(c => c.id === channelId);
+
+  if (!channel) {
+    return res.status(404).json({ success: false, message: 'Channel not found' });
+  }
+
+  // Only creator can delete
+  if (channel.creator !== creator) {
+    return res.status(403).json({ success: false, message: 'Only creator can delete channel' });
+  }
+
+  const deleted = await deleteVIPChannelFromSupabase(channelId);
+
+  if (deleted) {
+    res.json({ success: true, message: 'Channel deleted' });
+  } else {
+    res.status(500).json({ success: false, message: 'Error deleting VIP channel' });
+  }
+});
+
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
   console.log('Current rooms in store:', roomStore.size);
@@ -860,7 +1097,7 @@ io.on('connection', (socket) => {
         creator: userName,
         created: Date.now()
       });
-      saveRoomsToFile();
+      saveRoomsToSupabase();
       isNewRoom = true;
     }
     
@@ -1125,7 +1362,7 @@ io.on('connection', (socket) => {
       if (rooms.has(roomId)) {
         rooms.delete(roomId);
       }
-      saveRoomsToFile();
+      saveRoomsToSupabase();
       io.emit('room-deleted', roomId);
       io.emit('rooms-updated');
       console.log(`[DELETE] Room ${roomId} deleted by ${socket.userName}`);
@@ -1209,7 +1446,7 @@ io.on('connection', (socket) => {
           createdBy: socket.userName,
           createdAt: Date.now()
         };
-        saveRoomsToFile();
+        saveRoomsToSupabase();
         console.log(`[CHANNEL] Saved channel "${channelName}" to roomStore`);
       }
       

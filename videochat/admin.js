@@ -379,56 +379,105 @@ function setCameraQuality(quality) {
   }
 }
 
-function createVIPChannel() {
+async function createVIPChannel() {
   showPromptModal('Введите название VIP канала:', '', (channelName) => {
     if (!channelName) return;
-    showPromptModal('Установите пароль (или оставьте пустым):', '', (password) => {
-      const vipChannels = JSON.parse(localStorage.getItem('keroschat_vip_channels') || '[]');
-      const newChannel = { id: 'vip-' + Date.now(), name: channelName, password: password, creator: currentUser.username };
-      vipChannels.push(newChannel);
-      localStorage.setItem('keroschat_vip_channels', JSON.stringify(vipChannels));
-      renderVIPChannelsList();
+    showPromptModal('Установите пароль (или оставьте пустым):', '', async (password) => {
+      try {
+        const response = await fetch('/api/vip-channels', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Username': currentUser?.username || 'unknown'
+          },
+          body: JSON.stringify({ name: channelName, password: password })
+        });
+        const result = await response.json();
+        if (result.success) {
+          renderVIPChannelsList();
+          showAlertModal('VIP канал создан!', 'success');
+        } else {
+          showAlertModal('Ошибка: ' + result.message, 'error');
+        }
+      } catch (err) {
+        console.error('Error creating VIP channel:', err);
+        showAlertModal('Ошибка создания VIP канала', 'error');
+      }
     });
   });
 }
 
-function renderVIPChannelsList() {
+async function renderVIPChannelsList() {
   const listEl = document.getElementById('vipChannelsList');
   if (!listEl) return;
-  
-  const vipChannels = JSON.parse(localStorage.getItem('keroschat_vip_channels') || '[]');
-  
-  if (vipChannels.length === 0) {
-    listEl.innerHTML = '<div style="text-align: center; padding: 20px; color: #72767d;">🔓 Нет VIP каналов. Создайте первый!</div>';
-    return;
+
+  try {
+    const response = await fetch('/api/vip-channels');
+    const vipChannels = await response.json();
+
+    if (vipChannels.length === 0) {
+      listEl.innerHTML = '<div style="text-align: center; padding: 20px; color: #72767d;">🔓 Нет VIP каналов. Создайте первый!</div>';
+      return;
+    }
+
+    const listHtml = vipChannels.map(channel => `
+      <div class="vip-channel-item">
+        <span>🔒 ${channel.name} ${channel.password ? '(🔐 с паролем)' : '(открытый)'}</span>
+        <button onclick="configureVIPChannel('${channel.id}')" class="admin-btn small" title="Настроить">⚙️ Настроить</button>
+      </div>
+    `).join('');
+
+    listEl.innerHTML = listHtml;
+  } catch (err) {
+    console.error('Error loading VIP channels:', err);
+    listEl.innerHTML = '<div style="text-align: center; padding: 20px; color: #ed4245;">Ошибка загрузки VIP каналов</div>';
   }
-  
-  const listHtml = vipChannels.map(channel => `
-    <div class="vip-channel-item">
-      <span>🔒 ${channel.name} ${channel.password ? '(🔐 с паролем)' : '(открытый)'}</span>
-      <button onclick="configureVIPChannel('${channel.id}')" class="admin-btn small" title="Настроить">⚙️ Настроить</button>
-    </div>
-  `).join('');
-  
-  listEl.innerHTML = listHtml;
 }
 
-function configureVIPChannel(channelId) {
-  const vipChannels = JSON.parse(localStorage.getItem('keroschat_vip_channels') || '[]');
-  const channel = vipChannels.find(c => c.id === channelId);
-  if (!channel) return;
-
-  showPromptModal(`1 - Изменить пароль\n2 - Удалить канал`, '', (action) => {
+async function configureVIPChannel(channelId) {
+  showPromptModal(`1 - Изменить пароль\n2 - Удалить канал`, '', async (action) => {
     if (action === '1') {
-      showPromptModal('Новый пароль:', channel.password, (newPassword) => {
-        channel.password = newPassword;
-        localStorage.setItem('keroschat_vip_channels', JSON.stringify(vipChannels));
+      showPromptModal('Новый пароль:', '', async (newPassword) => {
+        try {
+          const response = await fetch(`/api/vip-channels/${channelId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Username': currentUser?.username || 'unknown'
+            },
+            body: JSON.stringify({ password: newPassword })
+          });
+          const result = await response.json();
+          if (result.success) {
+            showAlertModal('Пароль изменён!', 'success');
+          } else {
+            showAlertModal('Ошибка: ' + result.message, 'error');
+          }
+        } catch (err) {
+          console.error('Error updating VIP channel:', err);
+          showAlertModal('Ошибка изменения пароля', 'error');
+        }
       });
     } else if (action === '2') {
-      showConfirmModal(`Удалить канал "${channel.name}"?`, () => {
-        const filtered = vipChannels.filter(c => c.id !== channelId);
-        localStorage.setItem('keroschat_vip_channels', JSON.stringify(filtered));
-        renderVIPChannelsList();
+      showConfirmModal(`Удалить канал?`, async () => {
+        try {
+          const response = await fetch(`/api/vip-channels/${channelId}`, {
+            method: 'DELETE',
+            headers: {
+              'X-Username': currentUser?.username || 'unknown'
+            }
+          });
+          const result = await response.json();
+          if (result.success) {
+            renderVIPChannelsList();
+            showAlertModal('Канал удалён!', 'success');
+          } else {
+            showAlertModal('Ошибка: ' + result.message, 'error');
+          }
+        } catch (err) {
+          console.error('Error deleting VIP channel:', err);
+          showAlertModal('Ошибка удаления канала', 'error');
+        }
       });
     }
   });
