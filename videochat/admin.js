@@ -404,7 +404,7 @@ function loadAdminUsersList() {
         const currentUserRole = currentUser?.role || 'user';
         const isAdmin = currentUserRole === 'admin' || currentUserRole === 'superadmin';
         const canDelete = isAdmin || currentUser.username === user.username;
-        const canChangeRole = isAdmin;
+        const canChangeRole = isAdmin && !(currentUserRole === 'superadmin' && currentUser.username === user.username);
 
         // Debug logging
         console.log(`[ADMIN] Current user: ${currentUser?.username}, role: ${currentUserRole}, isAdmin: ${isAdmin}`);
@@ -497,7 +497,7 @@ function filterAdminUsers(searchTerm) {
     const currentUserRole = currentUser?.role || 'user';
     const isAdmin = currentUserRole === 'admin' || currentUserRole === 'superadmin';
     const canDelete = isAdmin || currentUser.username === user.username;
-    const canChangeRole = isAdmin;
+    const canChangeRole = isAdmin && !(currentUserRole === 'superadmin' && currentUser.username === user.username);
 
     return `
       <div class="admin-room-item ${user.isOnline ? '' : 'empty'}">

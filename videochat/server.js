@@ -272,6 +272,16 @@ app.put('/api/users/:username/role', async (req, res) => {
     return res.status(403).json({ success: false, message: 'Only admins can change user roles' });
   }
 
+  // Prevent superadmins from changing their own role
+  if (requesterUser.role === 'superadmin' && requester === username) {
+    return res.status(403).json({ success: false, message: 'Superadmins cannot change their own role' });
+  }
+
+  // Prevent changing superadmin role unless requester is also superadmin
+  if (role === 'superadmin' && requesterUser.role !== 'superadmin') {
+    return res.status(403).json({ success: false, message: 'Only superadmins can grant superadmin role' });
+  }
+
   // Validate role
   const validRoles = ['user', 'moderator', 'admin', 'superadmin'];
   if (!validRoles.includes(role)) {
