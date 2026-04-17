@@ -50,9 +50,9 @@ socket.on('user-muted', ({ username, isMuted, duration }) => {
   if (currentUser && currentUser.username === username) {
     if (isMuted) {
       const durationText = duration > 0 ? `${duration} минут` : 'навсегда';
-      alert(`🔇 Вы были замучены на ${durationText}`);
+      showAlertModal(`🔇 Вы были замучены на ${durationText}`, 'info');
     } else {
-      alert('🔊 Ваш мут был снят');
+      showAlertModal('🔊 Ваш мут был снят', 'success');
     }
     // Reload user data to get updated mute status
     loadRegisteredUsers();
@@ -62,7 +62,7 @@ socket.on('user-muted', ({ username, isMuted, duration }) => {
 // Listen for kick event
 socket.on('kicked-from-room', ({ roomId }) => {
   if (currentRoom === roomId) {
-    alert(`👢 Вы были выгнаны из комнаты`);
+    showAlertModal(`👢 Вы были выгнаны из комнаты`, 'error');
     leaveRoom();
   }
 });
@@ -353,7 +353,7 @@ window.addEventListener('load', () => {
                 } else {
                   // Room doesn't exist - stay in lobby, show error
                   addLogEntry('Ошибка', `Комната ${pendingRoom} не найдена на сервере`);
-                  alert(`Комната ${pendingRoom} не найдена. Возможно, она была удалена.`);
+                  showAlertModal(`Комната ${pendingRoom} не найдена. Возможно, она была удалена.`, 'error');
                   // Stay in lobby, don't auto-create room
                 }
               })
@@ -361,7 +361,7 @@ window.addEventListener('load', () => {
                 console.error('Error checking room:', err);
                 // On error, stay in lobby
                 addLogEntry('Ошибка', 'Не удалось проверить комнату на сервере');
-                alert('Ошибка подключения к серверу. Остаёмся в лобби.');
+                showAlertModal('Ошибка подключения к серверу. Остаёмся в лобби.', 'error');
               });
           }
         }
@@ -416,11 +416,11 @@ async function handleLogin(e) {
 
     // Login failed
     addLogEntry('Ошибка', `Неудачная попытка входа для ${username}`);
-    alert('Неверный никнейм или пароль!');
+    showAlertModal('Неверный никнейм или пароль!', 'error');
   } catch (err) {
     console.error('Login error:', err);
     addLogEntry('Ошибка', `Неудачная попытка входа для ${username}`);
-    alert('Ошибка соединения с сервером. Попробуйте позже.');
+    showAlertModal('Ошибка соединения с сервером. Попробуйте позже.', 'error');
   }
 }
 
@@ -431,7 +431,7 @@ async function handleRegister(e) {
   const passwordConfirm = document.getElementById('regPasswordConfirm').value;
   
   if (password !== passwordConfirm) {
-    alert('Пароли не совпадают!');
+    showAlertModal('Пароли не совпадают!', 'error');
     return;
   }
   
@@ -441,7 +441,7 @@ async function handleRegister(e) {
     const checkData = await checkResponse.json();
 
     if (checkData.exists) {
-      alert('Пользователь с таким именем уже зарегистрирован! Используйте форму входа.');
+      showAlertModal('Пользователь с таким именем уже зарегистрирован! Используйте форму входа.', 'error');
       return;
     }
 
@@ -458,10 +458,10 @@ async function handleRegister(e) {
     addLogEntry('Авторизация', `Новый пользователь ${username} зарегистрирован`);
 
     showLobby();
-    alert('Регистрация успешна!');
+    showAlertModal('Регистрация успешна!', 'success');
   } catch (err) {
     console.error('Registration error:', err);
-    alert('Ошибка регистрации. Попробуйте снова.');
+    showAlertModal('Ошибка регистрации. Попробуйте снова.', 'error');
   }
 };
 
@@ -484,7 +484,7 @@ function showLobby() {
   // Update user info
   if (!currentUser || !currentUser.username) {
     console.error('showLobby: currentUser or username is undefined', currentUser);
-    alert('Ошибка: пользователь не найден. Пожалуйста, войдите снова.');
+    showAlertModal('Ошибка: пользователь не найден. Пожалуйста, войдите снова.', 'error');
     showAuth();
     return;
   }
@@ -926,13 +926,13 @@ function previewRoomAvatar(input) {
 function createRoom() {
   const name = document.getElementById('newRoomName').value.trim();
   if (!name) {
-    alert('Введите название комнаты!');
+    showAlertModal('Введите название комнаты!', 'error');
     return;
   }
   
   // Prevent creating ghost rooms (name that looks like ID)
   if (/^[A-Z0-9]{8}$/.test(name)) {
-    alert('Название комнаты не должно выглядеть как ID (8 заглавных букв/цифр)! Придумайте нормальное название.');
+    showAlertModal('Название комнаты не должно выглядеть как ID (8 заглавных букв/цифр)! Придумайте нормальное название.', 'error');
     return;
   }
   
@@ -963,7 +963,7 @@ async function joinRoomById(roomId) {
   if (currentUser && currentUser.kickedRooms) {
     const kickedRooms = JSON.parse(currentUser.kickedRooms || '[]');
     if (kickedRooms.includes(roomId)) {
-      alert('👢 Вы были выгнаны из этой комнаты и не можете вернуться');
+      showAlertModal('👢 Вы были выгнаны из этой комнаты и не можете вернуться', 'error');
       return;
     }
   }
@@ -996,7 +996,7 @@ async function joinRoomById(roomId) {
       }
     }
   } catch (err) {
-    alert('Ошибка доступа к камере/микрофону: ' + err.message);
+    showAlertModal('Ошибка доступа к камере/микрофону: ' + err.message, 'error');
     return;
   }
 
@@ -1159,7 +1159,7 @@ function disconnectAndShowLobby() {
 function copyLink() {
   const link = `${window.location.origin}?room=${currentRoom}`;
   navigator.clipboard.writeText(link).then(() => {
-    alert('Ссылка скопирована!');
+    showAlertModal('Ссылка скопирована!', 'success');
   });
 }
 
@@ -1563,13 +1563,13 @@ socket.on('room-deleted', (roomId) => {
   // If currently in this room, leave it
   if (currentRoom === roomId) {
     leaveRoom();
-    alert('Эта комната была удалена создателем.');
+    showAlertModal('Эта комната была удалена создателем.', 'info');
   }
 });
 
 socket.on('room-error', (error) => {
   addLogEntry('Ошибка', error.message);
-  alert(error.message);
+  showAlertModal(error.message, 'error');
   // If in room, go back to lobby
   if (currentRoom) {
     leaveRoom();
@@ -1604,7 +1604,7 @@ socket.on('user-deleted', (username) => {
   
   // If current user was deleted, log them out
   if (currentUser && currentUser.username === username) {
-    alert('Ваш аккаунт был удалён администратором');
+    showAlertModal('Ваш аккаунт был удалён администратором', 'error');
     logout();
   }
 });
@@ -2170,7 +2170,7 @@ async function toggleScreen() {
       console.log('[SCREEN] Screen sharing started');
     } catch (err) {
       console.error('[SCREEN] Error starting screen share:', err);
-      alert('Ошибка при запуске демонстрации: ' + err.message);
+      showAlertModal('Ошибка при запуске демонстрации: ' + err.message, 'error');
     }
   }
 }
@@ -2424,7 +2424,7 @@ function sendMessage() {
       // Check if mute has expired
       if (currentUser.muteUntil && currentUser.muteUntil > Date.now()) {
         const remainingMinutes = Math.ceil((currentUser.muteUntil - Date.now()) / 60000);
-        alert(`🔇 Вы замучены. Осталось ${remainingMinutes} минут`);
+        showAlertModal(`🔇 Вы замучены. Осталось ${remainingMinutes} минут`, 'error');
         return;
       } else if (currentUser.muteUntil && currentUser.muteUntil <= Date.now()) {
         // Mute has expired, auto-unmute
@@ -2432,7 +2432,7 @@ function sendMessage() {
         currentUser.muteUntil = 0;
       } else if (!currentUser.muteUntil || currentUser.muteUntil === 0) {
         // Permanent mute
-        alert('🔇 Вы замучены навсегда');
+        showAlertModal('🔇 Вы замучены навсегда', 'error');
         return;
       }
     }

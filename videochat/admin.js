@@ -243,26 +243,26 @@ function clearGhostRooms() {
   if (!window.allAdminRooms) return;
   const ghostRooms = window.allAdminRooms.filter(r => r.id === r.name && /^[A-Z0-9]{8}$/.test(r.id));
   if (ghostRooms.length === 0) {
-    alert('Призрачные комнаты не найдены.');
+    showAlertModal('Призрачные комнаты не найдены.', 'info');
     return;
   }
-  if (confirm(`Найдено ${ghostRooms.length} призрачных комнат. Удалить их?`)) {
+  showConfirmModal(`Найдено ${ghostRooms.length} призрачных комнат. Удалить их?`, () => {
     ghostRooms.forEach(room => socket.emit('delete-room', room.id));
     setTimeout(renderAdminPanel, 500);
-  }
+  });
 }
 
 function deleteAllEmptyRooms() {
   if (!window.allAdminRooms) return;
   const emptyRooms = window.allAdminRooms.filter(r => r.userCount === 0);
   if (emptyRooms.length === 0) {
-    alert('Пустые комнаты не найдены.');
+    showAlertModal('Пустые комнаты не найдены.', 'info');
     return;
   }
-  if (confirm(`Найдено ${emptyRooms.length} пустых комнат. Удалить их все?`)) {
+  showConfirmModal(`Найдено ${emptyRooms.length} пустых комнат. Удалить их все?`, () => {
     emptyRooms.forEach(room => socket.emit('delete-room', room.id));
     setTimeout(renderAdminPanel, 500);
-  }
+  });
 }
 
 function showCreateRoomFromAdmin() {
@@ -380,14 +380,16 @@ function setCameraQuality(quality) {
 }
 
 function createVIPChannel() {
-  const channelName = prompt('Введите название VIP канала:');
-  if (!channelName) return;
-  const password = prompt('Установите пароль (или оставьте пустым):');
-  const vipChannels = JSON.parse(localStorage.getItem('keroschat_vip_channels') || '[]');
-  const newChannel = { id: 'vip-' + Date.now(), name: channelName, password: password, creator: currentUser.username };
-  vipChannels.push(newChannel);
-  localStorage.setItem('keroschat_vip_channels', JSON.stringify(vipChannels));
-  renderVIPChannelsList();
+  showPromptModal('Введите название VIP канала:', '', (channelName) => {
+    if (!channelName) return;
+    showPromptModal('Установите пароль (или оставьте пустым):', '', (password) => {
+      const vipChannels = JSON.parse(localStorage.getItem('keroschat_vip_channels') || '[]');
+      const newChannel = { id: 'vip-' + Date.now(), name: channelName, password: password, creator: currentUser.username };
+      vipChannels.push(newChannel);
+      localStorage.setItem('keroschat_vip_channels', JSON.stringify(vipChannels));
+      renderVIPChannelsList();
+    });
+  });
 }
 
 function renderVIPChannelsList() {
@@ -416,17 +418,20 @@ function configureVIPChannel(channelId) {
   const channel = vipChannels.find(c => c.id === channelId);
   if (!channel) return;
 
-  const action = prompt(`1 - Изменить пароль\n2 - Удалить канал`);
-  if (action === '1') {
-    channel.password = prompt('Новый пароль:', channel.password);
-    localStorage.setItem('keroschat_vip_channels', JSON.stringify(vipChannels));
-  } else if (action === '2') {
-    if (confirm(`Удалить канал "${channel.name}"?`)) {
-      const filtered = vipChannels.filter(c => c.id !== channelId);
-      localStorage.setItem('keroschat_vip_channels', JSON.stringify(filtered));
-      renderVIPChannelsList();
+  showPromptModal(`1 - Изменить пароль\n2 - Удалить канал`, '', (action) => {
+    if (action === '1') {
+      showPromptModal('Новый пароль:', channel.password, (newPassword) => {
+        channel.password = newPassword;
+        localStorage.setItem('keroschat_vip_channels', JSON.stringify(vipChannels));
+      });
+    } else if (action === '2') {
+      showConfirmModal(`Удалить канал "${channel.name}"?`, () => {
+        const filtered = vipChannels.filter(c => c.id !== channelId);
+        localStorage.setItem('keroschat_vip_channels', JSON.stringify(filtered));
+        renderVIPChannelsList();
+      });
     }
-  }
+  });
 }
 
 // ========== USER MANAGEMENT ==========
@@ -568,15 +573,15 @@ function reloadUsersFromSupabase() {
     .then(res => res.json())
     .then(result => {
       if (result.success) {
-        alert(`✅ ${result.message}`);
+        showAlertModal(`✅ ${result.message}`, 'success');
         loadAdminUsersList();
       } else {
-        alert(`❌ Ошибка: ${result.message}`);
+        showAlertModal(`❌ Ошибка: ${result.message}`, 'error');
       }
     })
     .catch(err => {
       console.error('Error reloading users:', err);
-      alert('❌ Ошибка при перезагрузке пользователей');
+      showAlertModal('❌ Ошибка при перезагрузке пользователей', 'error');
     });
 }
 
@@ -728,15 +733,15 @@ function muteUser(username, isMuted) {
       .then(res => res.json())
       .then(result => {
         if (result.success) {
-          alert(`✅ Пользователь "${username}" размучен`);
+          showAlertModal(`✅ Пользователь "${username}" размучен`, 'success');
           loadAdminUsersList();
         } else {
-          alert(`❌ Ошибка: ${result.message}`);
+          showAlertModal(`❌ Ошибка: ${result.message}`, 'error');
         }
       })
       .catch(err => {
         console.error('Error unmuting user:', err);
-        alert('❌ Ошибка при размуте');
+        showAlertModal('❌ Ошибка при размуте', 'error');
       });
     return;
   }
@@ -752,7 +757,7 @@ function muteUser(username, isMuted) {
     <div style="background: #36393f; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%;">
       <h3 style="color: #fff; margin-top: 0;">Замутить пользователя ${username}</h3>
       <p style="color: #b9bbbe; margin-bottom: 15px;">На сколько минут замутить?</p>
-      <input type="number" id="muteDuration" value="10" min="0" style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 4px; border: none; background: #40444b; color: #fff;">
+      <input type="number" id="muteDuration" value="10" min="0" style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 4px; border: none;">
       <p style="color: #72767d; font-size: 12px; margin-bottom: 15px;">0 = навсегда</p>
       <div style="display: flex; gap: 10px; justify-content: flex-end;">
         <button onclick="this.closest('div[style*=fixed]').remove()" class="admin-btn" style="padding: 10px 20px;">Отмена</button>
@@ -767,7 +772,7 @@ function muteUser(username, isMuted) {
     modal.remove();
 
     if (duration < 0) {
-      alert('❌ Неверное значение');
+      showAlertModal('❌ Неверное значение', 'error');
       return;
     }
 
@@ -782,15 +787,15 @@ function muteUser(username, isMuted) {
       .then(res => res.json())
       .then(result => {
         if (result.success) {
-          alert(`✅ Пользователь "${username}" замучен на ${duration === 0 ? 'навсегда' : duration + ' минут'}`);
+          showAlertModal(`✅ Пользователь "${username}" замучен на ${duration === 0 ? 'навсегда' : duration + ' минут'}`, 'success');
           loadAdminUsersList();
         } else {
-          alert(`❌ Ошибка: ${result.message}`);
+          showAlertModal(`❌ Ошибка: ${result.message}`, 'error');
         }
       })
       .catch(err => {
         console.error('Error muting user:', err);
-        alert('❌ Ошибка при муте');
+        showAlertModal('❌ Ошибка при муте', 'error');
       });
   });
 }
@@ -801,7 +806,7 @@ async function kickUser(username) {
   const rooms = await response.json();
 
   if (rooms.length === 0) {
-    alert('❌ Нет активных комнат');
+    showAlertModal('❌ Нет активных комнат', 'error');
     return;
   }
 
@@ -845,15 +850,15 @@ async function kickUser(username) {
       .then(res => res.json())
       .then(result => {
         if (result.success) {
-          alert(`✅ Пользователь "${username}" кикнут из комнаты`);
+          showAlertModal(`✅ Пользователь "${username}" кикнут из комнаты`, 'success');
           loadAdminUsersList();
         } else {
-          alert(`❌ Ошибка: ${result.message}`);
+          showAlertModal(`❌ Ошибка: ${result.message}`, 'error');
         }
       })
       .catch(err => {
         console.error('Error kicking user:', err);
-        alert('❌ Ошибка при кике');
+        showAlertModal('❌ Ошибка при кике', 'error');
       });
   });
 }
@@ -865,13 +870,13 @@ async function unkickUser(username) {
   const user = users.find(u => u.username === username);
 
   if (!user) {
-    alert('❌ Пользователь не найден');
+    showAlertModal('❌ Пользователь не найден', 'error');
     return;
   }
 
   const kickedRooms = JSON.parse(user.kickedRooms || '[]');
   if (kickedRooms.length === 0) {
-    alert('❌ Пользователь не кикнут ни из одной комнаты');
+    showAlertModal('❌ Пользователь не кикнут ни из одной комнаты', 'error');
     return;
   }
 
@@ -923,15 +928,15 @@ async function unkickUser(username) {
       .then(res => res.json())
       .then(result => {
         if (result.success) {
-          alert(`✅ Пользователь "${username}" разбанен из комнаты`);
+          showAlertModal(`✅ Пользователь "${username}" разбанен из комнаты`, 'success');
           loadAdminUsersList();
         } else {
-          alert(`❌ Ошибка: ${result.message}`);
+          showAlertModal(`❌ Ошибка: ${result.message}`, 'error');
         }
       })
       .catch(err => {
         console.error('Error unkicking user:', err);
-        alert('❌ Ошибка при разбане');
+        showAlertModal('❌ Ошибка при разбане', 'error');
       });
   });
 }
@@ -968,15 +973,15 @@ function changeUserRole(username, newRole) {
     .then(res => res.json())
     .then(result => {
       if (result.success) {
-        alert(`✅ Роль пользователя "${username}" изменена на "${getRoleLabel(newRole)}"`);
+        showAlertModal(`✅ Роль пользователя "${username}" изменена на "${getRoleLabel(newRole)}"`, 'success');
         loadAdminUsersList();
       } else {
-        alert(`❌ Ошибка: ${result.message}`);
+        showAlertModal(`❌ Ошибка: ${result.message}`, 'error');
       }
     })
     .catch(err => {
       console.error('Error changing user role:', err);
-      alert('❌ Ошибка изменения роли');
+      showAlertModal('❌ Ошибка изменения роли', 'error');
     });
 }
 
