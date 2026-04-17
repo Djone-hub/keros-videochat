@@ -195,6 +195,13 @@ app.get('/api/users', (req, res) => {
   res.json(users);
 });
 
+// REST API endpoint to check if user exists
+app.get('/api/users/:username', (req, res) => {
+  const username = req.params.username;
+  const exists = registeredUsers.has(username);
+  res.json({ exists, username });
+});
+
 // REST API endpoint for user login
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;

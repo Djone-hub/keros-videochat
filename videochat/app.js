@@ -284,8 +284,8 @@ async function handleLogin(e) {
         userAvatar = data.user.avatar || localStorage.getItem(`keroschat_avatar_${username}`);
         addLogEntry('Авторизация', `Пользователь ${username} вошёл в систему`);
 
-        // Notify server about user being online
-        socket.emit('user-registered', { username, avatar: data.user.avatar, isOnline: true, password });
+        // Notify server about user being online (user is already registered)
+        socket.emit('user-online', { username, avatar: data.user.avatar });
 
         showLobby();
         return;
@@ -314,50 +314,27 @@ async function handleRegister(e) {
   }
   
   try {
-    // Register on server
-    const response = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    });
-    
-    if (response.ok) {
-      // User exists, try to login
-      const data = await response.json();
-      if (data.success) {
-        currentUser = data.user;
-        localStorage.setItem('keroschat_user', JSON.stringify(currentUser));
-        addLogEntry('Авторизация', `Пользователь ${username} вошёл в систему`);
-        
-        // Notify server about user being online
-        socket.emit('user-registered', { username, avatar: data.user.avatar, isOnline: true, password });
-        
-        showLobby();
-        alert('Вход успешен!');
-        return;
-      }
-    }
-    
-    // If login failed or user doesn't exist, check if username is already taken on server
-    const usersResponse = await fetch('/api/users');
-    const users = await usersResponse.json();
-    if (users.find(u => u.name === username)) {
-      alert('Такой никнейм уже занят!');
+    // Check if user already exists on server
+    const checkResponse = await fetch(`/api/users/${username}`);
+    const checkData = await checkResponse.json();
+
+    if (checkData.exists) {
+      alert('Пользователь с таким именем уже зарегистрирован! Используйте форму входа.');
       return;
     }
-    
+
     // Register new user on server
     socket.emit('user-registered', { username, avatar: null, isOnline: true, password });
-    
+
     // Also save locally for offline support
     const localUsers = JSON.parse(localStorage.getItem('keroschat_users') || '[]');
     localUsers.push({ username, password, created: Date.now() });
     localStorage.setItem('keroschat_users', JSON.stringify(localUsers));
-    
+
     currentUser = { username, name: username, avatar: null };
     localStorage.setItem('keroschat_user', JSON.stringify(currentUser));
     addLogEntry('Авторизация', `Новый пользователь ${username} зарегистрирован`);
-    
+
     showLobby();
     alert('Регистрация успешна!');
   } catch (err) {
