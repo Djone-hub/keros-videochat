@@ -367,9 +367,6 @@ function loadAdminUsersList() {
       const currentUserData = users.find(u => u.username === currentUser?.username);
       if (currentUserData && currentUserData.role) {
         currentUser.role = currentUserData.role;
-        console.log(`[ADMIN] Updated current user role from API: ${currentUser.role}`);
-      } else {
-        console.log(`[ADMIN] Current user data not found or no role:`, currentUserData);
       }
 
       if (users.length === 0) {
@@ -405,8 +402,10 @@ function loadAdminUsersList() {
         // Check if current user is admin
         const currentUserRole = currentUser?.role || 'user';
         const isAdmin = currentUserRole === 'admin' || currentUserRole === 'superadmin';
-        const canDelete = isAdmin;  // Only admins can delete
+        const canDelete = isAdmin && !(user.role === 'superadmin');  // Admins can delete, but not superadmins
         const canChangeRole = isAdmin && !(currentUserRole === 'superadmin' && currentUser.username === user.username);
+        const canKick = isAdmin && !(user.role === 'superadmin');  // Admins can kick, but not superadmins
+        const canMute = isAdmin && !(user.role === 'superadmin');  // Admins can mute, but not superadmins
 
         return `
           <div class="admin-room-item ${user.isOnline ? '' : 'empty'}">
@@ -434,8 +433,10 @@ function loadAdminUsersList() {
                   <option value="superadmin" ${user.role === 'superadmin' ? 'selected' : ''}>Суперадмин</option>
                 </select>
               ` : ''}
-              ${isAdmin ? `
+              ${canMute ? `
                 <button onclick="muteUser('${user.username}', ${user.isMuted ? 'false' : 'true'})" class="admin-btn" style="padding: 6px 10px; font-size: 12px;" title="${user.isMuted ? 'Размутить' : 'Замутить'}">${user.isMuted ? '🔊' : '🔇'}</button>
+              ` : ''}
+              ${canKick ? `
                 <button onclick="kickUser('${user.username}')" class="admin-btn" style="padding: 6px 10px; font-size: 12px;" title="Кикнуть из комнаты">👢</button>
               ` : ''}
               ${canDelete ? `
@@ -451,7 +452,7 @@ function loadAdminUsersList() {
           Всего пользователей: <strong style="color: #fff;">${uniqueUsers.length}</strong> |
           Онлайн: <strong style="color: #3ba55d;">${uniqueUsers.filter(u => u.isOnline).length}</strong>
         </div>
-        ${currentUser ? `
+        ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin') ? `
         <button onclick="reloadUsersFromSupabase()" class="admin-btn" style="margin-bottom: 15px; padding: 8px 16px;">🔄 Перезагрузить пользователей из Supabase</button>
         ` : ''}
         ${listHtml}
@@ -529,8 +530,10 @@ function filterAdminUsers(searchTerm) {
 
     const currentUserRole = currentUser?.role || 'user';
     const isAdmin = currentUserRole === 'admin' || currentUserRole === 'superadmin';
-    const canDelete = isAdmin;  // Only admins can delete
+    const canDelete = isAdmin && !(user.role === 'superadmin');  // Only admins can delete, but not superadmins
     const canChangeRole = isAdmin && !(currentUserRole === 'superadmin' && currentUser.username === user.username);
+    const canKick = isAdmin && !(user.role === 'superadmin');  // Admins can kick, but not superadmins
+    const canMute = isAdmin && !(user.role === 'superadmin');  // Admins can mute, but not superadmins
 
     return `
       <div class="admin-room-item ${user.isOnline ? '' : 'empty'}">
@@ -558,8 +561,10 @@ function filterAdminUsers(searchTerm) {
               <option value="superadmin" ${user.role === 'superadmin' ? 'selected' : ''}>Суперадмин</option>
             </select>
           ` : ''}
-          ${isAdmin ? `
+          ${canMute ? `
             <button onclick="muteUser('${user.username}', ${user.isMuted ? 'false' : 'true'})" class="admin-btn" style="padding: 6px 10px; font-size: 12px;" title="${user.isMuted ? 'Размутить' : 'Замутить'}">${user.isMuted ? '🔊' : '🔇'}</button>
+          ` : ''}
+          ${canKick ? `
             <button onclick="kickUser('${user.username}')" class="admin-btn" style="padding: 6px 10px; font-size: 12px;" title="Кикнуть из комнаты">👢</button>
           ` : ''}
           ${canDelete ? `

@@ -66,7 +66,6 @@ async function loadUsersFromSupabase() {
 
     const map = new Map();
     data.forEach(u => {
-      console.log(`[USERS] Loading user: ${u.username}, role: ${u.role}, is_muted: ${u.is_muted}`);
       map.set(u.username, {
         username: u.username,
         password: u.password,
@@ -254,7 +253,6 @@ app.post('/api/login', (req, res) => {
   console.log(`[LOGIN] User found in registry: ${!!user}, hasPassword: ${!!user?.password}, passwordLength=${user?.password?.length || 0}`);
 
   if (user && user.password === password) {
-    console.log(`[LOGIN] SUCCESS: ${username}, role: ${user.role || 'user'}`);
     res.json({ success: true, user: { username: user.username, name: user.name, avatar: user.avatar, role: user.role || 'user' } });
   } else {
     console.log(`[LOGIN] FAILED: ${username} - user not found or wrong password`);
@@ -491,8 +489,12 @@ app.delete('/api/messages/:messageId', (req, res) => {
 app.post('/api/admin/reload-users', async (req, res) => {
   const requester = req.headers['x-username'];
 
-  // Temporarily allow all users to reload for debugging
-  // TODO: Restrict to admins only after fixing role issue
+  // Check if requester is admin
+  const requesterUser = registeredUsers.get(requester);
+  if (!requesterUser || (requesterUser.role !== 'admin' && requesterUser.role !== 'superadmin')) {
+    return res.status(403).json({ success: false, message: 'Only admins can reload users' });
+  }
+
   console.log(`[RELOAD] Force reloading users from Supabase (requested by: ${requester})...`);
 
   const freshUsers = await loadUsersFromSupabase();
