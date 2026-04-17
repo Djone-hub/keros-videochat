@@ -406,6 +406,10 @@ function loadAdminUsersList() {
         const canChangeRole = isAdmin && !(currentUserRole === 'superadmin' && currentUser.username === user.username);
         const canKick = isAdmin && !(user.role === 'superadmin');  // Admins can kick, but not superadmins
         const canMute = isAdmin && !(user.role === 'superadmin');  // Admins can mute, but not superadmins
+        const canUnkick = isAdmin;  // Admins can unkick users
+
+        const kickedRooms = JSON.parse(user.kickedRooms || '[]');
+        const isKicked = kickedRooms.length > 0;
 
         return `
           <div class="admin-room-item ${user.isOnline ? '' : 'empty'}">
@@ -420,6 +424,11 @@ function loadAdminUsersList() {
                 ${user.isMuted ? `
                 <div class="admin-room-meta" style="font-size: 12px; margin-top: 4px; color: #faa61a;">
                   🔇 Замучен ${user.muteUntil && user.muteUntil > 0 ? `до ${new Date(user.muteUntil).toLocaleTimeString()}` : 'навсегда'}
+                </div>
+                ` : ''}
+                ${isKicked ? `
+                <div class="admin-room-meta" style="font-size: 12px; margin-top: 4px; color: #ed4245;">
+                  👢 Кикнут из ${kickedRooms.length} комнат
                 </div>
                 ` : ''}
               </div>
@@ -438,6 +447,9 @@ function loadAdminUsersList() {
               ` : ''}
               ${canKick ? `
                 <button onclick="kickUser('${user.username}')" class="admin-btn" style="padding: 6px 10px; font-size: 12px;" title="Кикнуть из комнаты">👢</button>
+              ` : ''}
+              ${canUnkick && isKicked ? `
+                <button onclick="unkickUser('${user.username}')" class="admin-btn" style="padding: 6px 10px; font-size: 12px; background: #3ba55d;" title="Разбанить из комнаты">🔓</button>
               ` : ''}
               ${canDelete ? `
                 <button onclick="deleteUser('${user.username}')" class="admin-btn danger" title="Удалить пользователя">🗑️</button>
@@ -534,6 +546,10 @@ function filterAdminUsers(searchTerm) {
     const canChangeRole = isAdmin && !(currentUserRole === 'superadmin' && currentUser.username === user.username);
     const canKick = isAdmin && !(user.role === 'superadmin');  // Admins can kick, but not superadmins
     const canMute = isAdmin && !(user.role === 'superadmin');  // Admins can mute, but not superadmins
+    const canUnkick = isAdmin;  // Admins can unkick users
+
+    const kickedRooms = JSON.parse(user.kickedRooms || '[]');
+    const isKicked = kickedRooms.length > 0;
 
     return `
       <div class="admin-room-item ${user.isOnline ? '' : 'empty'}">
@@ -548,6 +564,11 @@ function filterAdminUsers(searchTerm) {
             ${user.isMuted ? `
             <div class="admin-room-meta" style="font-size: 12px; margin-top: 4px; color: #faa61a;">
               🔇 Замучен ${user.muteUntil && user.muteUntil > 0 ? `до ${new Date(user.muteUntil).toLocaleTimeString()}` : 'навсегда'}
+            </div>
+            ` : ''}
+            ${isKicked ? `
+            <div class="admin-room-meta" style="font-size: 12px; margin-top: 4px; color: #ed4245;">
+              👢 Кикнут из ${kickedRooms.length} комнат
             </div>
             ` : ''}
           </div>
@@ -566,6 +587,9 @@ function filterAdminUsers(searchTerm) {
           ` : ''}
           ${canKick ? `
             <button onclick="kickUser('${user.username}')" class="admin-btn" style="padding: 6px 10px; font-size: 12px;" title="Кикнуть из комнаты">👢</button>
+          ` : ''}
+          ${canUnkick && isKicked ? `
+            <button onclick="unkickUser('${user.username}')" class="admin-btn" style="padding: 6px 10px; font-size: 12px; background: #3ba55d;" title="Разбанить из комнаты">🔓</button>
           ` : ''}
           ${canDelete ? `
             <button onclick="deleteUser('${user.username}')" class="admin-btn danger" title="Удалить пользователя">🗑️</button>
@@ -694,6 +718,84 @@ async function kickUser(username) {
       .catch(err => {
         console.error('Error kicking user:', err);
         alert('❌ Ошибка при кике');
+      });
+  });
+}
+
+async function unkickUser(username) {
+  // Fetch user data to get kicked rooms
+  const usersResponse = await fetch('/api/users');
+  const users = await usersResponse.json();
+  const user = users.find(u => u.username === username);
+
+  if (!user) {
+    alert('❌ Пользователь не найден');
+    return;
+  }
+
+  const kickedRooms = JSON.parse(user.kickedRooms || '[]');
+  if (kickedRooms.length === 0) {
+    alert('❌ Пользователь не кикнут ни из одной комнаты');
+    return;
+  }
+
+  // Fetch rooms from API to get room names
+  const roomsResponse = await fetch('/api/rooms');
+  const rooms = await roomsResponse.json();
+
+  // Create room options with names
+  const roomOptions = kickedRooms.map(roomId => {
+    const room = rooms.find(r => r.id === roomId);
+    const roomName = room ? room.name : roomId;
+    return `<option value="${roomId}">${roomName} (${roomId})</option>`;
+  }).join('');
+
+  // Show modal with room selection
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
+    z-index: 10000;
+  `;
+  modal.innerHTML = `
+    <div style="background: #36393f; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%;">
+      <h3 style="color: #fff; margin-top: 0;">Разбанить пользователя ${username}</h3>
+      <p style="color: #b9bbbe; margin-bottom: 15px;">Выберите комнату для разбана:</p>
+      <select id="unkickRoomSelect" style="width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 4px; border: none;">
+        ${roomOptions}
+      </select>
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button onclick="this.closest('div[style*=fixed]').remove()" class="admin-btn" style="padding: 10px 20px;">Отмена</button>
+        <button id="confirmUnkick" class="admin-btn" style="padding: 10px 20px; background: #3ba55d;">Разбанить</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  document.getElementById('confirmUnkick').addEventListener('click', async () => {
+    const roomId = document.getElementById('unkickRoomSelect').value;
+    modal.remove();
+
+    fetch(`/api/users/${username}/unkick`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Username': currentUser?.username || 'unknown'
+      },
+      body: JSON.stringify({ roomId })
+    })
+      .then(res => res.json())
+      .then(result => {
+        if (result.success) {
+          alert(`✅ Пользователь "${username}" разбанен из комнаты`);
+          loadAdminUsersList();
+        } else {
+          alert(`❌ Ошибка: ${result.message}`);
+        }
+      })
+      .catch(err => {
+        console.error('Error unkicking user:', err);
+        alert('❌ Ошибка при разбане');
       });
   });
 }

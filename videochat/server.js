@@ -534,6 +534,69 @@ app.post('/api/users/:username/kick', async (req, res) => {
   res.json({ success: true, message: `User ${username} kicked from room ${roomId}` });
 });
 
+// REST API endpoint to unkick user from room
+app.post('/api/users/:username/unkick', async (req, res) => {
+  const username = req.params.username;
+  const { roomId } = req.body;
+  const requester = req.headers['x-username'];
+
+  // Fetch fresh data from Supabase to verify requester role
+  const { data: requesterData, error: requesterError } = await supabase
+    .from('videochat_users')
+    .select('role')
+    .eq('username', requester)
+    .single();
+
+  if (requesterError || !requesterData) {
+    return res.status(403).json({ success: false, message: 'Requester not found' });
+  }
+
+  const isAdmin = requesterData.role === 'admin' || requesterData.role === 'superadmin';
+
+  if (!isAdmin) {
+    return res.status(403).json({ success: false, message: 'Only admins can unkick users' });
+  }
+
+  // Fetch target user data from Supabase
+  const { data: targetUser, error: targetError } = await supabase
+    .from('videochat_users')
+    .select('*')
+    .eq('username', username)
+    .single();
+
+  if (targetError || !targetUser) {
+    return res.status(404).json({ success: false, message: 'User not found' });
+  }
+
+  // Update user's kicked rooms in memory
+  const memoryUser = registeredUsers.get(username);
+  let kickedRooms = memoryUser ? JSON.parse(memoryUser.kickedRooms || '[]') : JSON.parse(targetUser.kicked_rooms || '[]');
+  const index = kickedRooms.indexOf(roomId);
+  if (index > -1) {
+    kickedRooms.splice(index, 1);
+    if (memoryUser) {
+      memoryUser.kickedRooms = JSON.stringify(kickedRooms);
+      registeredUsers.set(username, memoryUser);
+    }
+  }
+
+  // Update user in Supabase
+  const { error } = await supabase
+    .from('videochat_users')
+    .update({ kicked_rooms: JSON.stringify(kickedRooms) })
+    .eq('username', username);
+
+  if (error) {
+    console.error('[UNKICK] Error updating user kicked rooms in Supabase:', error);
+    return res.status(500).json({ success: false, message: 'Error unkicking user' });
+  }
+
+  console.log(`[UNKICK] User ${username} unkicked from room ${roomId} by ${requester}`);
+  io.emit('users-updated');
+
+  res.json({ success: true, message: `User ${username} unkicked from room ${roomId}` });
+});
+
 // REST API endpoint to delete a message
 app.delete('/api/messages/:messageId', (req, res) => {
   const messageId = req.params.messageId;
