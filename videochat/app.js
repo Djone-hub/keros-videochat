@@ -2540,37 +2540,53 @@ socket.on('active-screen-shares', (userIds) => {
 });
 
 // Handle request to refresh screen offer (when new user joins and needs stream)
-socket.on('refresh-screen-offer', async ({ requesterId, targetId }) => {
-  console.log(`[SCREEN] Received refresh request from ${requesterId}, target: ${targetId}`);
-  console.log(`[SCREEN] My socket.id: ${socket.id}, isScreenSharing: ${isScreenSharing}`);
+socket.on('refresh-screen-offer', async ({ requesterId }) => {
+  console.log('[SCREEN] Received refresh-screen-offer from:', requesterId);
+  console.log('[SCREEN] isScreenSharing:', isScreenSharing, 'screenStream exists:', !!screenStream);
 
-  // Only respond if we are the target and we're screen sharing
-  if (targetId === socket.id && isScreenSharing) {
-    console.log(`[SCREEN] Re-sending screen stream to ${requesterId}`);
-    // Create peer connection if not exists
-    let pc = peers.get(requesterId);
-    if (!pc) {
-      try {
-        console.log(`[SCREEN] Creating new peer connection for ${requesterId}`);
-        pc = await createPeerConnection(requesterId);
-      } catch (e) {
-        console.error('[SCREEN] Error creating peer connection:', e);
-        return;
-      }
+  // Only respond if we are actively screen sharing
+  if (isScreenSharing && screenStream) {
+    console.log('[SCREEN] We are screen sharing, creating new peer connection for requester:', requesterId);
+
+    const screenTrack = screenStream.getVideoTracks()[0];
+    if (screenTrack) {
+      console.log('[SCREEN] Screen track found:', screenTrack.label, 'enabled:', screenTrack.enabled);
+      const screenSettings = screenTrack.getSettings();
+      console.log('[SCREEN] Screen track settings:', screenSettings);
     } else {
-      console.log(`[SCREEN] Peer connection already exists for ${requesterId}`);
+      console.warn('[SCREEN] No screen track found in screenStream!');
     }
-    // Create new offer to trigger renegotiation
-    try {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socket.emit('offer', requesterId, offer);
-      console.log(`[SCREEN] Re-sent offer to ${requesterId}`);
-    } catch (e) {
-      console.error('[SCREEN] Error creating offer:', e);
+
+    // Create peer connection if it doesn't exist
+    if (!peers.has(requesterId)) {
+      console.log('[SCREEN] Creating peer connection for requester:', requesterId);
+      createPeerConnection(requesterId);
     }
+
+    const pc = peers.get(requesterId);
+    if (!pc) {
+      console.error('[SCREEN] Failed to create peer connection for requester:', requesterId);
+      return;
+    }
+
+    // Send a new offer with the screen track
+    setTimeout(async () => {
+      try {
+        console.log('[SCREEN] Creating offer with screen track for:', requesterId);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit('offer', {
+          to: requesterId,
+          from: socket.id,
+          sdp: pc.localDescription
+        });
+        console.log('[SCREEN] Sent new offer with screen track to:', requesterId);
+      } catch (e) {
+        console.error('[SCREEN] Error creating offer for screen share:', e);
+      }
+    }, 100);
   } else {
-    console.log(`[SCREEN] Ignoring refresh request - not target (${targetId !== socket.id}) or not screen sharing (${!isScreenSharing})`);
+    console.log('[SCREEN] Not screen sharing, ignoring refresh-screen-offer');
   }
 });
 
