@@ -2601,8 +2601,7 @@ socket.on('screen-share-stopped', (userId) => {
 
   console.log('[SCREEN] Screen share users after delete:', Array.from(screenShareUsers));
 
-  // Remove screen container and recreate main container to ensure clean state
-  // Add delay to allow renegotiation to complete
+  // Remove screen container only - main container will be updated via renegotiation
   setTimeout(() => {
     console.log('[SCREEN] Looking for screen container:', `video-${userId}-screen`);
     const screenContainer = document.getElementById(`video-${userId}-screen`);
@@ -2610,16 +2609,6 @@ socket.on('screen-share-stopped', (userId) => {
     if (screenContainer) {
       screenContainer.remove();
       console.log('[SCREEN] Removed screen container for:', userId);
-    }
-    
-    // Also remove and recreate the main video container to ensure clean state
-    console.log('[SCREEN] Looking for main container:', `video-${userId}`);
-    const mainContainer = document.getElementById(`video-${userId}`);
-    console.log('[SCREEN] Main container found:', !!mainContainer);
-    if (mainContainer) {
-      console.log('[SCREEN] Removing and recreating main container for:', userId);
-      mainContainer.remove();
-      // The main container will be recreated automatically via addVideoStream when renegotiation completes
     }
   }, 500);
 });
