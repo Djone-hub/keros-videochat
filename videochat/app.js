@@ -3848,22 +3848,24 @@ function toggleSettings() {
 
 function updateRemoteVolumeControls() {
   const container = document.getElementById('remoteVolumeControls');
-  
-  if (peers.size === 0) {
+
+  // Use activeUsers instead of peers to show all users
+  const otherUsers = Array.from(activeUsers.entries()).filter(([id]) => id !== socket.id);
+
+  if (otherUsers.length === 0) {
     container.innerHTML = '<p style="color: #72767d; font-size: 12px;">Нет других участников</p>';
     return;
   }
-  
+
   container.innerHTML = '';
-  peers.forEach((pc, id) => {
-    const user = activeUsers.get(id);
+  otherUsers.forEach(([id, user]) => {
     const name = user ? user.name : 'Участник';
-    
+
     // Get current volume from video element (default 50%)
     const videoContainer = document.getElementById(`video-${id}`);
     const video = videoContainer ? videoContainer.querySelector('video') : null;
     const currentVolume = video ? Math.round(video.volume * 100) : 50;
-    
+
     const div = document.createElement('div');
     div.className = 'remote-volume-item';
     div.innerHTML = `
@@ -3876,20 +3878,33 @@ function updateRemoteVolumeControls() {
 }
 
 function setRemoteVolume(userId, value) {
+  // Try to set volume on video element first
   const container = document.getElementById(`video-${userId}`);
   if (container) {
     const video = container.querySelector('video');
     if (video) {
       video.volume = value / 100;
-      console.log(`Volume for ${userId} set to ${value}%`);
+      console.log(`[VOLUME] Video volume for ${userId} set to ${value}%`);
     }
   }
-  
+
+  // Also try to set volume on screen container if exists
+  const screenContainer = document.getElementById(`video-${userId}-screen`);
+  if (screenContainer) {
+    const video = screenContainer.querySelector('video');
+    if (video) {
+      video.volume = value / 100;
+      console.log(`[VOLUME] Screen video volume for ${userId} set to ${value}%`);
+    }
+  }
+
   // Also update volume in settings panel if it exists
   const settingsVolume = document.querySelector(`#remoteVolumeControls input[data-userid="${userId}"]`);
   if (settingsVolume) {
     settingsVolume.value = value;
   }
+
+  console.log(`[VOLUME] Volume for ${userId} set to ${value}%`);
 }
 
 function uploadAvatar(input) {
