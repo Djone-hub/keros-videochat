@@ -1787,6 +1787,20 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     const label = document.createElement('div');
     label.className = 'video-label';
     label.textContent = isLocal ? `${name} (Вы)` : name;
+
+    // Add avatar placeholder for audio-only users (like Discord)
+    if (!isLocal && (!stream.getVideoTracks() || stream.getVideoTracks().length === 0)) {
+      const avatarPlaceholder = document.createElement('div');
+      avatarPlaceholder.className = 'avatar-placeholder';
+      const user = activeUsers.get(id);
+      const avatar = user ? user.avatar : null;
+      if (avatar) {
+        avatarPlaceholder.innerHTML = `<img src="${avatar}" alt="${name}">`;
+      } else {
+        avatarPlaceholder.textContent = name.charAt(0).toUpperCase();
+      }
+      container.appendChild(avatarPlaceholder);
+    }
     
     if (!isLocal) {
       const volumeControl = document.createElement('div');
