@@ -2749,20 +2749,21 @@ function toggleMic() {
   }
 }
 
-function toggleCam() {
+async function toggleCam() {
   if (localStream) {
     const videoTrack = localStream.getVideoTracks()[0];
     if (videoTrack) {
+      // Toggle existing video track
       videoTrack.enabled = !videoTrack.enabled;
       isCamOn = videoTrack.enabled;
-      
+
       // Play sound
       if (isCamOn) {
         sounds.camOn();
       } else {
         sounds.camOff();
       }
-      
+
       const btn = document.getElementById('camBtn');
       if (isCamOn) {
         btn.classList.remove('danger');
@@ -2770,6 +2771,40 @@ function toggleCam() {
       } else {
         btn.classList.add('danger');
         btn.querySelector('.label').textContent = 'Камера выкл';
+      }
+    } else {
+      // No video track exists - request camera
+      try {
+        console.log('[CAM] Requesting camera...');
+        const camStream = await navigator.mediaDevices.getUserMedia({
+          video: selectedVideoInput ? { deviceId: { exact: selectedVideoInput } } : true,
+          audio: false
+        });
+
+        const newVideoTrack = camStream.getVideoTracks()[0];
+        if (newVideoTrack) {
+          localStream.addTrack(newVideoTrack);
+          isCamOn = true;
+
+          // Add to all peer connections
+          peers.forEach(pc => {
+            pc.addTrack(newVideoTrack, localStream);
+          });
+
+          // Update local video display
+          addVideoStream('local', localStream, currentUser.username, true, false);
+
+          sounds.camOn();
+
+          const btn = document.getElementById('camBtn');
+          btn.classList.remove('danger');
+          btn.querySelector('.label').textContent = 'Камера';
+
+          console.log('[CAM] Camera added successfully');
+        }
+      } catch (err) {
+        console.error('[CAM] Error requesting camera:', err);
+        showAlertModal('Не удалось получить доступ к камере. Проверьте разрешения.', 'error');
       }
     }
   }
