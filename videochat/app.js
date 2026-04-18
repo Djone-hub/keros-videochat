@@ -2457,9 +2457,12 @@ socket.on('room-error', (error) => {
 socket.on('user-joined', async (user) => {
   console.log('[USER-JOINED] Received user-joined:', user.id, user.name);
 
+  // Play sound when someone joins
+  await sounds.userJoin();
+
   // Skip if already connected with this exact socket.id
   if (activeUsers.has(user.id) || peers.has(user.id)) {
-    console.log('[USER-JOINED] User already connected with this socket.id, skipping:', user.id);
+    console.log('[USER-JOINED] User already connected with this exact socket.id, skipping:', user.id);
     return;
   }
 
@@ -2532,8 +2535,10 @@ socket.on('user-deleted', (username) => {
   }
 });
 
-socket.on('user-left', (userId) => {
-  // REMOVED: sounds.userLeave() - sound should only play for the user who left, not everyone in room
+socket.on('user-left', async (userId) => {
+  // Play sound when someone leaves
+  await sounds.userLeave();
+
   const user = activeUsers.get(userId);
   removeVideoStream(userId);
   if (peers.has(userId)) {
