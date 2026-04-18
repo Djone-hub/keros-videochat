@@ -1813,14 +1813,39 @@ function startSpeakingDetection() {
 }
 
 async function createPeerConnection(userId) {
+  console.log(`[PEER] Creating peer connection for user: ${userId}, isScreenSharing: ${isScreenSharing}`);
   const pc = new RTCPeerConnection({
     ...iceServers
   });
 
+  console.log(`[PEER] Adding local tracks to peer connection for ${userId}`);
   localStream.getTracks().forEach(track => {
+    console.log(`[PEER] Adding track: ${track.kind}, label: ${track.label}, enabled: ${track.enabled}`);
     pc.addTrack(track, localStream);
   });
-  
+  console.log(`[PEER] Total tracks added to peer ${userId}: ${localStream.getTracks().length}`);
+
+  // If screen sharing, replace video track immediately
+  if (isScreenSharing && screenStream) {
+    console.log(`[PEER] Screen sharing active, replacing video track for peer ${userId}`);
+    setTimeout(async () => {
+      try {
+        const senders = pc.getSenders();
+        const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+        if (videoSender) {
+          const screenTrack = screenStream.getVideoTracks()[0];
+          if (screenTrack) {
+            console.log(`[PEER] Replacing video track with screen track for peer ${userId}`);
+            await videoSender.replaceTrack(screenTrack);
+            console.log(`[PEER] Video track replaced successfully for peer ${userId}`);
+          }
+        }
+      } catch (e) {
+        console.error(`[PEER] Error replacing screen track for peer ${userId}:`, e);
+      }
+    }, 100);
+  }
+
   pc.ontrack = (e) => {
     const stream = e.streams[0];
     const videoTrack = stream.getVideoTracks()[0];
@@ -2641,14 +2666,23 @@ async function toggleScreen() {
       };
       
       // Replace camera track with screen track in all peer connections
-      peers.forEach(pc => {
+      console.log(`[SCREEN] Replacing video track in ${peers.size} peer connections`);
+      let replacedCount = 0;
+      peers.forEach((pc, peerId) => {
         const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
         if (sender) {
-          sender.replaceTrack(screenTrack).catch(err => {
-            console.error('[SCREEN] Error replacing track:', err);
+          console.log(`[SCREEN] Replacing track for peer ${peerId}, current track:`, sender.track?.label);
+          sender.replaceTrack(screenTrack).then(() => {
+            console.log(`[SCREEN] Track replaced successfully for peer ${peerId}`);
+            replacedCount++;
+          }).catch(err => {
+            console.error('[SCREEN] Error replacing track for peer', peerId, ':', err);
           });
+        } else {
+          console.warn(`[SCREEN] No video sender found for peer ${peerId}`);
         }
       });
+      console.log(`[SCREEN] Track replacement complete: ${replacedCount}/${peers.size} replaced`);
       
       // Remove local camera preview - no need to see own screen share
       const localContainer = document.getElementById('video-local');
