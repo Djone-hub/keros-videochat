@@ -3010,7 +3010,7 @@ async function toggleScreen() {
       previewContainer.appendChild(previewVideo);
       previewContainer.appendChild(previewLabel);
       document.getElementById('videoGrid').appendChild(previewContainer);
-      
+
       isScreenSharing = true;
       localStorage.setItem('keroschat_screen_sharing', 'true');
       socket.emit('screen-share-started');
