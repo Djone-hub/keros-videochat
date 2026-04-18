@@ -2276,7 +2276,17 @@ async function createPeerConnection(userId, forceScreen = false) {
   pc.onicecandidate = (e) => {
     if (e.candidate) {
       console.log(`[ICE] Candidate for ${userId}:`, e.candidate.type, e.candidate.protocol, e.candidate.address, e.candidate.port);
-      socket.emit('ice-candidate', userId, e.candidate);
+      // Serialize candidate as plain object to avoid Socket.IO serialization issues
+      const candidateObj = {
+        candidate: e.candidate.candidate,
+        sdpMid: e.candidate.sdpMid,
+        sdpMLineIndex: e.candidate.sdpMLineIndex,
+        type: e.candidate.type,
+        protocol: e.candidate.protocol,
+        address: e.candidate.address,
+        port: e.candidate.port
+      };
+      socket.emit('ice-candidate', userId, candidateObj);
     } else {
       console.log(`[ICE] ICE gathering complete for ${userId}`);
     }
@@ -2645,7 +2655,13 @@ socket.on('ice-candidate', async (userId, candidate) => {
   // ICE candidate received
   console.log(`[ICE] Received candidate from ${userId}:`, candidate?.type, candidate?.protocol, candidate?.address, candidate?.port);
   if (peers.has(userId)) {
-    await peers.get(userId).addIceCandidate(new RTCIceCandidate(candidate));
+    // Create RTCIceCandidate from plain object
+    const iceCandidate = new RTCIceCandidate({
+      candidate: candidate.candidate,
+      sdpMid: candidate.sdpMid,
+      sdpMLineIndex: candidate.sdpMLineIndex
+    });
+    await peers.get(userId).addIceCandidate(iceCandidate);
     console.log(`[ICE] Candidate added for ${userId}`);
   } else {
     console.warn(`[ICE] No peer for ICE candidate from ${userId}`);
