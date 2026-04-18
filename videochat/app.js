@@ -2769,8 +2769,9 @@ async function toggleScreen() {
     }
 
     // Remove screen track from all peer connections (keep camera track)
-    peers.forEach(pc => {
+    peers.forEach(async (pc, peerId) => {
       const senders = pc.getSenders();
+      let removed = false;
       senders.forEach(sender => {
         if (sender.track && sender.track.kind === 'video') {
           const track = sender.track;
@@ -2782,9 +2783,22 @@ async function toggleScreen() {
             sender.replaceTrack(null).catch(err => {
               console.error('[SCREEN] Error removing screen track:', err);
             });
+            removed = true;
           }
         }
       });
+
+      // Renegotiate to notify remote peer that screen track is removed
+      if (removed) {
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socket.emit('offer', peerId, offer);
+          console.log(`[SCREEN] Renegotiation offer sent after removing screen track for peer ${peerId}`);
+        } catch (renegErr) {
+          console.error(`[SCREEN] Error renegotiating for peer ${peerId}:`, renegErr);
+        }
+      }
     });
 
     // Restore local container (camera continues to work)
@@ -2861,11 +2875,21 @@ async function toggleScreen() {
       // Add screen track to all peer connections (Discord-style: camera + screen simultaneously)
       console.log(`[SCREEN] Adding screen track to ${peers.size} peer connections`);
       let addedCount = 0;
-      peers.forEach((pc, peerId) => {
+      peers.forEach(async (pc, peerId) => {
         try {
           pc.addTrack(screenTrack, screenStream);
           console.log(`[SCREEN] Screen track added successfully for peer ${peerId}`);
           addedCount++;
+
+          // Renegotiate to send the new track to remote peer
+          try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socket.emit('offer', peerId, offer);
+            console.log(`[SCREEN] Renegotiation offer sent for peer ${peerId}`);
+          } catch (renegErr) {
+            console.error(`[SCREEN] Error renegotiating for peer ${peerId}:`, renegErr);
+          }
         } catch (err) {
           console.error(`[SCREEN] Error adding screen track for peer ${peerId}:`, err);
         }
