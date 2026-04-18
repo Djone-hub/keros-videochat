@@ -2405,21 +2405,13 @@ socket.on('offer', async (userId, offer) => {
     const existingSenders = existingPc.getSenders();
     console.log('[OFFER] Existing peer connection found, senders:', existingSenders.map(s => ({ kind: s.track?.kind, label: s.track?.label })));
     
-    // Check if new offer has more senders (indicates renegotiation with screen track)
-    // Close old connection and create new one
-    console.log('[OFFER] Closing old peer connection for renegotiation');
-    existingPc.close();
-    peers.delete(userId);
-    removeVideoStream(userId);
-    
-    // Create new peer connection
-    const pc = await createPeerConnection(userId);
-    console.log('[OFFER] Created new peer connection for renegotiation');
-    await pc.setRemoteDescription(offer);
+    // Use existing peer connection for renegotiation
+    console.log('[OFFER] Using existing peer connection for renegotiation');
+    await existingPc.setRemoteDescription(offer);
     console.log('[OFFER] Remote description set');
-    const answer = await pc.createAnswer();
+    const answer = await existingPc.createAnswer();
     console.log('[OFFER] Answer created, type:', answer.type);
-    await pc.setLocalDescription(answer);
+    await existingPc.setLocalDescription(answer);
     console.log('[OFFER] Local description set');
     socket.emit('answer', userId, answer);
     console.log('[OFFER] Answer sent to:', userId);
