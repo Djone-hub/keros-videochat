@@ -1380,11 +1380,15 @@ async function joinRoomById(roomId) {
   }
 
   // Find room from allRooms (loaded from server)
+  console.log('[JOIN] Looking for room:', roomId);
+  console.log('[JOIN] Available rooms:', allRooms.map(r => ({id: r.id, name: r.name})));
   const room = allRooms.find(r => r.id === roomId);
   if (!room) {
+    console.error('[JOIN] Room not found:', roomId);
     showAlertModal('Комната не найдена', 'error');
     return;
   }
+  console.log('[JOIN] Room found:', room.name);
 
   currentRoom = roomId;
   currentRoomName = room.name;
@@ -1514,8 +1518,10 @@ async function joinRoomById(roomId) {
     isScreenSharing: isScreenSharing
   });
 
-  // Play join sound for local user
-  playSound('join');
+  // Play join sound for local user (if function exists)
+  if (typeof playSound === 'function') {
+    playSound('join');
+  }
 
   // Show room UI
   document.getElementById('lobby').classList.remove('active');
