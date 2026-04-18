@@ -514,7 +514,14 @@ function updatePingDisplay() {
 const iceServers = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    // Free TURN servers (for testing only - replace with your own TURN server for production)
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
   ]
 };
 
@@ -2232,7 +2239,7 @@ async function createPeerConnection(userId, forceScreen = false) {
 
   pc.onicecandidate = (e) => {
     if (e.candidate) {
-      console.log(`[ICE] Candidate for ${userId}:`, e.candidate.type, e.candidate.protocol);
+      console.log(`[ICE] Candidate for ${userId}:`, e.candidate.type, e.candidate.protocol, e.candidate.address, e.candidate.port);
       socket.emit('ice-candidate', userId, e.candidate);
     } else {
       console.log(`[ICE] ICE gathering complete for ${userId}`);
@@ -2553,7 +2560,7 @@ socket.on('answer', async (userId, answer) => {
 
 socket.on('ice-candidate', async (userId, candidate) => {
   // ICE candidate received
-  console.log(`[ICE] Received candidate from ${userId}:`, candidate.type, candidate.protocol);
+  console.log(`[ICE] Received candidate from ${userId}:`, candidate?.type, candidate?.protocol, candidate?.address, candidate?.port);
   if (peers.has(userId)) {
     await peers.get(userId).addIceCandidate(new RTCIceCandidate(candidate));
     console.log(`[ICE] Candidate added for ${userId}`);
