@@ -3017,6 +3017,13 @@ async function toggleScreen() {
         throw new Error('No video track in screen share');
       }
       
+      // Log screen track properties
+      console.log('[SCREEN] Screen track label:', screenTrack.label);
+      console.log('[SCREEN] Screen track enabled:', screenTrack.enabled);
+      console.log('[SCREEN] Screen track readyState:', screenTrack.readyState);
+      const settings = screenTrack.getSettings();
+      console.log('[SCREEN] Screen track settings:', JSON.stringify(settings));
+      
       // Handle when user stops sharing via browser UI
       screenTrack.onended = () => {
         console.log('[SCREEN] Track ended via browser');
