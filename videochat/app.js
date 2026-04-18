@@ -1445,6 +1445,7 @@ async function joinRoomById(roomId) {
   try {
     localStream = await navigator.mediaDevices.getUserMedia(constraints);
     console.log('[TRACK] Local track audio enabled:', localStream.getAudioTracks()[0]?.enabled);
+    console.log('[TRACK] Local track audio muted:', localStream.getAudioTracks()[0]?.muted);
     console.log('[TRACK] Local track video enabled:', localStream.getVideoTracks()[0]?.enabled);
 
     // Detect OBS Virtual Camera (log only, don't block)
@@ -2087,7 +2088,12 @@ async function createPeerConnection(userId, forceScreen = false) {
 
   // Add all tracks from localStream (camera + audio)
   localStream.getTracks().forEach(track => {
-    console.log(`[PEER] Adding track: ${track.kind}, label: ${track.label}, enabled: ${track.enabled}`);
+    console.log(`[PEER] Adding track: ${track.kind}, label: ${track.label}, enabled: ${track.enabled}, muted: ${track.muted}`);
+    // Ensure audio track is not muted
+    if (track.kind === 'audio' && track.muted) {
+      console.warn(`[PEER] WARNING: Local audio track is muted! Attempting to unmute`);
+      track.enabled = true;
+    }
     pc.addTrack(track, localStream);
   });
 
@@ -2130,6 +2136,25 @@ async function createPeerConnection(userId, forceScreen = false) {
     // Log audio track specifically
     if (audioTrack) {
       console.log(`[AUDIO] Received audio from ${userId}: enabled=${audioTrack.enabled}, muted=${audioTrack.muted}, state=${audioTrack.readyState}`);
+
+      // Try to unmute the track if it's muted
+      if (audioTrack.muted && audioTrack.enabled) {
+        console.log(`[AUDIO] Attempting to unmute audio track for ${userId}`);
+        audioTrack.enabled = true;
+        // Wait a bit and check if it worked
+        setTimeout(() => {
+          console.log(`[AUDIO] After unmute attempt - muted: ${audioTrack.muted}, enabled: ${audioTrack.enabled}`);
+        }, 100);
+      }
+
+      // Retry mechanism: if audio track is still muted, request renegotiation
+      if (audioTrack.muted) {
+        console.log(`[AUDIO] Audio track is muted for ${userId}, requesting renegotiation retry`);
+        setTimeout(() => {
+          console.log(`[AUDIO] Sending request-screen-renegotiation retry for ${userId} (audio fix)`);
+          socket.emit('request-screen-renegotiation', userId);
+        }, 500);
+      }
     } else {
       console.warn(`[AUDIO] No audio track received from ${userId}!`);
     }
