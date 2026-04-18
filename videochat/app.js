@@ -2071,8 +2071,12 @@ async function createPeerConnection(userId) {
     const screenTrack = screenStream.getVideoTracks()[0];
     if (screenTrack) {
       console.log(`[PEER] Screen track properties: label=${screenTrack.label}, enabled=${screenTrack.enabled}`);
-      pc.addTrack(screenTrack, screenStream);
-      console.log(`[PEER] Screen track added to peer ${userId} (in addition to camera)`);
+      // Use addTransceiver for screen track
+      pc.addTransceiver('video', {
+        streams: [screenStream],
+        direction: 'sendrecv'
+      });
+      console.log(`[PEER] Screen transceiver added to peer ${userId} (in addition to camera)`);
     }
   }
   console.log(`[PEER] Total tracks added to peer ${userId}`);
@@ -2780,19 +2784,20 @@ async function toggleScreen() {
 
     // Remove screen track from all peer connections (keep camera track)
     peers.forEach(async (pc, peerId) => {
-      const senders = pc.getSenders();
+      const transceivers = pc.getTransceivers();
       let removed = false;
-      senders.forEach(sender => {
-        if (sender.track && sender.track.kind === 'video') {
-          const track = sender.track;
+      transceivers.forEach(transceiver => {
+        if (transceiver.sender.track && transceiver.sender.track.kind === 'video') {
+          const track = transceiver.sender.track;
           // Check if this is a screen track by label
           if (track.label && (track.label.toLowerCase().includes('screen') ||
               track.label.toLowerCase().includes('display') ||
               track.label.toLowerCase().includes('window'))) {
-            console.log('[SCREEN] Removing screen track from peer');
-            sender.replaceTrack(null).catch(err => {
+            console.log('[SCREEN] Removing screen transceiver from peer');
+            transceiver.sender.replaceTrack(null).catch(err => {
               console.error('[SCREEN] Error removing screen track:', err);
             });
+            transceiver.stop();
             removed = true;
           }
         }
@@ -2823,16 +2828,37 @@ async function toggleScreen() {
       // Remove screen-share class
       localContainer.classList.remove('screen-share');
 
-      // Restore camera stream (it was never stopped)
+      // Check if we have camera track
+      const hasVideoTrack = localStream && localStream.getVideoTracks().length > 0;
       const localVideo = localContainer.querySelector('video');
-      if (localVideo && localStream) {
+
+      if (hasVideoTrack && localVideo) {
+        // Restore camera stream
         localVideo.srcObject = localStream;
         localVideo.playbackRate = 1.0;
         localVideo.style.objectFit = 'cover';
         localVideo.style.transform = 'scaleX(-1)';
+        localVideo.style.display = 'block';
+        console.log('[SCREEN] Local video restored with camera stream');
+      } else {
+        // No camera - restore avatar placeholder
+        if (localVideo) {
+          localVideo.style.display = 'none';
+        }
+        // Add avatar placeholder if not exists
+        if (!localContainer.querySelector('.avatar-placeholder')) {
+          const avatarPlaceholder = document.createElement('div');
+          avatarPlaceholder.className = 'avatar-placeholder';
+          const avatar = userAvatar || localStorage.getItem(`keroschat_avatar_${currentUser.username}`);
+          if (avatar) {
+            avatarPlaceholder.innerHTML = `<img src="${avatar}" alt="${currentUser.username}">`;
+          } else {
+            avatarPlaceholder.textContent = currentUser.username.charAt(0).toUpperCase();
+          }
+          localContainer.appendChild(avatarPlaceholder);
+          console.log('[SCREEN] Avatar placeholder restored (no camera)');
+        }
       }
-
-      console.log('[SCREEN] Local container restored (camera still active)');
     }
     
     isScreenSharing = false;
@@ -2887,8 +2913,12 @@ async function toggleScreen() {
       let addedCount = 0;
       peers.forEach(async (pc, peerId) => {
         try {
-          pc.addTrack(screenTrack, screenStream);
-          console.log(`[SCREEN] Screen track added successfully for peer ${peerId}`);
+          // Use addTransceiver for renegotiation (better than addTrack)
+          const transceiver = pc.addTransceiver('video', {
+            streams: [screenStream],
+            direction: 'sendrecv'
+          });
+          console.log(`[SCREEN] Screen transceiver added for peer ${peerId}`);
           addedCount++;
 
           // Renegotiate to send the new track to remote peer
