@@ -1374,7 +1374,20 @@ function generateRandomId(length) {
 // ========== ROOM ==========
 
 async function joinRoomById(roomId) {
+  if (!currentUser) {
+    showLoginModal();
+    return;
+  }
+
+  const storedRoom = roomStore.get(roomId);
+  if (!storedRoom) {
+    showAlertModal('Комната не найдена', 'error');
+    return;
+  }
+
   currentRoom = roomId;
+  currentRoomName = storedRoom.name;
+  currentRoomAvatar = storedRoom.avatar;
 
   // Check if user was screen sharing before (for restoration after join)
   const wasScreenSharing = localStorage.getItem('keroschat_screen_sharing') === 'true';
@@ -1382,106 +1395,159 @@ async function joinRoomById(roomId) {
   // Stop screen sharing temporarily when joining (will restore after successful join)
   if (isScreenSharing) {
     console.log('[SCREEN] Stopping screen share temporarily for room join');
-    toggleScreen();
   }
 
   // Check if user is kicked from this room
-  if (currentUser && currentUser.kickedRooms) {
-    const kickedRooms = JSON.parse(currentUser.kickedRooms || '[]');
-    if (kickedRooms.includes(roomId)) {
-      showAlertModal('👢 Вы были выгнаны из этой комнаты и не можете вернуться', 'error');
-      return;
-    }
-  }
-
-  // Find room name from stored rooms (local or server)
-  const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
-  const localRoom = rooms.find(r => r.id === roomId);
-  const serverRoom = serverRooms.find(r => r.id === roomId);
-  const room = localRoom || serverRoom;
-  currentRoomName = room ? room.name : roomId;
-  currentRoomAvatar = room ? room.avatar : null;
-
-  addLogEntry('Комната', `"${currentRoomName}" - вы подключились`);
-
-  // Request media with selected devices
-  try {
-    const constraints = {
-      audio: selectedAudioInput ? { deviceId: { exact: selectedAudioInput } } : true,
-      video: selectedVideoInput ? { deviceId: { exact: selectedVideoInput } } : true
-    };
-
-    console.log('[DEVICES] Requesting media with constraints:', constraints);
-
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia(constraints);
-    } catch (videoErr) {
-      // If video fails, try audio-only
-      console.warn('[DEVICES] Video failed, trying audio-only:', videoErr);
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        console.log('[DEVICES] Audio-only stream successful');
-        showAlertModal('Камера не найдена или недоступна. Вход только с микрофоном.', 'warning');
-      } catch (audioErr) {
-        console.error('[DEVICES] Audio also failed:', audioErr);
-        showAlertModal('Ошибка доступа к микрофону: ' + audioErr.message, 'error');
-        return;
-      }
-    }
-
-    // Apply audio output device to local video if selected
-    if (selectedAudioOutput) {
-      // Note: setSinkId doesn't work for local video, only for remote videos
-      console.log('[DEVICES] Audio output device selected (will apply to remote videos):', selectedAudioOutput);
-    }
-
-    // Ensure all tracks are enabled
-    localStream.getTracks().forEach(track => {
-      track.enabled = true;
-      console.log(`[TRACK] Local track ${track.kind} enabled:`, track.enabled);
-    });
-  } catch (err) {
-    console.error('[DEVICES] Error requesting media:', err);
-    showAlertModal('Ошибка доступа к камере/микрофону: ' + err.message, 'error');
+  const kickedRooms = JSON.parse(localStorage.getItem('keroschat_kicked_rooms') || '[]');
+  if (kickedRooms.includes(roomId)) {
+    showAlertModal('Вы были выгнаны из этой комнаты', 'error');
     return;
   }
 
-  // Join socket room with avatar, room name and room avatar
-  socket.emit('join-room', roomId, currentUser.username, userAvatar, currentRoomName, currentRoomAvatar);
+  // Request media stream with selected devices
+  const constraints = {
+    audio: selectedAudioInput ? { deviceId: { exact: selectedAudioInput } } : true,
+    video: isCamOn ? (selectedVideoInput ? { deviceId: { exact: selectedVideoInput } } : true) : false
+  };
 
-  // TEMPORARILY DISABLED: Load channels (causing video display issues)
-  // loadChannelsForRoom();
+  console.log('[DEVICES] Requesting media with constraints:', constraints);
 
-  // Play sound for local user entering room
-  sounds.userJoin();
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia(constraints);
+    console.log('[TRACK] Local track audio enabled:', localStream.getAudioTracks()[0]?.enabled);
+    console.log('[TRACK] Local track video enabled:', localStream.getVideoTracks()[0]?.enabled);
 
-  // Show room UI
-  showRoomUI();
-
-  // Restore screen share if it was active before leaving the room
-  if (wasScreenSharing) {
-    console.log('[SCREEN] Restoring screen share after room join');
-    setTimeout(async () => {
-      try {
-        await toggleScreen();
-        console.log('[SCREEN] Screen share restored successfully');
-      } catch (e) {
-        console.error('[SCREEN] Error restoring screen share:', e);
-        localStorage.removeItem('keroschat_screen_sharing');
+    // Detect and block OBS Virtual Camera
+    const videoTrack = localStream.getVideoTracks()[0];
+    if (videoTrack) {
+      const label = videoTrack.label.toLowerCase();
+      console.log('[DEVICES] Video track label:', videoTrack.label);
+      if (label.includes('obs') || label.includes('virtual')) {
+        console.warn('[DEVICES] OBS Virtual Camera detected, blocking it');
+        showAlertModal('⚠️ ОБНАРУЖЕН OBS Virtual Camera!\n\nЭто может вызвать проблемы с демонстрацией экрана (чёрный экран).\n\nПожалуйста, отключите OBS Virtual Camera в OBS и используйте обычную камеру или войдите без камеры.\n\nСейчас вы войдёте только с микрофоном.', 'error');
+        // Stop the video track and request audio-only
+        videoTrack.stop();
+        localStream.removeTrack(videoTrack);
+        // Create audio-only stream
+        const audioTrack = localStream.getAudioTracks()[0];
+        localStream = new MediaStream([audioTrack]);
+        console.log('[DEVICES] Switched to audio-only mode');
       }
-    }, 1000); // Wait 1 second for peer connections to establish
+    }
+
+    // Stop mic level monitoring if running
+    if (micLevelInterval) {
+      clearInterval(micLevelInterval);
+      micLevelInterval = null;
+      console.log('[MIC LEVEL] Monitoring stopped');
+    }
+  } catch (err) {
+    console.error('[DEVICES] Error getting media:', err);
+
+    // Fallback to default devices if selected devices fail
+    if (selectedAudioInput || selectedVideoInput) {
+      console.log('[DEVICES] Fallback to default devices');
+      selectedAudioInput = null;
+      selectedVideoInput = null;
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: isCamOn
+        });
+        console.log('[TRACK] Local track audio enabled:', localStream.getAudioTracks()[0]?.enabled);
+        console.log('[TRACK] Local track video enabled:', localStream.getVideoTracks()[0]?.enabled);
+
+        // Detect and block OBS Virtual Camera
+        const videoTrack = localStream.getVideoTracks()[0];
+        if (videoTrack) {
+          const label = videoTrack.label.toLowerCase();
+          console.log('[DEVICES] Video track label:', videoTrack.label);
+          if (label.includes('obs') || label.includes('virtual')) {
+            console.warn('[DEVICES] OBS Virtual Camera detected in fallback, blocking it');
+            showAlertModal('⚠️ ОБНАРУЖЕН OBS Virtual Camera!\n\nЭто может вызвать проблемы с демонстрацией экрана (чёрный экран).\n\nПожалуйста, отключите OBS Virtual Camera в OBS и используйте обычную камеру или войдите без камеры.\n\nСейчас вы войдёте только с микрофоном.', 'error');
+            videoTrack.stop();
+            localStream.removeTrack(videoTrack);
+            const audioTrack = localStream.getAudioTracks()[0];
+            localStream = new MediaStream([audioTrack]);
+            console.log('[DEVICES] Switched to audio-only mode');
+          }
+        }
+      } catch (fallbackErr) {
+        console.error('[DEVICES] Fallback also failed:', fallbackErr);
+        // If no camera available, fallback to audio-only
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: false
+          });
+          console.log('[TRACK] Local track audio enabled:', localStream.getAudioTracks()[0]?.enabled);
+          showAlertModal('Камера не найдена или недоступна. Вход только с микрофоном.', 'info');
+        } catch (audioOnlyErr) {
+          console.error('[DEVICES] Audio-only also failed:', audioOnlyErr);
+          showAlertModal('Не удалось получить доступ к микрофону. Проверьте разрешения.', 'error');
+          return;
+        }
+      }
+    } else {
+      // If no camera available, fallback to audio-only
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: false
+        });
+        console.log('[TRACK] Local track audio enabled:', localStream.getAudioTracks()[0]?.enabled);
+        showAlertModal('Камера не найдена или недоступна. Вход только с микрофоном.', 'info');
+      } catch (audioOnlyErr) {
+        console.error('[DEVICES] Audio-only also failed:', audioOnlyErr);
+        showAlertModal('Не удалось получить доступ к микрофону. Проверьте разрешения.', 'error');
+        return;
+      }
+    }
   }
 
-  // Add local video
-  addVideoStream('local', localStream, currentUser.username, true, false);
+  // Emit join-room event
+  socket.emit('join-room', {
+    roomId: currentRoom,
+    username: currentUser.username,
+    avatar: userAvatar || localStorage.getItem(`keroschat_avatar_${currentUser.username}`),
+    isScreenSharing: isScreenSharing
+  });
+
+  // Play join sound for local user
+  playSound('join');
+
+  // Show room UI
+  document.getElementById('lobby').classList.remove('active');
+  document.getElementById('room').classList.add('active');
+
+  // Add local video stream
+  if (localStream.getVideoTracks().length > 0) {
+    addVideoStream(socket.id, localStream, currentUser.username, true);
+  }
+
+  // Update active users list
   updateActiveUsers();
 
-  // Start speaking detection
+  // Start speaking detection and mic level monitoring
   startSpeakingDetection();
-
-  // Start microphone level monitoring
   startMicLevelMonitoring();
+
+  // Load user settings
+  loadUserSettings();
+
+  // Load chat history for this room
+  loadChatHistory(currentRoom);
+
+  // Restore screen sharing if it was active before join
+  if (wasScreenSharing) {
+    console.log('[SCREEN] Restoring screen share after join');
+    setTimeout(() => {
+      toggleScreen();
+    }, 1000);
+  }
 }
+
+// ... (rest of the code remains the same)
 
 function showRoomUI() {
   document.getElementById('lobbyScreen').style.display = 'none';
