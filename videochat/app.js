@@ -2573,9 +2573,20 @@ socket.on('active-screen-shares', (userIds) => {
 
     console.log(`[SCREEN] Processing screen share for user: ${userId}, name: ${userName}`);
     
-    // Screen sharer will send screen-share-renegotiate-request automatically
-    // Just wait for the renegotiation offer
-    console.log(`[SCREEN] Waiting for renegotiation offer from ${userId}`);
+    // Request screen sharer to renegotiate (with delay to avoid race condition)
+    setTimeout(() => {
+      if (peers.has(userId)) {
+        // If peer connection already exists, close it first
+        const pc = peers.get(userId);
+        pc.close();
+        peers.delete(userId);
+        removeVideoStream(userId);
+        console.log(`[SCREEN] Closed old peer connection for ${userId}`);
+      }
+      
+      socket.emit('request-screen-renegotiation', userId);
+      console.log(`[SCREEN] Sent request-screen-renegotiation for ${userId}`);
+    }, 500);
   });
 });
 
