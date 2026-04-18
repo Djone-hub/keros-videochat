@@ -3048,7 +3048,7 @@ async function toggleScreen() {
             const pc = await createPeerConnection(peerId);
             const offer = await pc.createOffer();
             console.log(`[SCREEN] Offer created for ${peerId}, type: ${offer.type}`);
-            console.log(`[SCREEN] Offer SDP (first 500 chars):`, offer.sdp.substring(0, 500));
+            console.log(`[SCREEN] Offer SDP (first 2000 chars):`, offer.sdp.substring(0, 2000));
             await pc.setLocalDescription(offer);
             socket.emit('offer', peerId, offer);
             console.log(`[SCREEN] Peer connection recreated for ${peerId} with screen track`);
