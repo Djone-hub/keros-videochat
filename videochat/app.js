@@ -2405,17 +2405,38 @@ socket.on('offer', async (userId, offer) => {
     const existingSenders = existingPc.getSenders();
     console.log('[OFFER] Existing peer connection found, senders:', existingSenders.map(s => ({ kind: s.track?.kind, label: s.track?.label })));
     
-    // Use existing peer connection for renegotiation
-    console.log('[OFFER] Using existing peer connection for renegotiation');
-    await existingPc.setRemoteDescription(offer);
-    console.log('[OFFER] Remote description set');
-    const answer = await existingPc.createAnswer();
-    console.log('[OFFER] Answer created, type:', answer.type);
-    await existingPc.setLocalDescription(answer);
-    console.log('[OFFER] Local description set');
-    socket.emit('answer', userId, answer);
-    console.log('[OFFER] Answer sent to:', userId);
-    updateActiveUsers();
+    // Check if this user is screen sharing (renegotiation for screen track)
+    if (screenShareUsers.has(userId)) {
+      console.log('[OFFER] This is a renegotiation from screen sharer - closing old peer connection');
+      existingPc.close();
+      peers.delete(userId);
+      removeVideoStream(userId);
+      
+      // Create new peer connection
+      const pc = await createPeerConnection(userId);
+      console.log('[OFFER] Created new peer connection for screen renegotiation');
+      await pc.setRemoteDescription(offer);
+      console.log('[OFFER] Remote description set');
+      const answer = await pc.createAnswer();
+      console.log('[OFFER] Answer created, type:', answer.type);
+      await pc.setLocalDescription(answer);
+      console.log('[OFFER] Local description set');
+      socket.emit('answer', userId, answer);
+      console.log('[OFFER] Answer sent to:', userId);
+      updateActiveUsers();
+    } else {
+      // Use existing peer connection for renegotiation
+      console.log('[OFFER] Using existing peer connection for renegotiation');
+      await existingPc.setRemoteDescription(offer);
+      console.log('[OFFER] Remote description set');
+      const answer = await existingPc.createAnswer();
+      console.log('[OFFER] Answer created, type:', answer.type);
+      await existingPc.setLocalDescription(answer);
+      console.log('[OFFER] Local description set');
+      socket.emit('answer', userId, answer);
+      console.log('[OFFER] Answer sent to:', userId);
+      updateActiveUsers();
+    }
   } else {
     // Create new peer connection (initial connection)
     const pc = await createPeerConnection(userId);
@@ -2575,15 +2596,6 @@ socket.on('active-screen-shares', (userIds) => {
     
     // Request screen sharer to renegotiate (with delay to avoid race condition)
     setTimeout(() => {
-      if (peers.has(userId)) {
-        // If peer connection already exists, close it first
-        const pc = peers.get(userId);
-        pc.close();
-        peers.delete(userId);
-        removeVideoStream(userId);
-        console.log(`[SCREEN] Closed old peer connection for ${userId}`);
-      }
-      
       socket.emit('request-screen-renegotiation', userId);
       console.log(`[SCREEN] Sent request-screen-renegotiation for ${userId}`);
     }, 500);
@@ -2607,17 +2619,19 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
       removeVideoStream(requesterId);
     }
     
-    // Create new peer connection with screen track
-    try {
-      console.log(`[SCREEN] Creating new peer connection with screen track for ${requesterId}`);
-      const newPc = await createPeerConnection(requesterId);
-      const offer = await newPc.createOffer();
-      await newPc.setLocalDescription(offer);
-      socket.emit('offer', requesterId, offer);
-      console.log(`[SCREEN] Peer connection created with screen track for ${requesterId}`);
-    } catch (e) {
-      console.error('[SCREEN] Error creating peer connection:', e);
-    }
+    // Wait a bit for the old peer connection to close
+    setTimeout(async () => {
+      try {
+        console.log(`[SCREEN] Creating new peer connection with screen track for ${requesterId}`);
+        const newPc = await createPeerConnection(requesterId);
+        const offer = await newPc.createOffer();
+        await newPc.setLocalDescription(offer);
+        socket.emit('offer', requesterId, offer);
+        console.log(`[SCREEN] Peer connection created with screen track for ${requesterId}`);
+      } catch (e) {
+        console.error('[SCREEN] Error creating peer connection:', e);
+      }
+    }, 100);
   } else {
     console.log('[SCREEN] Not screen sharing, ignoring renegotiation request');
   }
@@ -2627,24 +2641,8 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
 socket.on('screen-share-renegotiate-request', async ({ screenSharerId }) => {
   console.log('[SCREEN] Received screen-share-renegotiate-request from:', screenSharerId);
   
-  // Close and recreate peer connection for screen sharer
-  if (peers.has(screenSharerId)) {
-    console.log(`[SCREEN] Recreating peer connection for screen sharer: ${screenSharerId}`);
-    const pc = peers.get(screenSharerId);
-    pc.close();
-    peers.delete(screenSharerId);
-    removeVideoStream(screenSharerId);
-  }
-  
-  try {
-    const newPc = await createPeerConnection(screenSharerId);
-    const offer = await newPc.createOffer();
-    await newPc.setLocalDescription(offer);
-    socket.emit('offer', screenSharerId, offer);
-    console.log(`[SCREEN] Peer connection recreated for screen sharer ${screenSharerId}`);
-  } catch (e) {
-    console.error('[SCREEN] Error recreating peer connection:', e);
-  }
+  // Just log - screen sharer will send renegotiation offer automatically
+  console.log('[SCREEN] Screen sharer will send renegotiation offer automatically');
 });
 
 // Handle request to refresh screen offer (when new user joins and needs stream)
