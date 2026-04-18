@@ -1892,6 +1892,7 @@ async function createPeerConnection(userId) {
       console.log(`[PEER] Screen track properties: label=${screenTrack.label}, enabled=${screenTrack.enabled}, muted=${screenTrack.muted}, readyState=${screenTrack.readyState}`);
       const screenSettings = screenTrack.getSettings();
       console.log(`[PEER] Screen track settings:`, screenSettings);
+      console.log(`[PEER] Screen track width: ${screenSettings.width}, height: ${screenSettings.height}`);
     } else {
       console.warn(`[PEER] No screen track found in screenStream!`);
     }
@@ -1899,11 +1900,13 @@ async function createPeerConnection(userId) {
       try {
         const senders = pc.getSenders();
         const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+        console.log(`[PEER] Video sender found: ${!!videoSender}, current track: ${videoSender?.track?.label}`);
         if (videoSender) {
           if (screenTrack) {
             console.log(`[PEER] Replacing video track with screen track for peer ${userId}`);
             await videoSender.replaceTrack(screenTrack);
             console.log(`[PEER] Video track replaced successfully for peer ${userId}, new track:`, videoSender.track?.label);
+            console.log(`[PEER] New track settings after replacement:`, videoSender.track?.getSettings());
           } else {
             console.error(`[PEER] Cannot replace: no screen track available`);
           }
