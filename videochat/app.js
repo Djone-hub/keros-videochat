@@ -1537,6 +1537,11 @@ async function joinRoomById(roomId) {
     console.log('[JOIN] Adding local video stream');
     addVideoStream(socket.id, localStream, currentUser.username, true);
     console.log('[JOIN] Local video stream added');
+  } else {
+    // No camera - add local container with avatar placeholder
+    console.log('[JOIN] No video track, adding local container with avatar');
+    addVideoStream(socket.id, localStream, currentUser.username, true);
+    console.log('[JOIN] Local avatar container added');
   }
 
   // Update active users list
@@ -1788,11 +1793,10 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     label.textContent = isLocal ? `${name} (Вы)` : name;
 
     // Add avatar placeholder for audio-only users (like Discord)
-    if (!isLocal && (!stream.getVideoTracks() || stream.getVideoTracks().length === 0)) {
+    if ((!stream.getVideoTracks() || stream.getVideoTracks().length === 0)) {
       const avatarPlaceholder = document.createElement('div');
       avatarPlaceholder.className = 'avatar-placeholder';
-      const user = activeUsers.get(id);
-      const avatar = user ? user.avatar : null;
+      const avatar = isLocal ? (userAvatar || localStorage.getItem(`keroschat_avatar_${currentUser.username}`)) : (activeUsers.get(id)?.avatar);
       if (avatar) {
         avatarPlaceholder.innerHTML = `<img src="${avatar}" alt="${name}">`;
       } else {
