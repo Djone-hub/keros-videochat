@@ -1423,21 +1423,14 @@ async function joinRoomById(roomId) {
     console.log('[TRACK] Local track audio enabled:', localStream.getAudioTracks()[0]?.enabled);
     console.log('[TRACK] Local track video enabled:', localStream.getVideoTracks()[0]?.enabled);
 
-    // Detect and block OBS Virtual Camera
+    // Detect OBS Virtual Camera (log only, don't block)
     const videoTrack = localStream.getVideoTracks()[0];
     if (videoTrack) {
       const label = videoTrack.label.toLowerCase();
       console.log('[DEVICES] Video track label:', videoTrack.label);
       if (label.includes('obs') || label.includes('virtual')) {
-        console.warn('[DEVICES] OBS Virtual Camera detected, blocking it');
-        showAlertModal('⚠️ ОБНАРУЖЕН OBS Virtual Camera!\n\nЭто может вызвать проблемы с демонстрацией экрана (чёрный экран).\n\nПожалуйста, отключите OBS Virtual Camera в OBS и используйте обычную камеру или войдите без камеры.\n\nСейчас вы войдёте только с микрофоном.', 'error');
-        // Stop the video track and request audio-only
-        videoTrack.stop();
-        localStream.removeTrack(videoTrack);
-        // Create audio-only stream
-        const audioTrack = localStream.getAudioTracks()[0];
-        localStream = new MediaStream([audioTrack]);
-        console.log('[DEVICES] Switched to audio-only mode');
+        console.warn('[DEVICES] OBS Virtual Camera detected - may cause issues with screen share');
+        // NOT blocking - let user decide if they want to use it
       }
     }
 
@@ -1463,19 +1456,14 @@ async function joinRoomById(roomId) {
         console.log('[TRACK] Local track audio enabled:', localStream.getAudioTracks()[0]?.enabled);
         console.log('[TRACK] Local track video enabled:', localStream.getVideoTracks()[0]?.enabled);
 
-        // Detect and block OBS Virtual Camera
+        // Detect OBS Virtual Camera (log only, don't block)
         const videoTrack = localStream.getVideoTracks()[0];
         if (videoTrack) {
           const label = videoTrack.label.toLowerCase();
           console.log('[DEVICES] Video track label:', videoTrack.label);
           if (label.includes('obs') || label.includes('virtual')) {
-            console.warn('[DEVICES] OBS Virtual Camera detected in fallback, blocking it');
-            showAlertModal('⚠️ ОБНАРУЖЕН OBS Virtual Camera!\n\nЭто может вызвать проблемы с демонстрацией экрана (чёрный экран).\n\nПожалуйста, отключите OBS Virtual Camera в OBS и используйте обычную камеру или войдите без камеры.\n\nСейчас вы войдёте только с микрофоном.', 'error');
-            videoTrack.stop();
-            localStream.removeTrack(videoTrack);
-            const audioTrack = localStream.getAudioTracks()[0];
-            localStream = new MediaStream([audioTrack]);
-            console.log('[DEVICES] Switched to audio-only mode');
+            console.warn('[DEVICES] OBS Virtual Camera detected in fallback - may cause issues');
+            // NOT blocking - let user decide
           }
         }
       } catch (fallbackErr) {
