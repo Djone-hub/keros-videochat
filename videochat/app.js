@@ -103,6 +103,15 @@ let isMicOn = true;
 let isCamOn = false; // Camera OFF by default - user must enable explicitly
 let isSoundOn = true;
 let isScreenSharing = false;
+let screenQuality = localStorage.getItem('keroschat_screen_quality') || 'auto'; // auto, low, medium, high
+
+// Set quality selector to saved value
+window.addEventListener('DOMContentLoaded', () => {
+  const qualitySelector = document.getElementById('screenQuality');
+  if (qualitySelector) {
+    qualitySelector.value = screenQuality;
+  }
+});
 
 // Expose to window for admin panel access
 window.peers = peers;
@@ -621,7 +630,22 @@ const sounds = {
   userLeave: () => playSoftTone(380, 0.3, 'sine', 0.1)
 };
 
-// ========== AUTHENTICATION ==========
+// ========== SCREEN SHARING ==========
+
+// Set screen share quality
+function setScreenQuality(quality) {
+  console.log('[SCREEN] Setting screen quality:', quality);
+  screenQuality = quality;
+  localStorage.setItem('keroschat_screen_quality', quality);
+  
+  // If screen sharing is active, restart with new quality
+  if (isScreenSharing) {
+    toggleScreen(); // Stop
+    setTimeout(() => toggleScreen(), 100); // Restart with new quality
+  }
+}
+
+window.setScreenQuality = setScreenQuality;
 
 // Check for room invite in URL first (before auth check)
 const urlParams = new URLSearchParams(window.location.search);
@@ -2928,19 +2952,35 @@ async function toggleScreen() {
         return;
       }
 
-      // Request screen share with quality settings
-      // Low quality for local preview (to reduce CPU usage)
-      // High quality will be sent to remote peers
-      const constraints = {
-        video: {
-          cursor: 'always',
-          width: { ideal: 1280, max: 1920 },
-          height: { ideal: 720, max: 1080 },
-          frameRate: { ideal: 30, max: 60 }
-        },
-        audio: false
-      };
+      // Request screen share with quality settings based on user preference
+      let constraints;
+      switch (screenQuality) {
+        case 'low':
+          constraints = {
+            video: { cursor: 'always', width: { ideal: 640, max: 640 }, height: { ideal: 360, max: 360 }, frameRate: { ideal: 15, max: 30 } },
+            audio: false
+          };
+          break;
+        case 'medium':
+          constraints = {
+            video: { cursor: 'always', width: { ideal: 1280, max: 1280 }, height: { ideal: 720, max: 720 }, frameRate: { ideal: 30, max: 30 } },
+            audio: false
+          };
+          break;
+        case 'high':
+          constraints = {
+            video: { cursor: 'always', width: { ideal: 1920, max: 1920 }, height: { ideal: 1080, max: 1080 }, frameRate: { ideal: 60, max: 60 } },
+            audio: false
+          };
+          break;
+        default: // auto
+          constraints = {
+            video: { cursor: 'always', width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 30, max: 60 } },
+            audio: false
+          };
+      }
 
+      console.log('[SCREEN] Screen quality:', screenQuality, 'Constraints:', JSON.stringify(constraints));
       screenStream = await navigator.mediaDevices.getDisplayMedia(constraints);
       sounds.screenOn();
       

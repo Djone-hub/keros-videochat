@@ -1782,6 +1782,12 @@
         <span class="icon">&#128187;</span>
         <span class="label">Экран</span>
       </button>
+      <select id="screenQuality" class="control-btn" style="padding: 8px 12px; background: var(--bg-secondary); color: var(--text-primary); border: none; border-radius: 4px; cursor: pointer; font-size: 12px;" onchange="setScreenQuality(this.value)">
+        <option value="auto">Auto</option>
+        <option value="low">360p</option>
+        <option value="medium">720p</option>
+        <option value="high">1080p</option>
+      </select>
       <button class="control-btn" id="exitToLobbyBtn" onclick="disconnectAndShowLobby()" style="background: #ed4245; color: #fff;">
         <span class="icon">&#128222;</span>
         <span class="label">В лобби</span>
