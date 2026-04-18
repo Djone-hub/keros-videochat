@@ -2968,13 +2968,9 @@ function closeAllScreenModals() {
 }
 
 function openScreenModal(videoId) {
-  // Check if user is in the same channel as the screen sharing user
-  if (!currentChannelUsers.has(videoId) && videoId !== 'local') {
-    console.log('[SCREEN] Cannot open modal: user', videoId, 'is not in current channel');
-    addSystemMessage('Вы не можете просматривать демонстрацию экрана пользователя из другого канала');
-    return;
-  }
-  
+  // REMOVED: Channel restriction - screen share is now visible to all users in room
+  // This ensures screen share works in any room/channel and is visible to everyone
+
   // Find the screen share video element by id
   const container = document.getElementById(`video-${videoId}`);
   if (!container) {
