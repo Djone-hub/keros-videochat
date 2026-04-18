@@ -1454,7 +1454,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('ice-candidate', (targetId, candidate) => {
-    socket.to(targetId).emit('ice-candidate', socket.id, candidate);
+    console.log(`[SERVER] ICE candidate from ${socket.id} to ${targetId}`);
+    io.to(targetId).emit('ice-candidate', socket.id, candidate);
   });
 
   socket.on('chat-message', (message) => {
