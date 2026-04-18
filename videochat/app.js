@@ -31,15 +31,13 @@ socket.on('connect', () => {
   // REJOIN ROOM: If we were in a room, rejoin to restore socket.roomId on server
   if (currentRoom && currentUser && currentUser.username) {
     console.log('[RECONNECT] Rejoining room after reconnect:', currentRoom);
-    socket.emit('join-room', currentRoom, currentUser.username, userAvatar, currentRoomName, currentRoomAvatar, (response) => {
-      if (response && response.success) {
-        console.log('[RECONNECT] Successfully rejoined room:', currentRoom);
-        // DISABLED: Reload channels after rejoin
-        // loadChannels();
-      } else {
-        console.error('[RECONNECT] Failed to rejoin room:', response?.error);
-      }
+    socket.emit('join-room', {
+      roomId: currentRoom,
+      username: currentUser.username,
+      avatar: userAvatar || localStorage.getItem(`keroschat_avatar_${currentUser.username}`),
+      isScreenSharing: isScreenSharing
     });
+    console.log('[RECONNECT] Rejoin event sent');
   }
 
   // If lobby is already visible, reload rooms and users
