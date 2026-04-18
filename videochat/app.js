@@ -1362,7 +1362,22 @@ async function joinRoomById(roomId) {
     };
 
     console.log('[DEVICES] Requesting media with constraints:', constraints);
-    localStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (videoErr) {
+      // If video fails, try audio-only
+      console.warn('[DEVICES] Video failed, trying audio-only:', videoErr);
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        console.log('[DEVICES] Audio-only stream successful');
+        showAlertModal('Камера не найдена или недоступна. Вход только с микрофоном.', 'warning');
+      } catch (audioErr) {
+        console.error('[DEVICES] Audio also failed:', audioErr);
+        showAlertModal('Ошибка доступа к микрофону: ' + audioErr.message, 'error');
+        return;
+      }
+    }
 
     // Apply audio output device to local video if selected
     if (selectedAudioOutput) {
@@ -1377,14 +1392,8 @@ async function joinRoomById(roomId) {
     });
   } catch (err) {
     console.error('[DEVICES] Error requesting media:', err);
-    // Fallback to default devices
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      console.log('[DEVICES] Fallback to default devices successful');
-    } catch (fallbackErr) {
-      showAlertModal('Ошибка доступа к камере/микрофону: ' + fallbackErr.message, 'error');
-      return;
-    }
+    showAlertModal('Ошибка доступа к камере/микрофону: ' + err.message, 'error');
+    return;
   }
 
   // Join socket room with avatar, room name and room avatar
@@ -1849,7 +1858,12 @@ async function createPeerConnection(userId) {
             console.error(`[PEER] Cannot replace: no screen track available`);
           }
         } else {
-          console.warn(`[PEER] No video sender found for peer ${userId}`);
+          console.warn(`[PEER] No video sender found for peer ${userId} (audio-only connection)`);
+          // If no video sender but screen sharing, add screen track
+          if (screenTrack) {
+            console.log(`[PEER] Adding screen track to audio-only connection for peer ${userId}`);
+            pc.addTrack(screenTrack, screenStream);
+          }
         }
       } catch (e) {
         console.error(`[PEER] Error replacing screen track for peer ${userId}:`, e);
@@ -2611,7 +2625,7 @@ async function toggleScreen() {
       screenStream = null;
     }
     
-    // Replace with camera track
+    // Replace with camera track (if exists)
     const videoTrack = localStream ? localStream.getVideoTracks()[0] : null;
     if (videoTrack) {
       peers.forEach(pc => {
@@ -2619,6 +2633,17 @@ async function toggleScreen() {
         if (sender && videoTrack) {
           sender.replaceTrack(videoTrack).catch(err => {
             console.error('[SCREEN] Error replacing track:', err);
+          });
+        }
+      });
+    } else {
+      // If no camera track (audio-only), remove screen track from all peers
+      console.log('[SCREEN] No camera track (audio-only), removing screen track from peers');
+      peers.forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender) {
+          sender.replaceTrack(null).catch(err => {
+            console.error('[SCREEN] Error removing track:', err);
           });
         }
       });
@@ -2685,6 +2710,7 @@ async function toggleScreen() {
       // Replace camera track with screen track in all peer connections
       console.log(`[SCREEN] Replacing video track in ${peers.size} peer connections`);
       let replacedCount = 0;
+      let addedCount = 0;
       peers.forEach((pc, peerId) => {
         const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
         if (sender) {
@@ -2696,10 +2722,17 @@ async function toggleScreen() {
             console.error('[SCREEN] Error replacing track for peer', peerId, ':', err);
           });
         } else {
-          console.warn(`[SCREEN] No video sender found for peer ${peerId}`);
+          // If no video sender (audio-only), add screen track
+          console.log(`[SCREEN] No video sender for peer ${peerId} (audio-only), adding screen track`);
+          pc.addTrack(screenTrack, screenStream).then(() => {
+            console.log(`[SCREEN] Screen track added successfully for peer ${peerId}`);
+            addedCount++;
+          }).catch(err => {
+            console.error('[SCREEN] Error adding screen track for peer', peerId, ':', err);
+          });
         }
       });
-      console.log(`[SCREEN] Track replacement complete: ${replacedCount}/${peers.size} replaced`);
+      console.log(`[SCREEN] Track replacement complete: ${replacedCount} replaced, ${addedCount} added`);
       
       // Remove local camera preview - no need to see own screen share
       const localContainer = document.getElementById('video-local');
