@@ -2593,20 +2593,29 @@ socket.on('screen-share-stopped', (userId) => {
   const userName = user ? user.name : 'Участник';
   addLogEntry('Демонстрация', `${userName} остановил демонстрацию экрана`);
 
+  console.log('[SCREEN] Received screen-share-stopped for:', userId);
+  console.log('[SCREEN] Screen share users before delete:', Array.from(screenShareUsers));
+
   // Remove from screen share tracking
   screenShareUsers.delete(userId);
+
+  console.log('[SCREEN] Screen share users after delete:', Array.from(screenShareUsers));
 
   // Remove screen container (camera container remains unchanged)
   // Add delay to allow renegotiation to complete
   setTimeout(() => {
+    console.log('[SCREEN] Looking for screen container:', `video-${userId}-screen`);
     const screenContainer = document.getElementById(`video-${userId}-screen`);
+    console.log('[SCREEN] Screen container found:', !!screenContainer);
     if (screenContainer) {
       screenContainer.remove();
       console.log('[SCREEN] Removed screen container for:', userId);
     }
     
     // Also remove and recreate the main video container to ensure clean state
+    console.log('[SCREEN] Looking for main container:', `video-${userId}`);
     const mainContainer = document.getElementById(`video-${userId}`);
+    console.log('[SCREEN] Main container found:', !!mainContainer);
     if (mainContainer) {
       console.log('[SCREEN] Removing and recreating main container for:', userId);
       mainContainer.remove();
