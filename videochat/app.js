@@ -2604,6 +2604,14 @@ socket.on('screen-share-stopped', (userId) => {
       screenContainer.remove();
       console.log('[SCREEN] Removed screen container for:', userId);
     }
+    
+    // Also remove and recreate the main video container to ensure clean state
+    const mainContainer = document.getElementById(`video-${userId}`);
+    if (mainContainer) {
+      console.log('[SCREEN] Removing and recreating main container for:', userId);
+      mainContainer.remove();
+      // The main container will be recreated automatically via addVideoStream when renegotiation completes
+    }
   }, 500);
 });
 
