@@ -1524,8 +1524,10 @@ async function joinRoomById(roomId) {
   }
 
   // Show room UI
-  document.getElementById('lobby').classList.remove('active');
-  document.getElementById('room').classList.add('active');
+  const lobbyScreen = document.getElementById('lobbyScreen');
+  const roomScreen = document.getElementById('roomScreen');
+  if (lobbyScreen) lobbyScreen.classList.remove('active');
+  if (roomScreen) roomScreen.classList.add('active');
 
   // Add local video stream
   if (localStream.getVideoTracks().length > 0) {
