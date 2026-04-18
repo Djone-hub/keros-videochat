@@ -1547,15 +1547,27 @@ async function joinRoomById(roomId) {
 
   // Start speaking detection and mic level monitoring
   console.log('[JOIN] Starting speaking detection');
-  startSpeakingDetection();
-  console.log('[JOIN] Speaking detection started');
-  startMicLevelMonitoring();
-  console.log('[JOIN] Mic level monitoring started');
+  try {
+    startSpeakingDetection();
+    console.log('[JOIN] Speaking detection started');
+  } catch (error) {
+    console.error('[JOIN] Error starting speaking detection:', error);
+  }
+  try {
+    startMicLevelMonitoring();
+    console.log('[JOIN] Mic level monitoring started');
+  } catch (error) {
+    console.error('[JOIN] Error starting mic level monitoring:', error);
+  }
 
   // Load user settings
   console.log('[JOIN] Loading user settings');
-  loadUserSettings();
-  console.log('[JOIN] User settings loaded');
+  try {
+    loadUserSettings();
+    console.log('[JOIN] User settings loaded');
+  } catch (error) {
+    console.error('[JOIN] Error loading user settings:', error);
+  }
 
   // Load chat history for this room (if function exists)
   if (typeof loadChatHistory === 'function') {
@@ -2195,10 +2207,12 @@ socket.on('room-deleted', (roomId) => {
 });
 
 socket.on('room-error', (error) => {
+  console.error('[ROOM-ERROR] Received room-error from server:', error);
   addLogEntry('Ошибка', error.message);
   showAlertModal(error.message, 'error');
   // If in room, go back to lobby
   if (currentRoom) {
+    console.log('[ROOM-ERROR] Leaving room due to error');
     leaveRoom();
   }
 });
