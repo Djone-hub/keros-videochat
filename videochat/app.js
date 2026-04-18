@@ -1780,12 +1780,18 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     container.className = 'video-container' + (isScreenShare ? ' screen-share' : '') + (isLocal ? ' local' : '');
     container.id = `video-${id}`;
 
+    // Always create video element (even if no video track initially - needed for screen share)
     const video = document.createElement('video');
     video.srcObject = stream;
     video.autoplay = true;
     video.playsInline = true;
     video.muted = isLocal;
     if (isLocal && !isScreenShare) video.style.transform = 'scaleX(-1)';
+
+    // Hide video element if no video track (show avatar instead)
+    if (!hasVideoTrack) {
+      video.style.display = 'none';
+    }
 
     // Ensure video plays
     video.play().catch(e => {});
@@ -1863,6 +1869,13 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     if (video) {
       video.srcObject = stream;
       video.play().catch(e => {});
+
+      // Show/hide video element based on video track
+      if (hasVideoTrack) {
+        video.style.display = 'block';
+      } else {
+        video.style.display = 'none';
+      }
     }
 
     // Handle avatar placeholder - remove if video track exists, add if no video track
@@ -3025,11 +3038,14 @@ async function toggleScreen() {
             console.error('[SCREEN] Error replacing track for peer', peerId, ':', err);
           });
         } else {
-          // If no video sender (audio-only), add screen track
-          console.log(`[SCREEN] No video sender for peer ${peerId} (audio-only), adding screen track`);
+          // If no video sender (audio-only), add screen track using transceiver
+          console.log(`[SCREEN] No video sender for peer ${peerId} (audio-only), adding screen track via transceiver`);
           try {
-            pc.addTrack(screenTrack, screenStream);
-            console.log(`[SCREEN] Screen track added successfully for peer ${peerId}`);
+            const transceiver = pc.addTransceiver('video', {
+              streams: [screenStream],
+              direction: 'sendonly'
+            });
+            console.log(`[SCREEN] Screen track added successfully for peer ${peerId} via transceiver`);
             addedCount++;
           } catch (err) {
             console.error(`[SCREEN] Error adding screen track for peer ${peerId}:`, err);
