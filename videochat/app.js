@@ -2519,18 +2519,34 @@ socket.on('offer', async (userId, offer) => {
     const existingPc = peers.get(userId);
     const existingSenders = existingPc.getSenders();
     console.log('[OFFER] Existing peer connection found, senders:', existingSenders.map(s => ({ kind: s.track?.kind, label: s.track?.label })));
-    
+    console.log('[OFFER] Peer connection state:', existingPc.signalingState);
+
     // Use existing peer connection for renegotiation
     console.log('[OFFER] Using existing peer connection for renegotiation');
-    await existingPc.setRemoteDescription(offer);
-    console.log('[OFFER] Remote description set');
-    const answer = await existingPc.createAnswer();
-    console.log('[OFFER] Answer created, type:', answer.type);
-    await existingPc.setLocalDescription(answer);
-    console.log('[OFFER] Local description set');
-    socket.emit('answer', userId, answer);
-    console.log('[OFFER] Answer sent to:', userId);
-    updateActiveUsers();
+    try {
+      await existingPc.setRemoteDescription(offer);
+      console.log('[OFFER] Remote description set');
+      const answer = await existingPc.createAnswer();
+      console.log('[OFFER] Answer created, type:', answer.type);
+      await existingPc.setLocalDescription(answer);
+      console.log('[OFFER] Local description set');
+      socket.emit('answer', userId, answer);
+      console.log('[OFFER] Answer sent to:', userId);
+      updateActiveUsers();
+    } catch (err) {
+      console.error('[OFFER] Error in renegotiation:', err);
+      console.error('[OFFER] Peer connection state:', existingPc.signalingState);
+      // If error, recreate peer connection
+      console.log('[OFFER] Recreating peer connection due to error');
+      existingPc.close();
+      peers.delete(userId);
+      removeVideoStream(userId);
+      const pc = await createPeerConnection(userId);
+      await pc.setRemoteDescription(offer);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit('answer', userId, answer);
+    }
   } else {
     // Create new peer connection (initial connection)
     const pc = await createPeerConnection(userId);
@@ -2551,8 +2567,17 @@ socket.on('answer', async (userId, answer) => {
   // Answer received
   console.log('[ANSWER] Received answer from:', userId);
   if (peers.has(userId)) {
-    await peers.get(userId).setRemoteDescription(answer);
-    console.log('[ANSWER] Remote description set for:', userId);
+    const pc = peers.get(userId);
+    console.log('[ANSWER] Peer connection state before setRemoteDescription:', pc.signalingState);
+    try {
+      await pc.setRemoteDescription(answer);
+      console.log('[ANSWER] Remote description set for:', userId);
+    } catch (err) {
+      console.error('[ANSWER] Error setting remote description:', err);
+      console.error('[ANSWER] Peer connection state:', pc.signalingState);
+      console.error('[ANSWER] Local description:', pc.localDescription ? 'set' : 'not set');
+      console.error('[ANSWER] Remote description:', pc.remoteDescription ? 'set' : 'not set');
+    }
   } else {
     console.warn('[ANSWER] No peer for answer from:', userId);
   }
