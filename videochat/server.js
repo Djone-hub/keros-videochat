@@ -1520,6 +1520,18 @@ io.on('connection', (socket) => {
     });
   });
 
+  socket.on('refresh-screen-offer', (requesterId) => {
+    console.log('[SCREEN] Received refresh-screen-offer from:', requesterId, 'target:', socket.id);
+    console.log('[SCREEN] isScreenSharing:', isScreenSharing);
+    console.log('[SCREEN] screenStream exists:', !!screenStream);
+    console.log('[SCREEN] screenStream tracks:', screenStream ? screenStream.getTracks().length : 0);
+
+    // Only respond if we are actively screen sharing
+    if (isScreenSharing && screenStream) {
+      console.log('[SCREEN] We are screen sharing, creating new peer connection for requester:', requesterId);
+    }
+  });
+
   // Handle theme changes - broadcast to other users in room
   socket.on('theme-changed', ({ roomId, theme }) => {
     console.log(`[THEME] User ${socket.userName} changed theme to ${theme} in room ${roomId}`);
