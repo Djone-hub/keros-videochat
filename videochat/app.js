@@ -1769,31 +1769,33 @@ function copyLink() {
 function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false) {
   const videoGrid = document.getElementById('videoGrid');
   if (!videoGrid) return;
-  
+
   let container = document.getElementById(`video-${id}`);
   const isNew = !container;
-  
+
+  const hasVideoTrack = stream.getVideoTracks() && stream.getVideoTracks().length > 0;
+
   if (!container) {
     container = document.createElement('div');
     container.className = 'video-container' + (isScreenShare ? ' screen-share' : '') + (isLocal ? ' local' : '');
     container.id = `video-${id}`;
-    
+
     const video = document.createElement('video');
     video.srcObject = stream;
     video.autoplay = true;
     video.playsInline = true;
     video.muted = isLocal;
     if (isLocal && !isScreenShare) video.style.transform = 'scaleX(-1)';
-    
+
     // Ensure video plays
     video.play().catch(e => {});
-    
+
     const label = document.createElement('div');
     label.className = 'video-label';
     label.textContent = isLocal ? `${name} (Вы)` : name;
 
     // Add avatar placeholder for audio-only users (like Discord)
-    if ((!stream.getVideoTracks() || stream.getVideoTracks().length === 0)) {
+    if (!hasVideoTrack) {
       const avatarPlaceholder = document.createElement('div');
       avatarPlaceholder.className = 'avatar-placeholder';
       const avatar = isLocal ? (userAvatar || localStorage.getItem(`keroschat_avatar_${currentUser.username}`)) : (activeUsers.get(id)?.avatar);
@@ -1856,10 +1858,37 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     container.appendChild(label);
     videoGrid.appendChild(container);
   } else {
+    // Container exists - update it
     const video = container.querySelector('video');
-    video.srcObject = stream;
-    video.play().catch(e => {});
-    
+    if (video) {
+      video.srcObject = stream;
+      video.play().catch(e => {});
+    }
+
+    // Handle avatar placeholder - remove if video track exists, add if no video track
+    const avatarPlaceholder = container.querySelector('.avatar-placeholder');
+    if (hasVideoTrack) {
+      // Video track exists - remove avatar placeholder
+      if (avatarPlaceholder) {
+        avatarPlaceholder.remove();
+        console.log(`[VIDEO] Removed avatar placeholder for ${id} (video track received)`);
+      }
+    } else {
+      // No video track - add avatar placeholder
+      if (!avatarPlaceholder) {
+        const newAvatarPlaceholder = document.createElement('div');
+        newAvatarPlaceholder.className = 'avatar-placeholder';
+        const avatar = isLocal ? (userAvatar || localStorage.getItem(`keroschat_avatar_${currentUser.username}`)) : (activeUsers.get(id)?.avatar);
+        if (avatar) {
+          newAvatarPlaceholder.innerHTML = `<img src="${avatar}" alt="${name}">`;
+        } else {
+          newAvatarPlaceholder.textContent = name.charAt(0).toUpperCase();
+        }
+        container.appendChild(newAvatarPlaceholder);
+        console.log(`[VIDEO] Added avatar placeholder for ${id} (no video track)`);
+      }
+    }
+
     // Update styles if this is a screen share (for replaceTrack case)
     if (isScreenShare && !isLocal) {
       container.classList.add('screen-share');
@@ -2965,15 +2994,6 @@ async function toggleScreen() {
         audio: false
       };
 
-      // Disable camera before starting screen share to prevent OBS Virtual Camera conflict
-      if (localStream && localStream.getVideoTracks().length > 0) {
-        console.log('[SCREEN] Disabling camera before screen share to prevent OBS conflict');
-        localStream.getVideoTracks().forEach(track => {
-          track.stop();
-          localStream.removeTrack(track);
-        });
-      }
-
       screenStream = await navigator.mediaDevices.getDisplayMedia(constraints);
       sounds.screenOn();
       
@@ -3027,16 +3047,27 @@ async function toggleScreen() {
           avatarPlaceholder.remove();
         }
 
-        // Replace video with screen stream
-        const localVideo = localContainer.querySelector('video');
-        if (localVideo) {
-          localVideo.srcObject = screenStream;
-          localVideo.muted = true;
+        // Get or create video element
+        let localVideo = localContainer.querySelector('video');
+        if (!localVideo) {
+          localVideo = document.createElement('video');
           localVideo.autoplay = true;
-          localVideo.style.objectFit = 'contain';
-          // Limit to 5fps to reduce CPU usage
-          localVideo.playbackRate = 0.1;
+          localVideo.muted = true;
+          localVideo.playsInline = true;
+          localVideo.style.width = '100%';
+          localVideo.style.height = '100%';
+          localVideo.style.objectFit = 'cover';
+          localVideo.style.transform = 'scaleX(-1)';
+          localContainer.appendChild(localVideo);
+          console.log('[SCREEN] Created new video element in local container');
         }
+
+        // Replace video with screen stream
+        localVideo.srcObject = screenStream;
+        localVideo.style.objectFit = 'contain';
+        localVideo.style.transform = 'none';
+        // Limit to 5fps to reduce CPU usage
+        localVideo.playbackRate = 0.1;
 
         // Add screen share indicator
         const screenIndicator = document.createElement('div');
