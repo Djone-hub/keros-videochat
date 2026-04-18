@@ -2726,7 +2726,15 @@ async function toggleScreen() {
       console.log('[SCREEN] Screen sharing started');
     } catch (err) {
       console.error('[SCREEN] Error starting screen share:', err);
-      showAlertModal('Ошибка при запуске демонстрации: ' + err.message, 'error');
+
+      // Handle specific permission denied error
+      if (err.name === 'NotAllowedError' || err.message.includes('Permission denied')) {
+        showAlertModal('❌ Вы отказали в разрешении на демонстрацию экрана. Нажмите кнопку "Экран" снова и разрешите доступ.', 'error');
+      } else if (err.name === 'NotFoundError') {
+        showAlertModal('❌ Не выбран экран для демонстрации. Пожалуйста, выберите экран или окно.', 'error');
+      } else {
+        showAlertModal('Ошибка при запуске демонстрации: ' + err.message, 'error');
+      }
     }
   }
 }
