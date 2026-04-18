@@ -1828,17 +1828,28 @@ async function createPeerConnection(userId) {
   // If screen sharing, replace video track immediately
   if (isScreenSharing && screenStream) {
     console.log(`[PEER] Screen sharing active, replacing video track for peer ${userId}`);
+    const screenTrack = screenStream.getVideoTracks()[0];
+    if (screenTrack) {
+      console.log(`[PEER] Screen track properties: label=${screenTrack.label}, enabled=${screenTrack.enabled}, muted=${screenTrack.muted}, readyState=${screenTrack.readyState}`);
+      const screenSettings = screenTrack.getSettings();
+      console.log(`[PEER] Screen track settings:`, screenSettings);
+    } else {
+      console.warn(`[PEER] No screen track found in screenStream!`);
+    }
     setTimeout(async () => {
       try {
         const senders = pc.getSenders();
         const videoSender = senders.find(s => s.track && s.track.kind === 'video');
         if (videoSender) {
-          const screenTrack = screenStream.getVideoTracks()[0];
           if (screenTrack) {
             console.log(`[PEER] Replacing video track with screen track for peer ${userId}`);
             await videoSender.replaceTrack(screenTrack);
-            console.log(`[PEER] Video track replaced successfully for peer ${userId}`);
+            console.log(`[PEER] Video track replaced successfully for peer ${userId}, new track:`, videoSender.track?.label);
+          } else {
+            console.error(`[PEER] Cannot replace: no screen track available`);
           }
+        } else {
+          console.warn(`[PEER] No video sender found for peer ${userId}`);
         }
       } catch (e) {
         console.error(`[PEER] Error replacing screen track for peer ${userId}:`, e);
@@ -1850,7 +1861,7 @@ async function createPeerConnection(userId) {
     const stream = e.streams[0];
     const videoTrack = stream.getVideoTracks()[0];
     const audioTrack = stream.getAudioTracks()[0];
-    
+
     // Log detailed track info for debugging
     const trackInfo = stream.getTracks().map(t => ({
       kind: t.kind,
@@ -1860,28 +1871,34 @@ async function createPeerConnection(userId) {
       muted: t.muted
     }));
     console.log(`[TRACK] Received stream from ${userId}:`, JSON.stringify(trackInfo));
-    
+
+    // Log video track settings
+    if (videoTrack) {
+      const videoSettings = videoTrack.getSettings();
+      console.log(`[TRACK] Video track settings from ${userId}:`, videoSettings);
+    }
+
     // Log audio track specifically
     if (audioTrack) {
       console.log(`[AUDIO] Received audio from ${userId}: enabled=${audioTrack.enabled}, muted=${audioTrack.muted}, state=${audioTrack.readyState}`);
     } else {
       console.warn(`[AUDIO] No audio track received from ${userId}!`);
     }
-    
+
     // Detect screen share by track label
     const isScreenByLabel = videoTrack && (
       videoTrack.label.toLowerCase().includes('screen') ||
       videoTrack.label.toLowerCase().includes('display') ||
       videoTrack.label.toLowerCase().includes('window')
     );
-    
+
     // Detect screen share by settings (screen share usually has higher resolution or aspect ratio)
     const settings = videoTrack?.getSettings();
     const width = settings?.width || 0;
     const height = settings?.height || 0;
     // Screen share typically has 16:9 or wider aspect ratio, or high resolution (reverted to less strict)
     const isScreenByResolution = width >= 720 || (width > 0 && width/height > 1.3);
-    
+
     console.log(`[TRACK] Video settings for ${userId}:`, width, 'x', height, 'aspect:', width/height);
     
     socket.emit('get-user-name', userId, (name) => {
