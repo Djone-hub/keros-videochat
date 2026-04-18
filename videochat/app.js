@@ -1620,7 +1620,7 @@ function resetRoomStateAndUI() {
   // Reset state
   currentRoom = null;
   isMicOn = true;
-  isCamOn = true;
+  isCamOn = false; // Camera OFF by default
   isSoundOn = true;
   isScreenSharing = false;
 
