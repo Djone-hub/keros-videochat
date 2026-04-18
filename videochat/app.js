@@ -2812,7 +2812,7 @@ async function toggleScreen() {
     });
 
     // Restore local container (camera continues to work)
-    const localContainer = document.getElementById('video-local');
+    const localContainer = document.getElementById(`video-${socket.id}`);
     if (localContainer) {
       // Remove screen share indicator
       const screenIndicator = localContainer.querySelector('[style*="background: rgba(59, 165, 93"]');
@@ -2907,8 +2907,8 @@ async function toggleScreen() {
       console.log(`[SCREEN] Screen track addition complete: ${addedCount} added`);
 
       // Replace local container avatar with screen preview (instead of removing container)
-      const localContainer = document.getElementById('video-local');
-      console.log('[SCREEN] Local container found:', !!localContainer);
+      const localContainer = document.getElementById(`video-${socket.id}`);
+      console.log('[SCREEN] Local container found:', !!localContainer, 'id:', `video-${socket.id}`);
       if (localContainer) {
         // Remove avatar placeholder
         const avatarPlaceholder = localContainer.querySelector('.avatar-placeholder');
