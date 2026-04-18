@@ -3046,6 +3046,8 @@ async function toggleScreen() {
         for (const peerId of peerIds) {
           try {
             const pc = await createPeerConnection(peerId);
+            // Wait for screen track to be ready before creating offer
+            await new Promise(resolve => setTimeout(resolve, 500));
             const offer = await pc.createOffer();
             console.log(`[SCREEN] Offer created for ${peerId}, type: ${offer.type}`);
             console.log(`[SCREEN] Offer SDP (first 4000 chars):`, offer.sdp.substring(0, 4000));
