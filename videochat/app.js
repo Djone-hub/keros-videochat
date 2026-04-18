@@ -2051,8 +2051,8 @@ function startSpeakingDetection() {
   checkSpeaking();
 }
 
-async function createPeerConnection(userId) {
-  console.log(`[PEER] Creating peer connection for user: ${userId}, isScreenSharing: ${isScreenSharing}`);
+async function createPeerConnection(userId, forceScreen = false) {
+  console.log(`[PEER] Creating peer connection for user: ${userId}, isScreenSharing: ${isScreenSharing}, forceScreen: ${forceScreen}`);
   const pc = new RTCPeerConnection({
     ...iceServers
   });
@@ -2065,14 +2065,16 @@ async function createPeerConnection(userId) {
     pc.addTrack(track, localStream);
   });
 
-  // If screen sharing is active, ADD screen track as well (Discord-style: camera + screen simultaneously)
-  if (isScreenSharing && screenStream) {
-    console.log(`[PEER] Screen sharing active, adding screen track for peer ${userId}`);
-    const screenTrack = screenStream.getVideoTracks()[0];
+  // If screen sharing is active OR forceScreen is true, ADD screen track as well
+  if ((isScreenSharing && screenStream) || forceScreen) {
+    console.log(`[PEER] Screen sharing active OR forceScreen=true, adding screen track for peer ${userId}`);
+    const screenTrack = screenStream ? screenStream.getVideoTracks()[0] : null;
     if (screenTrack) {
       console.log(`[PEER] Screen track properties: label=${screenTrack.label}, enabled=${screenTrack.enabled}`);
       pc.addTrack(screenTrack, screenStream);
       console.log(`[PEER] Screen track added to peer ${userId} (in addition to camera)`);
+    } else if (forceScreen) {
+      console.warn(`[PEER] forceScreen=true but no screenStream available!`);
     }
   }
   console.log(`[PEER] Total tracks added to peer ${userId}`);
@@ -2551,7 +2553,7 @@ socket.on('screen-share-stopped', (userId) => {
 socket.on('active-screen-shares', (userIds) => {
   console.log('[SCREEN] Received active screen shares on join:', userIds);
 
-  userIds.forEach(async (userId) => {
+  userIds.forEach((userId) => {
     // Track this user as screen sharing
     screenShareUsers.add(userId);
     const user = activeUsers.get(userId);
@@ -2560,37 +2562,41 @@ socket.on('active-screen-shares', (userIds) => {
 
     console.log(`[SCREEN] Processing screen share for user: ${userId}, name: ${userName}`);
 
-    // Recreate peer connection if it exists (to get screen track)
-    if (peers.has(userId)) {
-      console.log(`[SCREEN] Recreating peer connection for screen share user: ${userId}`);
-      const pc = peers.get(userId);
-      pc.close();
-      peers.delete(userId);
-      removeVideoStream(userId);
-      
-      // Recreate with screen track
-      try {
-        const newPc = await createPeerConnection(userId);
-        const offer = await newPc.createOffer();
-        await newPc.setLocalDescription(offer);
-        socket.emit('offer', userId, offer);
-        console.log(`[SCREEN] Peer connection recreated with screen track for ${userId}`);
-      } catch (e) {
-        console.error('[SCREEN] Error recreating peer connection:', e);
-      }
-    } else {
-      console.log(`[SCREEN] Creating new peer connection for screen share user: ${userId}`);
-      try {
-        const pc = await createPeerConnection(userId);
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socket.emit('offer', userId, offer);
-        console.log(`[SCREEN] Peer connection created with screen track for ${userId}`);
-      } catch (e) {
-        console.error('[SCREEN] Error creating peer connection for screen share:', e);
-      }
-    }
+    // Request screen sharer to renegotiate (send screen track)
+    socket.emit('request-screen-renegotiation', userId);
+    console.log(`[SCREEN] Sent request-screen-renegotiation for ${userId}`);
   });
+});
+
+// Handle request to renegotiate screen share (from new user)
+socket.on('request-screen-renegotiation', async (requesterId) => {
+  console.log('[SCREEN] Received request-screen-renegotiation from:', requesterId);
+  
+  // Only respond if we are actively screen sharing
+  if (isScreenSharing && screenStream) {
+    console.log('[SCREEN] We are screen sharing, renegotiating with:', requesterId);
+    
+    // Recreate peer connection for requester with screen track
+    if (peers.has(requesterId)) {
+      console.log(`[SCREEN] Recreating peer connection for requester: ${requesterId}`);
+      const pc = peers.get(requesterId);
+      pc.close();
+      peers.delete(requesterId);
+      removeVideoStream(requesterId);
+    }
+    
+    try {
+      const newPc = await createPeerConnection(requesterId);
+      const offer = await newPc.createOffer();
+      await newPc.setLocalDescription(offer);
+      socket.emit('offer', requesterId, offer);
+      console.log(`[SCREEN] Peer connection recreated with screen track for ${requesterId}`);
+    } catch (e) {
+      console.error('[SCREEN] Error recreating peer connection:', e);
+    }
+  } else {
+    console.log('[SCREEN] Not screen sharing, ignoring renegotiation request');
+  }
 });
 
 // Handle request to refresh screen offer (when new user joins and needs stream)
