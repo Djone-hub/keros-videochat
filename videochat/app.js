@@ -1326,8 +1326,12 @@ function generateRandomId(length) {
 async function joinRoomById(roomId) {
   currentRoom = roomId;
 
-  // Ensure screen sharing is disabled when joining a new room
+  // Check if user was screen sharing before (for restoration after join)
+  const wasScreenSharing = localStorage.getItem('keroschat_screen_sharing') === 'true';
+
+  // Stop screen sharing temporarily when joining (will restore after successful join)
   if (isScreenSharing) {
+    console.log('[SCREEN] Stopping screen share temporarily for room join');
     toggleScreen();
   }
 
@@ -1391,9 +1395,23 @@ async function joinRoomById(roomId) {
 
   // Play sound for local user entering room
   sounds.userJoin();
-  
+
   // Show room UI
   showRoomUI();
+
+  // Restore screen share if it was active before leaving the room
+  if (wasScreenSharing) {
+    console.log('[SCREEN] Restoring screen share after room join');
+    setTimeout(async () => {
+      try {
+        await toggleScreen();
+        console.log('[SCREEN] Screen share restored successfully');
+      } catch (e) {
+        console.error('[SCREEN] Error restoring screen share:', e);
+        localStorage.removeItem('keroschat_screen_sharing');
+      }
+    }, 1000); // Wait 1 second for peer connections to establish
+  }
 
   // Add local video
   addVideoStream('local', localStream, currentUser.username, true, false);
@@ -2302,20 +2320,25 @@ socket.on('screen-share-stopped', (userId) => {
 // Handle active screen shares when joining room (users already sharing)
 socket.on('active-screen-shares', (userIds) => {
   console.log('[SCREEN] Received active screen shares on join:', userIds);
-  
+  console.log('[SCREEN] Active users:', Array.from(activeUsers.keys()));
+  console.log('[SCREEN] Peers:', Array.from(peers.keys()));
+
   userIds.forEach(async (userId) => {
     // Track this user as screen sharing
     screenShareUsers.add(userId);
     const user = activeUsers.get(userId);
     const userName = user ? user.name : 'Участник';
     addLogEntry('Демонстрация', `${userName} демонстрирует экран`);
-    
+
+    console.log(`[SCREEN] Processing screen share for user: ${userId}, name: ${userName}`);
+
     // Ensure peer connection exists before requesting screen stream
     if (!peers.has(userId) && !activeUsers.has(userId)) {
       // Create user entry if not exists
       activeUsers.set(userId, { name: userName, avatar: user?.avatar });
+      console.log(`[SCREEN] Created activeUsers entry for ${userId}`);
     }
-    
+
     // Create peer connection if not exists
     if (!peers.has(userId)) {
       try {
@@ -2324,19 +2347,25 @@ socket.on('active-screen-shares', (userIds) => {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         socket.emit('offer', userId, offer);
+        console.log(`[SCREEN] Peer connection created and offer sent for ${userId}`);
       } catch (e) {
         console.error('[SCREEN] Error creating peer connection for screen share:', e);
       }
+    } else {
+      console.log(`[SCREEN] Peer connection already exists for ${userId}`);
     }
-    
+
     // Wait a bit for peer connection to establish before requesting screen stream
     setTimeout(() => {
+      console.log(`[SCREEN] Timeout triggered for ${userId}, checking video container`);
+
       // Check if video container already exists and add buttons
       const container = document.getElementById(`video-${userId}`);
       if (container) {
+        console.log(`[SCREEN] Video container found for ${userId}, adding screen share UI`);
         // Add screen-share class
         container.classList.add('screen-share');
-        
+
         // Add preview toggle button if not exists
         if (!container.querySelector('.preview-toggle-btn')) {
           const previewToggleBtn = document.createElement('button');
@@ -2346,7 +2375,7 @@ socket.on('active-screen-shares', (userIds) => {
           previewToggleBtn.onclick = () => toggleScreenSharePreview(userId);
           container.appendChild(previewToggleBtn);
         }
-        
+
         // Add fullscreen button if not exists
         if (!container.querySelector('.fullscreen-btn')) {
           const fullscreenBtn = document.createElement('button');
@@ -2356,25 +2385,33 @@ socket.on('active-screen-shares', (userIds) => {
           fullscreenBtn.onclick = () => openScreenModal(userId);
           container.appendChild(fullscreenBtn);
         }
-        
+
         // Add double-click handler to video
         const video = container.querySelector('video');
         if (video) {
+          console.log(`[SCREEN] Video element found for ${userId}, srcObject:`, video.srcObject ? 'has stream' : 'NO STREAM');
           video.style.cursor = 'pointer';
           video.title = 'Двойной клик для увеличения';
           video.ondblclick = () => openScreenModal(userId);
           // Refresh video stream by re-setting srcObject
           const currentStream = video.srcObject;
           if (currentStream) {
+            console.log(`[SCREEN] Refreshing video stream for ${userId}`);
             video.srcObject = null;
             setTimeout(() => {
               video.srcObject = currentStream;
               video.play().catch(e => console.log('[SCREEN] Refresh play error:', e));
             }, 100);
+          } else {
+            console.warn(`[SCREEN] No video stream for ${userId}, requesting fresh stream`);
           }
+        } else {
+          console.warn(`[SCREEN] No video element found for ${userId}`);
         }
+      } else {
+        console.warn(`[SCREEN] No video container found for ${userId}`);
       }
-      
+
       // Request fresh video stream from server for this user
       console.log(`[SCREEN] Requesting fresh stream from user: ${userId}`);
       socket.emit('request-screen-stream', userId);
@@ -2385,6 +2422,8 @@ socket.on('active-screen-shares', (userIds) => {
 // Handle request to refresh screen offer (when new user joins and needs stream)
 socket.on('refresh-screen-offer', async ({ requesterId, targetId }) => {
   console.log(`[SCREEN] Received refresh request from ${requesterId}, target: ${targetId}`);
+  console.log(`[SCREEN] My socket.id: ${socket.id}, isScreenSharing: ${isScreenSharing}`);
+
   // Only respond if we are the target and we're screen sharing
   if (targetId === socket.id && isScreenSharing) {
     console.log(`[SCREEN] Re-sending screen stream to ${requesterId}`);
@@ -2398,12 +2437,20 @@ socket.on('refresh-screen-offer', async ({ requesterId, targetId }) => {
         console.error('[SCREEN] Error creating peer connection:', e);
         return;
       }
+    } else {
+      console.log(`[SCREEN] Peer connection already exists for ${requesterId}`);
     }
     // Create new offer to trigger renegotiation
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    socket.emit('offer', requesterId, offer);
-    console.log(`[SCREEN] Re-sent offer to ${requesterId}`);
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit('offer', requesterId, offer);
+      console.log(`[SCREEN] Re-sent offer to ${requesterId}`);
+    } catch (e) {
+      console.error('[SCREEN] Error creating offer:', e);
+    }
+  } else {
+    console.log(`[SCREEN] Ignoring refresh request - not target (${targetId !== socket.id}) or not screen sharing (${!isScreenSharing})`);
   }
 });
 
@@ -2547,8 +2594,9 @@ async function toggleScreen() {
     }
     
     isScreenSharing = false;
+    localStorage.removeItem('keroschat_screen_sharing');
     socket.emit('screen-share-stopped');
-    
+
     const btn = document.getElementById('screenBtn');
     if (btn) {
       btn.classList.remove('active');
@@ -2631,8 +2679,9 @@ async function toggleScreen() {
       document.getElementById('videoGrid').appendChild(previewContainer);
       
       isScreenSharing = true;
+      localStorage.setItem('keroschat_screen_sharing', 'true');
       socket.emit('screen-share-started');
-      
+
       const btn = document.getElementById('screenBtn');
       if (btn) {
         btn.classList.add('active');
