@@ -1372,21 +1372,22 @@ function generateRandomId(length) {
 // ========== ROOM ==========
 
 async function joinRoomById(roomId) {
-  if (!currentUser) {
-    showLoginModal();
-    return;
-  }
+  try {
+    if (!currentUser) {
+      showLoginModal();
+      return;
+    }
 
-  // Find room from allRooms (loaded from server)
-  console.log('[JOIN] Looking for room:', roomId);
-  console.log('[JOIN] Available rooms:', allRooms.map(r => ({id: r.id, name: r.name})));
-  const room = allRooms.find(r => r.id === roomId);
-  if (!room) {
-    console.error('[JOIN] Room not found:', roomId);
-    showAlertModal('Комната не найдена', 'error');
-    return;
-  }
-  console.log('[JOIN] Room found:', room.name);
+    // Find room from allRooms (loaded from server)
+    console.log('[JOIN] Looking for room:', roomId);
+    console.log('[JOIN] Available rooms:', allRooms.map(r => ({id: r.id, name: r.name})));
+    const room = allRooms.find(r => r.id === roomId);
+    if (!room) {
+      console.error('[JOIN] Room not found:', roomId);
+      showAlertModal('Комната не найдена', 'error');
+      return;
+    }
+    console.log('[JOIN] Room found:', room.name);
 
   currentRoom = roomId;
   currentRoomName = room.name;
@@ -1553,6 +1554,10 @@ async function joinRoomById(roomId) {
     setTimeout(() => {
       toggleScreen();
     }, 1000);
+  }
+  } catch (error) {
+    console.error('[JOIN] Error in joinRoomById:', error);
+    showAlertModal('Ошибка входа в комнату: ' + error.message, 'error');
   }
 }
 
