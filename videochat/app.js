@@ -104,6 +104,11 @@ let isCamOn = true;
 let isSoundOn = true;
 let isScreenSharing = false;
 
+// Expose to window for admin panel access
+window.peers = peers;
+window.activeUsers = activeUsers;
+window.setRemoteVolume = setRemoteVolume;
+
 // Audio/Video device selection
 let selectedAudioInput = null; // microphone
 let selectedAudioOutput = null; // speakers
@@ -2122,6 +2127,12 @@ socket.on('user-joined', async (user) => {
   activeUsers.set(user.id, user);
   addChatMessage('Система', `Комната "${currentRoomName}" - подключился ${user.name}`, true);
   updateActiveUsers();
+
+  // Update admin panel remote volume controls
+  if (typeof window.updateAdminRemoteVolumeControls === 'function') {
+    window.updateAdminRemoteVolumeControls();
+  }
+
   console.log('[USER-JOINED] User added to activeUsers:', user.id, user.name);
 });
 
@@ -2156,6 +2167,11 @@ socket.on('user-left', (userId) => {
   const userName = user ? user.name : 'Участник';
   addChatMessage('Система', `Комната "${currentRoomName}" - отключился ${userName}`, true);
   updateActiveUsers();
+
+  // Update admin panel remote volume controls
+  if (typeof window.updateAdminRemoteVolumeControls === 'function') {
+    window.updateAdminRemoteVolumeControls();
+  }
 });
 
 // Room synchronization events

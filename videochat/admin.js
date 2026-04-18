@@ -436,6 +436,9 @@ function loadUserSettings() {
   updateVolume('mic', micVol);
   updateVolume('vid', vidVol);
 
+  // Update remote volume controls
+  updateAdminRemoteVolumeControls();
+
   // Update avatar preview in admin panel
   const avatar = userAvatar || localStorage.getItem(`keroschat_avatar_${currentUser?.username}`);
   const preview = document.getElementById('adminAvatarPreview');
@@ -517,6 +520,57 @@ function updateVolume(type, value) {
 
   localStorage.setItem(`keroschat_${type}_volume`, value);
 }
+
+function updateAdminRemoteVolumeControls() {
+  const container = document.getElementById('adminRemoteVolumeControls');
+
+  // Check if we're in a room and have peers (need to access from app.js scope)
+  if (typeof window.peers !== 'undefined' && window.peers.size > 0) {
+    container.innerHTML = '';
+    window.peers.forEach((pc, id) => {
+      const user = window.activeUsers ? window.activeUsers.get(id) : null;
+      const name = user ? user.name : 'Участник';
+
+      // Get current volume from video element
+      const videoContainer = document.getElementById(`video-${id}`);
+      const video = videoContainer ? videoContainer.querySelector('video') : null;
+      const currentVolume = video ? Math.round(video.volume * 100) : 50;
+
+      const div = document.createElement('div');
+      div.style.cssText = 'display: flex; align-items: center; margin-bottom: 12px;';
+      div.innerHTML = `
+        <span style="flex: 1; font-size: 13px; color: #dcddde;">${name}</span>
+        <input type="range" min="0" max="100" value="${currentVolume}" data-userid="${id}"
+               onchange="setAdminRemoteVolume('${id}', this.value)"
+               style="width: 120px;">
+        <span style="margin-left: 8px; font-size: 11px; color: #b9bbbe; width: 35px;">${currentVolume}%</span>
+      `;
+      container.appendChild(div);
+    });
+  } else {
+    container.innerHTML = '<p style="color: #72767d; font-size: 12px;">Нет других участников в комнате</p>';
+  }
+}
+
+function setAdminRemoteVolume(userId, value) {
+  // Call the function from app.js
+  if (typeof window.setRemoteVolume === 'function') {
+    window.setRemoteVolume(userId, value);
+  }
+
+  // Update the percentage display
+  const container = document.getElementById('adminRemoteVolumeControls');
+  const input = container.querySelector(`input[data-userid="${userId}"]`);
+  if (input) {
+    const span = input.nextElementSibling;
+    if (span) {
+      span.textContent = value + '%';
+    }
+  }
+}
+
+// Expose to window for app.js access
+window.updateAdminRemoteVolumeControls = updateAdminRemoteVolumeControls;
 
 function updateAdminAvatar(input) {
   const file = input.files[0];
