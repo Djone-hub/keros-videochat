@@ -2901,6 +2901,13 @@ async function toggleScreen() {
     sounds.screenOff();
     
     if (screenStream) {
+      // Remove screen track from localStream
+      const screenTrack = screenStream.getVideoTracks()[0];
+      if (screenTrack && localStream) {
+        localStream.removeTrack(screenTrack);
+        console.log('[SCREEN] Screen track removed from localStream');
+      }
+
       // Remove onended handler before stopping to prevent double toggle
       screenStream.getVideoTracks().forEach(track => {
         track.onended = null;
@@ -3038,15 +3045,25 @@ async function toggleScreen() {
             console.error('[SCREEN] Error replacing track for peer', peerId, ':', err);
           });
         } else {
-          // If no video sender (audio-only), add screen track using transceiver
-          console.log(`[SCREEN] No video sender for peer ${peerId} (audio-only), adding screen track via transceiver`);
+          // If no video sender (audio-only), add screen track to localStream first, then replace
+          console.log(`[SCREEN] No video sender for peer ${peerId} (audio-only), adding screen track to localStream`);
           try {
-            const transceiver = pc.addTransceiver('video', {
-              streams: [screenStream],
-              direction: 'sendonly'
-            });
-            console.log(`[SCREEN] Screen track added successfully for peer ${peerId} via transceiver`);
-            addedCount++;
+            // Add screen track to localStream
+            localStream.addTrack(screenTrack);
+            console.log('[SCREEN] Screen track added to localStream');
+
+            // Now replace with the new track
+            const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+            if (sender) {
+              sender.replaceTrack(screenTrack);
+              console.log(`[SCREEN] Track replaced successfully for peer ${peerId}`);
+              replacedCount++;
+            } else {
+              // Still no sender - try addTrack
+              pc.addTrack(screenTrack, screenStream);
+              console.log(`[SCREEN] Screen track added via addTrack for peer ${peerId}`);
+              addedCount++;
+            }
           } catch (err) {
             console.error(`[SCREEN] Error adding screen track for peer ${peerId}:`, err);
           }
