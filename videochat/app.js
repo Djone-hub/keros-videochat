@@ -2560,24 +2560,36 @@ socket.on('active-screen-shares', (userIds) => {
 
     console.log(`[SCREEN] Processing screen share for user: ${userId}, name: ${userName}`);
 
-    // Ensure peer connection exists
-    if (!peers.has(userId)) {
+    // Recreate peer connection if it exists (to get screen track)
+    if (peers.has(userId)) {
+      console.log(`[SCREEN] Recreating peer connection for screen share user: ${userId}`);
+      const pc = peers.get(userId);
+      pc.close();
+      peers.delete(userId);
+      removeVideoStream(userId);
+      
+      // Recreate with screen track
       try {
-        console.log(`[SCREEN] Creating peer connection for screen share user: ${userId}`);
+        const newPc = await createPeerConnection(userId);
+        const offer = await newPc.createOffer();
+        await newPc.setLocalDescription(offer);
+        socket.emit('offer', userId, offer);
+        console.log(`[SCREEN] Peer connection recreated with screen track for ${userId}`);
+      } catch (e) {
+        console.error('[SCREEN] Error recreating peer connection:', e);
+      }
+    } else {
+      console.log(`[SCREEN] Creating new peer connection for screen share user: ${userId}`);
+      try {
         const pc = await createPeerConnection(userId);
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         socket.emit('offer', userId, offer);
-        console.log(`[SCREEN] Peer connection created and offer sent for ${userId}`);
+        console.log(`[SCREEN] Peer connection created with screen track for ${userId}`);
       } catch (e) {
         console.error('[SCREEN] Error creating peer connection for screen share:', e);
       }
-    } else {
-      console.log(`[SCREEN] Peer connection already exists for ${userId}`);
     }
-
-    // Screen container will be created automatically when screen track arrives via ontrack
-    console.log('[SCREEN] Waiting for screen track for:', userId);
   });
 });
 
