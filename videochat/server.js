@@ -1192,20 +1192,29 @@ io.on('connection', (socket) => {
 
     // Check if room exists in persistent store
     let storedRoom = roomStore.get(roomId);
-    
+
+    console.log(`[JOIN-ROOM] Room ID: ${roomId}, Name: ${roomName}`);
+    console.log(`[JOIN-ROOM] Stored room exists: ${!!storedRoom}`);
+    console.log(`[JOIN-ROOM] Active room exists: ${rooms.has(roomId)}`);
+    if (storedRoom) {
+      console.log(`[JOIN-ROOM] Stored room data:`, storedRoom);
+    }
+
     if (!rooms.has(roomId)) {
       // If room exists in store, use that name
       // Only create if room exists in persistent store OR roomName is provided (explicit creation)
       if (storedRoom || roomName) {
         const displayName = storedRoom ? storedRoom.name : (roomName || roomId);
-        rooms.set(roomId, { 
-          name: displayName, 
-          users: new Set(), 
+        rooms.set(roomId, {
+          name: displayName,
+          users: new Set(),
           screenSharingUsers: new Set(),
           channels: new Map([['general', { name: 'Общий', users: new Set() }]]) // Default channel
         });
+        console.log(`[JOIN-ROOM] Created active room: ${roomId} with name: ${displayName}`);
       } else {
         // Room doesn't exist anywhere and no name provided - reject join
+        console.log(`[JOIN-ROOM] Room not found anywhere, rejecting join for: ${roomId}`);
         socket.emit('room-error', { message: 'Комната не найдена' });
         return;
       }
