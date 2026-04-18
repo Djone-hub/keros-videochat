@@ -2394,21 +2394,25 @@ socket.on('channels-updated', () => {
 });
 
 socket.on('offer', async (userId, offer) => {
-  // Offer received - debug disabled
-  console.log('[OFFER] Received offer from:', userId);
+  // Offer received
+  console.log('[OFFER] Received offer from:', userId, 'type:', offer.type);
   let pc;
   if (peers.has(userId)) {
     // Use existing peer connection (renegotiation)
     pc = peers.get(userId);
     console.log('[OFFER] Using existing peer connection for renegotiation');
+    console.log('[OFFER] Current senders:', pc.getSenders().map(s => ({ kind: s.track?.kind, label: s.track?.label })));
   } else {
     // Create new peer connection (initial connection)
     pc = await createPeerConnection(userId);
     console.log('[OFFER] Created new peer connection');
   }
   await pc.setRemoteDescription(offer);
+  console.log('[OFFER] Remote description set');
   const answer = await pc.createAnswer();
+  console.log('[OFFER] Answer created, type:', answer.type);
   await pc.setLocalDescription(answer);
+  console.log('[OFFER] Local description set');
   // Answer sent
   socket.emit('answer', userId, answer);
   console.log('[OFFER] Answer sent to:', userId);
@@ -2879,10 +2883,15 @@ async function toggleScreen() {
         return;
       }
 
-      // Request screen share with original constraints
+      // Request screen share with quality settings
+      // Low quality for local preview (to reduce CPU usage)
+      // High quality will be sent to remote peers
       const constraints = {
         video: {
-          cursor: 'always'
+          cursor: 'always',
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
+          frameRate: { ideal: 30, max: 60 }
         },
         audio: false
       };
@@ -2916,7 +2925,9 @@ async function toggleScreen() {
           // Renegotiate to send the new track to remote peer
           try {
             const offer = await pc.createOffer();
+            console.log(`[SCREEN] Renegotiation offer created for peer ${peerId}, type: ${offer.type}`);
             await pc.setLocalDescription(offer);
+            console.log(`[SCREEN] Local description set for renegotiation`);
             socket.emit('offer', peerId, offer);
             console.log(`[SCREEN] Renegotiation offer sent for peer ${peerId}`);
           } catch (renegErr) {
