@@ -2927,12 +2927,13 @@ async function toggleScreen() {
         } else {
           // If no video sender (audio-only), add screen track
           console.log(`[SCREEN] No video sender for peer ${peerId} (audio-only), adding screen track`);
-          pc.addTrack(screenTrack, screenStream).then(() => {
+          try {
+            pc.addTrack(screenTrack, screenStream);
             console.log(`[SCREEN] Screen track added successfully for peer ${peerId}`);
             addedCount++;
-          }).catch(err => {
-            console.error('[SCREEN] Error adding screen track for peer', peerId, ':', err);
-          });
+          } catch (err) {
+            console.error(`[SCREEN] Error adding screen track for peer ${peerId}:`, err);
+          }
         }
       });
       console.log(`[SCREEN] Track replacement complete: ${replacedCount} replaced, ${addedCount} added`);
