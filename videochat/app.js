@@ -2666,6 +2666,8 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
       try {
         console.log(`[SCREEN] Creating new peer connection with screen track for ${requesterId}`);
         const newPc = await createPeerConnection(requesterId);
+        // Wait for screen track to be ready before creating offer
+        await new Promise(resolve => setTimeout(resolve, 1000));
         const offer = await newPc.createOffer();
         await newPc.setLocalDescription(offer);
         socket.emit('offer', requesterId, offer);
@@ -3062,8 +3064,8 @@ async function toggleScreen() {
         for (const peerId of peerIds) {
           try {
             const pc = await createPeerConnection(peerId);
-            // Wait for screen track to be ready before creating offer
-            await new Promise(resolve => setTimeout(resolve, 500));
+            // Wait for screen track to be ready before creating offer (increased to 1000ms)
+            await new Promise(resolve => setTimeout(resolve, 1000));
             const offer = await pc.createOffer();
             console.log(`[SCREEN] Offer created for ${peerId}, type: ${offer.type}`);
             console.log(`[SCREEN] Offer SDP (first 4000 chars):`, offer.sdp.substring(0, 4000));
