@@ -2572,10 +2572,10 @@ socket.on('active-screen-shares', (userIds) => {
     addLogEntry('Демонстрация', `${userName} демонстрирует экран`);
 
     console.log(`[SCREEN] Processing screen share for user: ${userId}, name: ${userName}`);
-
-    // Request screen sharer to renegotiate (send screen track)
-    socket.emit('request-screen-renegotiation', userId);
-    console.log(`[SCREEN] Sent request-screen-renegotiation for ${userId}`);
+    
+    // Screen sharer will send screen-share-renegotiate-request automatically
+    // Just wait for the renegotiation offer
+    console.log(`[SCREEN] Waiting for renegotiation offer from ${userId}`);
   });
 });
 
