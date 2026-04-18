@@ -2046,51 +2046,30 @@ async function createPeerConnection(userId) {
   });
 
   console.log(`[PEER] Adding local tracks to peer connection for ${userId}`);
-  localStream.getTracks().forEach(track => {
-    console.log(`[PEER] Adding track: ${track.kind}, label: ${track.label}, enabled: ${track.enabled}`);
-    pc.addTrack(track, localStream);
-  });
-  console.log(`[PEER] Total tracks added to peer ${userId}: ${localStream.getTracks().length}`);
 
-  // If screen sharing, replace video track immediately
+  // If screen sharing is active, add screen track instead of camera track
   if (isScreenSharing && screenStream) {
-    console.log(`[PEER] Screen sharing active, replacing video track for peer ${userId}`);
+    console.log(`[PEER] Screen sharing active, adding screen track for peer ${userId}`);
     const screenTrack = screenStream.getVideoTracks()[0];
     if (screenTrack) {
-      console.log(`[PEER] Screen track properties: label=${screenTrack.label}, enabled=${screenTrack.enabled}, muted=${screenTrack.muted}, readyState=${screenTrack.readyState}`);
-      const screenSettings = screenTrack.getSettings();
-      console.log(`[PEER] Screen track settings:`, screenSettings);
-      console.log(`[PEER] Screen track width: ${screenSettings.width}, height: ${screenSettings.height}`);
-    } else {
-      console.warn(`[PEER] No screen track found in screenStream!`);
+      console.log(`[PEER] Screen track properties: label=${screenTrack.label}, enabled=${screenTrack.enabled}`);
+      pc.addTrack(screenTrack, screenStream);
+      console.log(`[PEER] Screen track added to peer ${userId}`);
     }
-    setTimeout(async () => {
-      try {
-        const senders = pc.getSenders();
-        const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-        console.log(`[PEER] Video sender found: ${!!videoSender}, current track: ${videoSender?.track?.label}`);
-        if (videoSender) {
-          if (screenTrack) {
-            console.log(`[PEER] Replacing video track with screen track for peer ${userId}`);
-            await videoSender.replaceTrack(screenTrack);
-            console.log(`[PEER] Video track replaced successfully for peer ${userId}, new track:`, videoSender.track?.label);
-            console.log(`[PEER] New track settings after replacement:`, videoSender.track?.getSettings());
-          } else {
-            console.error(`[PEER] Cannot replace: no screen track available`);
-          }
-        } else {
-          console.warn(`[PEER] No video sender found for peer ${userId} (audio-only connection)`);
-          // If no video sender but screen sharing, add screen track
-          if (screenTrack) {
-            console.log(`[PEER] Adding screen track to audio-only connection for peer ${userId}`);
-            pc.addTrack(screenTrack, screenStream);
-          }
-        }
-      } catch (e) {
-        console.error(`[PEER] Error replacing screen track for peer ${userId}:`, e);
-      }
-    }, 100);
+    // Add audio track from localStream
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (audioTrack) {
+      pc.addTrack(audioTrack, localStream);
+      console.log(`[PEER] Audio track added to peer ${userId}`);
+    }
+  } else {
+    // Normal mode - add all tracks from localStream
+    localStream.getTracks().forEach(track => {
+      console.log(`[PEER] Adding track: ${track.kind}, label: ${track.label}, enabled: ${track.enabled}`);
+      pc.addTrack(track, localStream);
+    });
   }
+  console.log(`[PEER] Total tracks added to peer ${userId}`);
 
   pc.ontrack = (e) => {
     const stream = e.streams[0];
@@ -2135,7 +2114,7 @@ async function createPeerConnection(userId) {
     const isScreenByResolution = width >= 720 || (width > 0 && width/height > 1.3);
 
     console.log(`[TRACK] Video settings for ${userId}:`, width, 'x', height, 'aspect:', width/height);
-    
+
     socket.emit('get-user-name', userId, (name) => {
       const userName = name || 'Участник';
       if (!activeUsers.has(userId)) {
@@ -2148,13 +2127,13 @@ async function createPeerConnection(userId) {
       updateActiveUsers();
     });
   };
-  
+
   pc.onicecandidate = (e) => {
     if (e.candidate) {
       socket.emit('ice-candidate', userId, e.candidate);
     }
   };
-  
+
   pc.onconnectionstatechange = () => {
     if (pc.connectionState === 'disconnected') {
       removeVideoStream(userId);
@@ -2162,7 +2141,7 @@ async function createPeerConnection(userId) {
       updateActiveUsers();
     }
   };
-  
+
   peers.set(userId, pc);
   return pc;
 }
@@ -2901,13 +2880,6 @@ async function toggleScreen() {
     sounds.screenOff();
     
     if (screenStream) {
-      // Remove screen track from localStream
-      const screenTrack = screenStream.getVideoTracks()[0];
-      if (screenTrack && localStream) {
-        localStream.removeTrack(screenTrack);
-        console.log('[SCREEN] Screen track removed from localStream');
-      }
-
       // Remove onended handler before stopping to prevent double toggle
       screenStream.getVideoTracks().forEach(track => {
         track.onended = null;
@@ -3045,25 +3017,12 @@ async function toggleScreen() {
             console.error('[SCREEN] Error replacing track for peer', peerId, ':', err);
           });
         } else {
-          // If no video sender (audio-only), add screen track to localStream first, then replace
-          console.log(`[SCREEN] No video sender for peer ${peerId} (audio-only), adding screen track to localStream`);
+          // If no video sender (audio-only), add screen track directly
+          console.log(`[SCREEN] No video sender for peer ${peerId} (audio-only), adding screen track`);
           try {
-            // Add screen track to localStream
-            localStream.addTrack(screenTrack);
-            console.log('[SCREEN] Screen track added to localStream');
-
-            // Now replace with the new track
-            const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-            if (sender) {
-              sender.replaceTrack(screenTrack);
-              console.log(`[SCREEN] Track replaced successfully for peer ${peerId}`);
-              replacedCount++;
-            } else {
-              // Still no sender - try addTrack
-              pc.addTrack(screenTrack, screenStream);
-              console.log(`[SCREEN] Screen track added via addTrack for peer ${peerId}`);
-              addedCount++;
-            }
+            pc.addTrack(screenTrack, screenStream);
+            console.log(`[SCREEN] Screen track added successfully for peer ${peerId}`);
+            addedCount++;
           } catch (err) {
             console.error(`[SCREEN] Error adding screen track for peer ${peerId}:`, err);
           }
