@@ -386,7 +386,7 @@ function loadUserSettings() {
   const savedTheme = localStorage.getItem('keroschat_theme') || 'dark';
   setTheme(savedTheme);
 
-  const micVol = localStorage.getItem('keroschat_mic_volume') || '100';
+  const micVol = localStorage.getItem('keroschat_mic_volume') || '50';
   const vidVol = localStorage.getItem('keroschat_video_volume') || '100';
 
   // Update admin panel sliders
@@ -399,6 +399,18 @@ function loadUserSettings() {
   const vidVolVal = document.getElementById('vidVolVal');
   if (micVolVal) micVolVal.textContent = micVol;
   if (vidVolVal) vidVolVal.textContent = vidVol;
+
+  // Update visual indicators
+  const micVolBar = document.getElementById('micVolBar');
+  const vidVolBar = document.getElementById('vidVolBar');
+  if (micVolBar) {
+    const micPercentage = Math.min(100, (parseInt(micVol) / 200) * 100);
+    micVolBar.style.width = micPercentage + '%';
+  }
+  if (vidVolBar) {
+    const vidPercentage = Math.min(100, (parseInt(vidVol) / 200) * 100);
+    vidVolBar.style.width = vidPercentage + '%';
+  }
 
   // Update avatar preview in admin panel
   const avatar = userAvatar || localStorage.getItem(`keroschat_avatar_${currentUser?.username}`);
@@ -450,6 +462,14 @@ function setTheme(themeName) {
 function updateVolume(type, value) {
   const displayEl = document.getElementById(type === 'mic' ? 'micVolVal' : 'vidVolVal');
   if (displayEl) displayEl.textContent = value;
+
+  // Update visual indicator
+  const barEl = document.getElementById(type === 'mic' ? 'micVolBar' : 'vidVolBar');
+  if (barEl) {
+    const percentage = Math.min(100, (value / 200) * 100);
+    barEl.style.width = percentage + '%';
+  }
+
   localStorage.setItem(`keroschat_${type}_volume`, value);
 }
 

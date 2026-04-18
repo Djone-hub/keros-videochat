@@ -1886,10 +1886,16 @@
             </div>
             <div class="admin-setting-card">
               <h4>🔊 Громкость</h4>
-              <label>Микрофон: <span id="micVolVal">100</span>%</label>
-              <input type="range" id="adminMicVolume" min="0" max="200" value="100" oninput="updateVolume('mic', this.value)" style="width: 100%; margin-bottom: 12px;">
+              <label>Микрофон: <span id="micVolVal">50</span>%</label>
+              <input type="range" id="adminMicVolume" min="0" max="200" value="50" oninput="updateVolume('mic', this.value)" style="width: 100%; margin-bottom: 8px;">
+              <div id="micVolIndicator" style="width: 100%; height: 8px; background: #40444b; border-radius: 4px; margin-bottom: 12px; overflow: hidden;">
+                <div id="micVolBar" style="width: 50%; height: 100%; background: linear-gradient(90deg, #3ba55d 0%, #faa61a 70%, #ed4245 100%); transition: width 0.1s;"></div>
+              </div>
               <label>Видео: <span id="vidVolVal">100</span>%</label>
-              <input type="range" id="adminVidVolume" min="0" max="200" value="100" oninput="updateVolume('vid', this.value)" style="width: 100%;">
+              <input type="range" id="adminVidVolume" min="0" max="200" value="100" oninput="updateVolume('vid', this.value)" style="width: 100%; margin-bottom: 8px;">
+              <div id="vidVolIndicator" style="width: 100%; height: 8px; background: #40444b; border-radius: 4px; overflow: hidden;">
+                <div id="vidVolBar" style="width: 100%; height: 100%; background: linear-gradient(90deg, #3ba55d 0%, #faa61a 70%, #ed4245 100%); transition: width 0.1s;"></div>
+              </div>
             </div>
             <div class="admin-setting-card">
               <h4>👤 Аватар</h4>
