@@ -2612,6 +2612,30 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
   }
 });
 
+// Handle screen share renegotiate request (from screen sharer)
+socket.on('screen-share-renegotiate-request', async ({ screenSharerId }) => {
+  console.log('[SCREEN] Received screen-share-renegotiate-request from:', screenSharerId);
+  
+  // Close and recreate peer connection for screen sharer
+  if (peers.has(screenSharerId)) {
+    console.log(`[SCREEN] Recreating peer connection for screen sharer: ${screenSharerId}`);
+    const pc = peers.get(screenSharerId);
+    pc.close();
+    peers.delete(screenSharerId);
+    removeVideoStream(screenSharerId);
+  }
+  
+  try {
+    const newPc = await createPeerConnection(screenSharerId);
+    const offer = await newPc.createOffer();
+    await newPc.setLocalDescription(offer);
+    socket.emit('offer', screenSharerId, offer);
+    console.log(`[SCREEN] Peer connection recreated for screen sharer ${screenSharerId}`);
+  } catch (e) {
+    console.error('[SCREEN] Error recreating peer connection:', e);
+  }
+});
+
 // Handle request to refresh screen offer (when new user joins and needs stream)
 socket.on('refresh-screen-offer', async ({ requesterId }) => {
   console.log('[SCREEN] Received refresh-screen-offer from:', requesterId);
@@ -2954,6 +2978,10 @@ async function toggleScreen() {
         removeVideoStream(peerId);
       });
       console.log('[SCREEN] All peer connections closed');
+
+      // Notify all users to recreate their peer connections
+      socket.emit('screen-share-renegotiate-request', { screenSharerId: socket.id });
+      console.log('[SCREEN] Sent screen-share-renegotiate-request to all users');
 
       // Wait a bit and recreate peer connections with screen track
       setTimeout(async () => {

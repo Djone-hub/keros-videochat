@@ -1447,6 +1447,12 @@ io.on('connection', (socket) => {
     socket.to(screenSharerId).emit('request-screen-renegotiation', socket.id);
   });
 
+  socket.on('screen-share-renegotiate-request', ({ screenSharerId }) => {
+    console.log(`[SCREEN] Screen share renegotiate request from ${socket.id}, screenSharerId: ${screenSharerId}`);
+    // Broadcast to all users in room except sender
+    socket.to(socket.roomId).emit('screen-share-renegotiate-request', { screenSharerId });
+  });
+
   socket.on('ice-candidate', (targetId, candidate) => {
     socket.to(targetId).emit('ice-candidate', socket.id, candidate);
   });
