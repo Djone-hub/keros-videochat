@@ -1839,25 +1839,28 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     // Local user doesn't need fullscreen button for their own screen share
     // Remote users DO need fullscreen button to enlarge shared screen
     if (isScreenShare && !isLocal) {
+      // Extract original userId from screen ID (remove -screen suffix)
+      const originalId = id.replace('-screen', '');
+
       // Add preview toggle button
       const previewToggleBtn = document.createElement('button');
       previewToggleBtn.className = 'preview-toggle-btn';
       previewToggleBtn.innerHTML = '👁️ Превью';
       previewToggleBtn.title = 'Переключить режим превью (экономия ресурсов)';
-      previewToggleBtn.onclick = () => toggleScreenSharePreview(id);
+      previewToggleBtn.onclick = () => toggleScreenSharePreview(originalId);
       container.appendChild(previewToggleBtn);
-      
+
       const fullscreenBtn = document.createElement('button');
       fullscreenBtn.className = 'fullscreen-btn';
       fullscreenBtn.innerHTML = '🔍';
       fullscreenBtn.title = 'Увеличить демонстрацию экрана';
-      fullscreenBtn.onclick = () => openScreenModal(id);
+      fullscreenBtn.onclick = () => openScreenModal(originalId);
       container.appendChild(fullscreenBtn);
-      
+
       // Double-click on video to enlarge screen share
       video.style.cursor = 'pointer';
       video.title = 'Двойной клик для увеличения';
-      video.ondblclick = () => openScreenModal(id);
+      video.ondblclick = () => openScreenModal(originalId);
     }
     
     container.appendChild(video);
@@ -1908,19 +1911,22 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
       // Force inline styles for visibility
       container.style.cssText = 'display: block !important; visibility: visible !important; opacity: 1 !important; min-width: 640px; min-height: 360px; border: 3px solid #3ba55d;';
       video.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: contain !important; display: block !important; visibility: visible !important;';
-      
+
+      // Extract original userId from screen ID (remove -screen suffix)
+      const originalId = id.replace('-screen', '');
+
       // Add fullscreen button if not exists
       if (!container.querySelector('.fullscreen-btn')) {
         const fullscreenBtn = document.createElement('button');
         fullscreenBtn.className = 'fullscreen-btn';
         fullscreenBtn.innerHTML = '🔍';
         fullscreenBtn.title = 'Увеличить демонстрацию экрана';
-        fullscreenBtn.onclick = () => openScreenModal(id);
+        fullscreenBtn.onclick = () => openScreenModal(originalId);
         container.appendChild(fullscreenBtn);
-        
+
         video.style.cursor = 'pointer';
         video.title = 'Двойной клик для увеличения';
-        video.ondblclick = () => openScreenModal(id);
+        video.ondblclick = () => openScreenModal(originalId);
       }
     }
   }
@@ -1928,8 +1934,14 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
 }
 
 function removeVideoStream(id) {
+  // Remove camera container
   const container = document.getElementById(`video-${id}`);
   if (container) container.remove();
+
+  // Remove screen share container (if exists)
+  const screenContainer = document.getElementById(`video-${id}-screen`);
+  if (screenContainer) screenContainer.remove();
+
   updateUserCount();
 }
 
@@ -2047,44 +2059,39 @@ async function createPeerConnection(userId) {
 
   console.log(`[PEER] Adding local tracks to peer connection for ${userId}`);
 
-  // If screen sharing is active, add screen track instead of camera track
+  // Add all tracks from localStream (camera + audio)
+  localStream.getTracks().forEach(track => {
+    console.log(`[PEER] Adding track: ${track.kind}, label: ${track.label}, enabled: ${track.enabled}`);
+    pc.addTrack(track, localStream);
+  });
+
+  // If screen sharing is active, ADD screen track as well (Discord-style: camera + screen simultaneously)
   if (isScreenSharing && screenStream) {
     console.log(`[PEER] Screen sharing active, adding screen track for peer ${userId}`);
     const screenTrack = screenStream.getVideoTracks()[0];
     if (screenTrack) {
       console.log(`[PEER] Screen track properties: label=${screenTrack.label}, enabled=${screenTrack.enabled}`);
       pc.addTrack(screenTrack, screenStream);
-      console.log(`[PEER] Screen track added to peer ${userId}`);
+      console.log(`[PEER] Screen track added to peer ${userId} (in addition to camera)`);
     }
-    // Add audio track from localStream
-    const audioTrack = localStream.getAudioTracks()[0];
-    if (audioTrack) {
-      pc.addTrack(audioTrack, localStream);
-      console.log(`[PEER] Audio track added to peer ${userId}`);
-    }
-  } else {
-    // Normal mode - add all tracks from localStream
-    localStream.getTracks().forEach(track => {
-      console.log(`[PEER] Adding track: ${track.kind}, label: ${track.label}, enabled: ${track.enabled}`);
-      pc.addTrack(track, localStream);
-    });
   }
   console.log(`[PEER] Total tracks added to peer ${userId}`);
 
   pc.ontrack = (e) => {
     const stream = e.streams[0];
-    const videoTrack = stream.getVideoTracks()[0];
-    const audioTrack = stream.getAudioTracks()[0];
+    const tracks = stream.getTracks();
+    const videoTrack = tracks.find(t => t.kind === 'video');
+    const audioTrack = tracks.find(t => t.kind === 'audio');
 
     // Log detailed track info for debugging
-    const trackInfo = stream.getTracks().map(t => ({
+    const trackInfo = tracks.map(t => ({
       kind: t.kind,
       label: t.label,
       readyState: t.readyState,
       enabled: t.enabled,
       muted: t.muted
     }));
-    console.log(`[TRACK] Received stream from ${userId}:`, JSON.stringify(trackInfo));
+    console.log(`[TRACK] Received track from ${userId}:`, JSON.stringify(trackInfo));
 
     // Log video track settings
     if (videoTrack) {
@@ -2110,7 +2117,7 @@ async function createPeerConnection(userId) {
     const settings = videoTrack?.getSettings();
     const width = settings?.width || 0;
     const height = settings?.height || 0;
-    // Screen share typically has 16:9 or wider aspect ratio, or high resolution (reverted to less strict)
+    // Screen share typically has 16:9 or wider aspect ratio, or high resolution
     const isScreenByResolution = width >= 720 || (width > 0 && width/height > 1.3);
 
     console.log(`[TRACK] Video settings for ${userId}:`, width, 'x', height, 'aspect:', width/height);
@@ -2120,10 +2127,16 @@ async function createPeerConnection(userId) {
       if (!activeUsers.has(userId)) {
         activeUsers.set(userId, { id: userId, name: userName });
       }
-      // Check if this user is screen sharing (socket event OR label OR resolution)
-      const isScreenShare = screenShareUsers.has(userId) || isScreenByLabel || isScreenByResolution;
-      console.log(`[TRACK] Screen detection for ${userId}: socket=${screenShareUsers.has(userId)}, label=${isScreenByLabel}, resolution=${isScreenByResolution}, FINAL=${isScreenShare}`);
-      addVideoStream(userId, stream, userName, false, isScreenShare);
+
+      // Check if this is a screen track
+      const isScreenShare = isScreenByLabel || isScreenByResolution;
+      console.log(`[TRACK] Screen detection for ${userId}: label=${isScreenByLabel}, resolution=${isScreenByResolution}, FINAL=${isScreenShare}`);
+
+      // Use unique ID for screen share container (userId + '-screen')
+      const videoId = isScreenShare ? `${userId}-screen` : userId;
+
+      // Add video stream with unique ID
+      addVideoStream(videoId, stream, userName, false, isScreenShare);
       updateActiveUsers();
     });
   };
@@ -2495,65 +2508,12 @@ socket.on('screen-share-started', (userId) => {
   const user = activeUsers.get(userId);
   const userName = user ? user.name : 'Участник';
   addLogEntry('Демонстрация', `${userName} начал демонстрацию экрана`);
-  
+
   // Track this user as screen sharing
   screenShareUsers.add(userId);
-  
-  // Check if video container already exists and UPDATE it to screen share mode
-  const container = document.getElementById(`video-${userId}`);
-  if (container) {
-    // Update existing container to screen share style
-    container.classList.add('screen-share');
-    const video = container.querySelector('video');
-    if (video) {
-      video.style.objectFit = 'contain';
-      
-      // Log resolution for debugging (screen share styling already applied above)
-      const checkResolution = () => {
-        const w = video.videoWidth;
-        const h = video.videoHeight;
-        const isLarge = w >= 1280 || (w > 0 && w/h > 1.5);
-        console.log(`[SCREEN] Video resolution for ${userId}: ${w}x${h}, aspect: ${(w/h).toFixed(2)}, largeRes: ${isLarge}`);
-      };
-      
-      // Check now and on metadata loaded (resolution may change with replaceTrack)
-      if (video.readyState >= 2) {
-        checkResolution();
-      }
-      video.onloadedmetadata = checkResolution;
-      video.onresize = checkResolution;
-    }
-    
-    // Add preview toggle button if not exists
-    if (!container.querySelector('.preview-toggle-btn')) {
-      const previewToggleBtn = document.createElement('button');
-      previewToggleBtn.className = 'preview-toggle-btn';
-      previewToggleBtn.innerHTML = '👁️ Превью';
-      previewToggleBtn.title = 'Переключить режим превью (экономия ресурсов)';
-      previewToggleBtn.onclick = () => toggleScreenSharePreview(userId);
-      container.appendChild(previewToggleBtn);
-    }
-    
-    // Add fullscreen button if not exists
-    if (!container.querySelector('.fullscreen-btn')) {
-      const fullscreenBtn = document.createElement('button');
-      fullscreenBtn.className = 'fullscreen-btn';
-      fullscreenBtn.innerHTML = '🔍';
-      fullscreenBtn.title = 'Увеличить демонстрацию экрана';
-      fullscreenBtn.onclick = () => openScreenModal(userId);
-      container.appendChild(fullscreenBtn);
-      
-      if (video) {
-        video.style.cursor = 'pointer';
-        video.title = 'Двойной клик для увеличения';
-        video.ondblclick = () => openScreenModal(userId);
-      }
-    }
-    
-    console.log('[SCREEN] Updated container for screen share:', userId);
-  } else {
-    console.log('[SCREEN] Container not found yet, will be styled when video arrives');
-  }
+
+  // Screen container will be created automatically when screen track arrives via ontrack
+  console.log('[SCREEN] User started screen share, waiting for screen track:', userId);
 });
 
 // Handle remote user screen share stopped
@@ -2561,36 +2521,21 @@ socket.on('screen-share-stopped', (userId) => {
   const user = activeUsers.get(userId);
   const userName = user ? user.name : 'Участник';
   addLogEntry('Демонстрация', `${userName} остановил демонстрацию экрана`);
-  
+
   // Remove from screen share tracking
   screenShareUsers.delete(userId);
-  
-  // Revert container to normal video mode (don't remove it!)
-  const container = document.getElementById(`video-${userId}`);
-  if (container) {
-    container.classList.remove('screen-share');
-    container.style.cssText = ''; // Clear forced screen share styles
-    
-    const video = container.querySelector('video');
-    if (video) {
-      video.style.cssText = ''; // Clear forced video styles
-      video.style.transform = 'scaleX(-1)'; // Restore mirror for normal camera
-      video.style.objectFit = 'cover';
-    }
-    
-    // Remove screen share specific buttons
-    const previewBtn = container.querySelector('.preview-toggle-btn');
-    if (previewBtn) previewBtn.remove();
-    const fullscreenBtn = container.querySelector('.fullscreen-btn');
-    if (fullscreenBtn) fullscreenBtn.remove();
+
+  // Remove screen container (camera container remains unchanged)
+  const screenContainer = document.getElementById(`video-${userId}-screen`);
+  if (screenContainer) {
+    screenContainer.remove();
+    console.log('[SCREEN] Removed screen container for:', userId);
   }
 });
 
 // Handle active screen shares when joining room (users already sharing)
 socket.on('active-screen-shares', (userIds) => {
   console.log('[SCREEN] Received active screen shares on join:', userIds);
-  console.log('[SCREEN] Active users:', Array.from(activeUsers.keys()));
-  console.log('[SCREEN] Peers:', Array.from(peers.keys()));
 
   userIds.forEach(async (userId) => {
     // Track this user as screen sharing
@@ -2601,14 +2546,7 @@ socket.on('active-screen-shares', (userIds) => {
 
     console.log(`[SCREEN] Processing screen share for user: ${userId}, name: ${userName}`);
 
-    // Ensure peer connection exists before requesting screen stream
-    if (!peers.has(userId) && !activeUsers.has(userId)) {
-      // Create user entry if not exists
-      activeUsers.set(userId, { name: userName, avatar: user?.avatar });
-      console.log(`[SCREEN] Created activeUsers entry for ${userId}`);
-    }
-
-    // Create peer connection if not exists
+    // Ensure peer connection exists
     if (!peers.has(userId)) {
       try {
         console.log(`[SCREEN] Creating peer connection for screen share user: ${userId}`);
@@ -2624,67 +2562,8 @@ socket.on('active-screen-shares', (userIds) => {
       console.log(`[SCREEN] Peer connection already exists for ${userId}`);
     }
 
-    // Wait a bit for peer connection to establish before requesting screen stream
-    setTimeout(() => {
-      console.log(`[SCREEN] Timeout triggered for ${userId}, checking video container`);
-
-      // Check if video container already exists and add buttons
-      const container = document.getElementById(`video-${userId}`);
-      if (container) {
-        console.log(`[SCREEN] Video container found for ${userId}, adding screen share UI`);
-        // Add screen-share class
-        container.classList.add('screen-share');
-
-        // Add preview toggle button if not exists
-        if (!container.querySelector('.preview-toggle-btn')) {
-          const previewToggleBtn = document.createElement('button');
-          previewToggleBtn.className = 'preview-toggle-btn';
-          previewToggleBtn.innerHTML = '👁️ Превью';
-          previewToggleBtn.title = 'Переключить режим превью (экономия ресурсов)';
-          previewToggleBtn.onclick = () => toggleScreenSharePreview(userId);
-          container.appendChild(previewToggleBtn);
-        }
-
-        // Add fullscreen button if not exists
-        if (!container.querySelector('.fullscreen-btn')) {
-          const fullscreenBtn = document.createElement('button');
-          fullscreenBtn.className = 'fullscreen-btn';
-          fullscreenBtn.innerHTML = '🔍';
-          fullscreenBtn.title = 'Увеличить демонстрацию экрана';
-          fullscreenBtn.onclick = () => openScreenModal(userId);
-          container.appendChild(fullscreenBtn);
-        }
-
-        // Add double-click handler to video
-        const video = container.querySelector('video');
-        if (video) {
-          console.log(`[SCREEN] Video element found for ${userId}, srcObject:`, video.srcObject ? 'has stream' : 'NO STREAM');
-          video.style.cursor = 'pointer';
-          video.title = 'Двойной клик для увеличения';
-          video.ondblclick = () => openScreenModal(userId);
-          // Refresh video stream by re-setting srcObject
-          const currentStream = video.srcObject;
-          if (currentStream) {
-            console.log(`[SCREEN] Refreshing video stream for ${userId}`);
-            video.srcObject = null;
-            setTimeout(() => {
-              video.srcObject = currentStream;
-              video.play().catch(e => console.log('[SCREEN] Refresh play error:', e));
-            }, 100);
-          } else {
-            console.warn(`[SCREEN] No video stream for ${userId}, requesting fresh stream`);
-          }
-        } else {
-          console.warn(`[SCREEN] No video element found for ${userId}`);
-        }
-      } else {
-        console.warn(`[SCREEN] No video container found for ${userId}`);
-      }
-
-      // Request fresh video stream from server for this user
-      console.log(`[SCREEN] Requesting fresh stream from user: ${userId}`);
-      socket.emit('request-screen-stream', userId);
-    }, 500); // Wait 500ms for peer connection to establish
+    // Screen container will be created automatically when screen track arrives via ontrack
+    console.log('[SCREEN] Waiting for screen track for:', userId);
   });
 });
 
@@ -2874,11 +2753,11 @@ function toggleSound() {
 
 async function toggleScreen() {
   console.log('[SCREEN] Toggle called, isScreenSharing:', isScreenSharing);
-  
+
   if (isScreenSharing) {
     // Stop screen sharing
     sounds.screenOff();
-    
+
     if (screenStream) {
       // Remove onended handler before stopping to prevent double toggle
       screenStream.getVideoTracks().forEach(track => {
@@ -2888,32 +2767,27 @@ async function toggleScreen() {
       screenStream.getAudioTracks().forEach(track => track.stop());
       screenStream = null;
     }
-    
-    // Replace with camera track (if exists)
-    const videoTrack = localStream ? localStream.getVideoTracks()[0] : null;
-    if (videoTrack) {
-      peers.forEach(pc => {
-        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-        if (sender && videoTrack) {
-          sender.replaceTrack(videoTrack).catch(err => {
-            console.error('[SCREEN] Error replacing track:', err);
-          });
-        }
-      });
-    } else {
-      // If no camera track (audio-only), remove screen track from all peers
-      console.log('[SCREEN] No camera track (audio-only), removing screen track from peers');
-      peers.forEach(pc => {
-        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-        if (sender) {
-          sender.replaceTrack(null).catch(err => {
-            console.error('[SCREEN] Error removing track:', err);
-          });
-        }
-      });
-    }
 
-    // Restore local container with avatar or camera
+    // Remove screen track from all peer connections (keep camera track)
+    peers.forEach(pc => {
+      const senders = pc.getSenders();
+      senders.forEach(sender => {
+        if (sender.track && sender.track.kind === 'video') {
+          const track = sender.track;
+          // Check if this is a screen track by label
+          if (track.label && (track.label.toLowerCase().includes('screen') ||
+              track.label.toLowerCase().includes('display') ||
+              track.label.toLowerCase().includes('window'))) {
+            console.log('[SCREEN] Removing screen track from peer');
+            sender.replaceTrack(null).catch(err => {
+              console.error('[SCREEN] Error removing screen track:', err);
+            });
+          }
+        }
+      });
+    });
+
+    // Restore local container (camera continues to work)
     const localContainer = document.getElementById('video-local');
     if (localContainer) {
       // Remove screen share indicator
@@ -2925,34 +2799,16 @@ async function toggleScreen() {
       // Remove screen-share class
       localContainer.classList.remove('screen-share');
 
-      // If no camera track, add avatar placeholder
-      if (!localStream.getVideoTracks() || localStream.getVideoTracks().length === 0) {
-        const avatarPlaceholder = document.createElement('div');
-        avatarPlaceholder.className = 'avatar-placeholder';
-        const avatar = userAvatar || localStorage.getItem(`keroschat_avatar_${currentUser.username}`);
-        if (avatar) {
-          avatarPlaceholder.innerHTML = `<img src="${avatar}" alt="${currentUser.username}">`;
-        } else {
-          avatarPlaceholder.textContent = currentUser.username.charAt(0).toUpperCase();
-        }
-        localContainer.appendChild(avatarPlaceholder);
-
-        // Clear video
-        const localVideo = localContainer.querySelector('video');
-        if (localVideo) {
-          localVideo.srcObject = null;
-        }
-      } else {
-        // Restore camera stream
-        const localVideo = localContainer.querySelector('video');
-        if (localVideo) {
-          localVideo.srcObject = localStream;
-          localVideo.playbackRate = 1.0;
-          localVideo.style.objectFit = 'cover';
-        }
+      // Restore camera stream (it was never stopped)
+      const localVideo = localContainer.querySelector('video');
+      if (localVideo && localStream) {
+        localVideo.srcObject = localStream;
+        localVideo.playbackRate = 1.0;
+        localVideo.style.objectFit = 'cover';
+        localVideo.style.transform = 'scaleX(-1)';
       }
 
-      console.log('[SCREEN] Local container restored');
+      console.log('[SCREEN] Local container restored (camera still active)');
     }
     
     isScreenSharing = false;
@@ -3001,34 +2857,20 @@ async function toggleScreen() {
           toggleScreen();
         }
       };
-      
-      // Replace camera track with screen track in all peer connections
-      console.log(`[SCREEN] Replacing video track in ${peers.size} peer connections`);
-      let replacedCount = 0;
+
+      // Add screen track to all peer connections (Discord-style: camera + screen simultaneously)
+      console.log(`[SCREEN] Adding screen track to ${peers.size} peer connections`);
       let addedCount = 0;
       peers.forEach((pc, peerId) => {
-        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-        if (sender) {
-          console.log(`[SCREEN] Replacing track for peer ${peerId}, current track:`, sender.track?.label);
-          sender.replaceTrack(screenTrack).then(() => {
-            console.log(`[SCREEN] Track replaced successfully for peer ${peerId}`);
-            replacedCount++;
-          }).catch(err => {
-            console.error('[SCREEN] Error replacing track for peer', peerId, ':', err);
-          });
-        } else {
-          // If no video sender (audio-only), add screen track directly
-          console.log(`[SCREEN] No video sender for peer ${peerId} (audio-only), adding screen track`);
-          try {
-            pc.addTrack(screenTrack, screenStream);
-            console.log(`[SCREEN] Screen track added successfully for peer ${peerId}`);
-            addedCount++;
-          } catch (err) {
-            console.error(`[SCREEN] Error adding screen track for peer ${peerId}:`, err);
-          }
+        try {
+          pc.addTrack(screenTrack, screenStream);
+          console.log(`[SCREEN] Screen track added successfully for peer ${peerId}`);
+          addedCount++;
+        } catch (err) {
+          console.error(`[SCREEN] Error adding screen track for peer ${peerId}:`, err);
         }
       });
-      console.log(`[SCREEN] Track replacement complete: ${replacedCount} replaced, ${addedCount} added`);
+      console.log(`[SCREEN] Screen track addition complete: ${addedCount} added`);
 
       // Replace local container avatar with screen preview (instead of removing container)
       const localContainer = document.getElementById('video-local');
@@ -3105,12 +2947,12 @@ let currentScreenResolution = '1080p'; // Default resolution
 
 // Toggle screen share between full size and preview/thumbnail mode
 function toggleScreenSharePreview(videoId) {
-  const container = document.getElementById(`video-${videoId}`);
+  const container = document.getElementById(`video-${videoId}-screen`);
   if (!container) return;
-  
+
   const isPreview = container.classList.contains('preview-mode');
   const toggleBtn = container.querySelector('.preview-toggle-btn');
-  
+
   if (isPreview) {
     // Switch to full mode
     container.classList.remove('preview-mode');
@@ -3136,8 +2978,8 @@ function openScreenModal(videoId) {
   // REMOVED: Channel restriction - screen share is now visible to all users in room
   // This ensures screen share works in any room/channel and is visible to everyone
 
-  // Find the screen share video element by id
-  const container = document.getElementById(`video-${videoId}`);
+  // Find the screen share video element by id (use -screen suffix for screen share containers)
+  const container = document.getElementById(`video-${videoId}-screen`);
   if (!container) {
     console.warn('Screen share container not found:', videoId);
     return;
@@ -3596,10 +3438,18 @@ function loadChannels() {
 let currentChannelUsers = new Map(); // Track which users are in current channel
 
 function showUserVideo(userId, show) {
+  // Show/hide camera container
   const videoContainer = document.getElementById(`video-${userId}`);
   if (videoContainer) {
     videoContainer.style.display = show ? 'block' : 'none';
     console.log(`[CHANNEL] Video for ${userId}: ${show ? 'shown' : 'hidden'}`);
+  }
+
+  // Show/hide screen container (if exists)
+  const screenContainer = document.getElementById(`video-${userId}-screen`);
+  if (screenContainer) {
+    screenContainer.style.display = show ? 'block' : 'none';
+    console.log(`[CHANNEL] Screen for ${userId}: ${show ? 'shown' : 'hidden'}`);
   }
 }
 
@@ -3612,7 +3462,10 @@ function updateVideoVisibilityForChannel(channelUsers) {
 
   // Show/hide videos in the main video grid based on channel membership
   document.querySelectorAll('.video-container').forEach(container => {
-    const userId = container.id.replace('video-', '');
+    let userId = container.id.replace('video-', '');
+    // Remove -screen suffix if present to get original userId
+    userId = userId.replace('-screen', '');
+
     // For local user, check if socket.id is in the channel; for others, check userId directly
     const isLocalUser = userId === 'local';
     const isInChannel = isLocalUser ? userIdsInChannel.has(socket.id) : userIdsInChannel.has(userId);
