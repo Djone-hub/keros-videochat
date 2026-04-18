@@ -3996,7 +3996,13 @@ function updateRemoteVolumeControls() {
 
   container.innerHTML = '';
   otherUsers.forEach(([id, user]) => {
-    const name = user ? user.name : 'Участник';
+    const name = user ? user.name : null;
+
+    // Skip if name is unknown
+    if (!name) {
+      console.log(`[ADMIN VOL] Skipping user ${id} - no name available`);
+      return;
+    }
 
     // Get current volume from video element (default 50%)
     const videoContainer = document.getElementById(`video-${id}`);
