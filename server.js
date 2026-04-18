@@ -58,12 +58,12 @@ async function loadUsersFromSupabase() {
     const { data, error } = await supabase
       .from('videochat_users')
       .select('*');
-
+    
     if (error) {
       console.error('[USERS] Error loading users from Supabase:', error);
       return new Map();
     }
-
+    
     const map = new Map();
     data.forEach(u => {
       map.set(u.username, {
@@ -72,14 +72,10 @@ async function loadUsersFromSupabase() {
         name: u.name,
         avatar: u.avatar,
         isOnline: u.is_online,
-        lastSeen: u.last_seen,
-        role: u.role || 'user',
-        isMuted: u.is_muted || false,
-        muteUntil: u.mute_until || 0,
-        kickedRooms: u.kicked_rooms || '[]'
+        lastSeen: u.last_seen
       });
     });
-
+    
     console.log(`[USERS] Loaded ${data.length} users from Supabase`);
     return map;
   } catch (err) {
@@ -108,11 +104,7 @@ async function saveUsersToSupabase() {
       name: u.name,
       avatar: u.avatar,
       is_online: u.isOnline,
-      last_seen: u.lastSeen,
-      role: u.role || 'user',
-      is_muted: u.isMuted || false,
-      mute_until: u.muteUntil || 0,
-      kicked_rooms: u.kickedRooms || '[]'
+      last_seen: u.lastSeen
     }));
 
     // Use upsert to insert or update
@@ -130,223 +122,21 @@ async function saveUsersToSupabase() {
   }
 }
 
-async function loadRoomsFromSupabase() {
-  try {
-    const { data, error } = await supabase
-      .from('videochat_rooms')
-      .select('*');
-
-    if (error) {
-      console.error('[ROOMS] Error loading rooms from Supabase:', error);
-      return new Map();
-    }
-
-    const map = new Map();
-    data.forEach(r => {
-      map.set(r.id, {
-        id: r.id,
-        name: r.name,
-        avatar: r.avatar,
-        creator: r.creator,
-        created: r.created,
-        channels: r.channels || { general: { name: 'Общий', users: [] } }
-      });
-    });
-
-    console.log(`[ROOMS] Loaded ${data.length} rooms from Supabase`);
-    return map;
-  } catch (err) {
-    console.error('[ROOMS] Error loading rooms from Supabase:', err);
-    return new Map();
-  }
-}
-
-async function saveRoomsToSupabase() {
-  try {
-    const roomsArray = Array.from(roomStore.values());
-
-    // Convert to Supabase format
-    const supabaseRooms = roomsArray.map(r => ({
-      id: r.id,
-      name: r.name,
-      avatar: r.avatar,
-      creator: r.creator,
-      created: r.created,
-      channels: r.channels || { general: { name: 'Общий', users: [] } }
-    }));
-
-    // Use upsert to insert or update
-    const { data, error } = await supabase
-      .from('videochat_rooms')
-      .upsert(supabaseRooms, { onConflict: 'id' });
-
-    if (error) {
-      console.error('[ROOMS] Error saving rooms to Supabase:', error);
-    } else {
-      console.log(`[ROOMS] Saved ${roomsArray.length} rooms to Supabase`);
-    }
-  } catch (err) {
-    console.error('[ROOMS] Error saving rooms to Supabase:', err);
-  }
-}
-
-async function deleteRoomFromSupabase(roomId) {
-  try {
-    console.log(`[ROOMS] Deleting room ${roomId} from Supabase`);
-    const { error } = await supabase
-      .from('videochat_rooms')
-      .delete()
-      .eq('id', roomId);
-
-    if (error) {
-      console.error(`[ROOMS] Error deleting room ${roomId} from Supabase:`, error);
-      return false;
-    } else {
-      console.log(`[ROOMS] Successfully deleted room ${roomId} from Supabase`);
-      return true;
-    }
-  } catch (err) {
-    console.error(`[ROOMS] Error deleting room ${roomId} from Supabase:`, err);
-    return false;
-  }
-}
-
-async function loadVIPChannelsFromSupabase() {
-  try {
-    const { data, error } = await supabase
-      .from('videochat_vip_channels')
-      .select('*');
-
-    if (error) {
-      console.error('[VIP] Error loading VIP channels from Supabase:', error);
-      return [];
-    }
-
-    const channels = data.map(c => ({
-      id: c.id,
-      name: c.name,
-      password: c.password,
-      creator: c.creator,
-      created: c.created
-    }));
-
-    console.log(`[VIP] Loaded ${channels.length} VIP channels from Supabase`);
-    return channels;
-  } catch (err) {
-    console.error('[VIP] Error loading VIP channels from Supabase:', err);
-    return [];
-  }
-}
-
-async function saveVIPChannelToSupabase(channel) {
-  try {
-    const supabaseChannel = {
-      id: channel.id,
-      name: channel.name,
-      password: channel.password,
-      creator: channel.creator,
-      created: channel.created
-    };
-
-    const { data, error } = await supabase
-      .from('videochat_vip_channels')
-      .upsert(supabaseChannel, { onConflict: 'id' });
-
-    if (error) {
-      console.error('[VIP] Error saving VIP channel to Supabase:', error);
-      return false;
-    }
-
-    console.log(`[VIP] Saved VIP channel ${channel.name} to Supabase`);
-    return true;
-  } catch (err) {
-    console.error('[VIP] Error saving VIP channel to Supabase:', err);
-    return false;
-  }
-}
-
-async function deleteVIPChannelFromSupabase(channelId) {
-  try {
-    const { error } = await supabase
-      .from('videochat_vip_channels')
-      .delete()
-      .eq('id', channelId);
-
-    if (error) {
-      console.error('[VIP] Error deleting VIP channel from Supabase:', error);
-      return false;
-    }
-
-    console.log(`[VIP] Deleted VIP channel ${channelId} from Supabase`);
-    return true;
-  } catch (err) {
-    console.error('[VIP] Error deleting VIP channel from Supabase:', err);
-    return false;
-  }
-}
-
-const roomStore = new Map();
+const roomStore = loadRoomsFromFile();
 const registeredUsers = new Map();
-
-// Load rooms from Supabase asynchronously
-loadRoomsFromSupabase().then(rooms => {
-  // Copy all rooms to roomStore
-  rooms.forEach((value, key) => roomStore.set(key, value));
-  console.log('========================================');
-  console.log('[VERSION] Server v3.1 - Supabase room & user persistence enabled');
-  console.log('========================================');
-}).catch(err => {
-  console.error('[ROOMS] Failed to load rooms from Supabase, falling back to file:', err);
-  const fileRooms = loadRoomsFromFile();
-  fileRooms.forEach((value, key) => roomStore.set(key, value));
-  console.log('========================================');
-  console.log('[VERSION] Server v3.1 - Loaded rooms from file as fallback');
-  console.log('========================================');
-});
 
 // Load users from Supabase asynchronously
 loadUsersFromSupabase().then(users => {
   // Copy all users to registeredUsers
   users.forEach((value, key) => registeredUsers.set(key, value));
   console.log('========================================');
-  console.log('[USERS] Loaded users from Supabase');
+  console.log('[VERSION] Server v3.0 - Supabase user persistence enabled');
   console.log('========================================');
 }).catch(err => {
   console.error('[USERS] Failed to load users from Supabase:', err);
   console.log('========================================');
-  console.log('[VERSION] Server v3.1 - Starting with empty user registry');
+  console.log('[VERSION] Server v3.0 - Starting with empty user registry');
   console.log('========================================');
-});
-
-// REST API endpoint to create room
-app.post('/api/rooms', async (req, res) => {
-  const { id, name, avatar } = req.body;
-  const creator = req.headers['x-username'];
-
-  if (!id || !name) {
-    return res.status(400).json({ success: false, message: 'Room ID and name are required' });
-  }
-
-  if (!creator) {
-    return res.status(401).json({ success: false, message: 'Unauthorized' });
-  }
-
-  const newRoom = {
-    id,
-    name,
-    avatar: avatar || null,
-    creator,
-    created: Date.now()
-  };
-
-  roomStore.set(id, newRoom);
-  await saveRoomsToSupabase();
-
-  io.emit('room-created', newRoom);
-  io.emit('rooms-updated');
-
-  console.log(`[CREATE API] Room ${id} created by ${creator}`);
-  res.json({ success: true, room: newRoom });
 });
 
 // REST API endpoint for rooms - returns ALL rooms (stored + active) with user list
@@ -395,52 +185,14 @@ app.get('/api/rooms', (req, res) => {
 });
 
 // REST API endpoint for registered users with online status
-app.get('/api/users', async (req, res) => {
-  try {
-    // Fetch fresh data from Supabase
-    const { data, error } = await supabase
-      .from('videochat_users')
-      .select('*');
-
-    if (error) {
-      console.error('[API] Error fetching users from Supabase:', error);
-      // Fallback to memory cache
-      const users = Array.from(registeredUsers.values()).map(u => ({
-        username: u.username,
-        name: u.name,
-        avatar: u.avatar,
-        isOnline: u.isOnline,
-        lastSeen: u.lastSeen,
-        role: u.role || 'user'
-      }));
-      res.json(users);
-      return;
-    }
-
-    console.log('[API] Fetched users from Supabase:', data.map(u => ({ username: u.username, role: u.role })));
-
-    // Map Supabase data to API format, merging with online status from memory
-    const users = data.map(su => {
-      const memoryUser = registeredUsers.get(su.username);
-      return {
-        username: su.username,
-        name: su.name,
-        avatar: su.avatar,
-        isOnline: memoryUser ? memoryUser.isOnline : su.is_online,
-        lastSeen: memoryUser ? memoryUser.lastSeen : su.last_seen,
-        role: su.role || 'user',
-        isMuted: su.is_muted || false,
-        muteUntil: su.mute_until || 0,
-        kickedRooms: su.kicked_rooms || '[]'
-      };
-    });
-
-    console.log('[API] Returning users to client:', users.map(u => ({ username: u.username, role: u.role })));
-    res.json(users);
-  } catch (err) {
-    console.error('[API] Error in /api/users:', err);
-    res.status(500).json({ error: 'Error fetching users' });
-  }
+app.get('/api/users', (req, res) => {
+  const users = Array.from(registeredUsers.values()).map(u => ({
+    name: u.name,
+    avatar: u.avatar,
+    isOnline: u.isOnline,
+    lastSeen: u.lastSeen
+  }));
+  res.json(users);
 });
 
 // REST API endpoint to check if user exists
@@ -451,51 +203,15 @@ app.get('/api/users/:username', (req, res) => {
 });
 
 // REST API endpoint for user login
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
   console.log(`[LOGIN] Attempt: username=${username}, hasPassword=${!!password}, passwordLength=${password?.length || 0}`);
-
-  // First check cached users in memory
-  let user = registeredUsers.get(username);
-
-  // If user not found or role might be outdated, fetch fresh from Supabase
-  if (!user) {
-    console.log(`[LOGIN] User not found in cache, fetching from Supabase...`);
-    try {
-      const { data, error } = await supabase
-        .from('videochat_users')
-        .select('*')
-        .eq('username', username)
-        .single();
-
-      if (error) {
-        console.error('[LOGIN] Error fetching from Supabase:', error);
-      } else if (data) {
-        // Update cache with fresh data
-        registeredUsers.set(username, {
-          username: data.username,
-          password: data.password,
-          name: data.name,
-          avatar: data.avatar,
-          isOnline: data.is_online,
-          lastSeen: data.last_seen,
-          role: data.role || 'user',
-          isMuted: data.is_muted || false,
-          muteUntil: data.mute_until || 0,
-          kickedRooms: data.kicked_rooms || '[]'
-        });
-        user = registeredUsers.get(username);
-        console.log(`[LOGIN] Loaded fresh user from Supabase: role=${user.role}`);
-      }
-    } catch (err) {
-      console.error('[LOGIN] Error fetching from Supabase:', err);
-    }
-  }
-
-  console.log(`[LOGIN] User found in registry: ${!!user}, hasPassword: ${!!user?.password}, passwordLength=${user?.password?.length || 0}, role=${user?.role}`);
+  const user = registeredUsers.get(username);
+  console.log(`[LOGIN] User found in registry: ${!!user}, hasPassword: ${!!user?.password}, passwordLength=${user?.password?.length || 0}`);
 
   if (user && user.password === password) {
-    res.json({ success: true, user: { username: user.username, name: user.name, avatar: user.avatar, role: user.role || 'user' } });
+    console.log(`[LOGIN] SUCCESS: ${username}`);
+    res.json({ success: true, user: { username: user.username, name: user.name, avatar: user.avatar } });
   } else {
     console.log(`[LOGIN] FAILED: ${username} - user not found or wrong password`);
     res.status(401).json({ success: false, message: 'Invalid username or password' });
@@ -506,603 +222,28 @@ app.post('/api/login', async (req, res) => {
 app.delete('/api/users/:username', async (req, res) => {
   const username = req.params.username;
   const requester = req.headers['x-username'];
-
-  // Fetch fresh data from Supabase to verify requester role
-  const { data: requesterData, error: requesterError } = await supabase
-    .from('videochat_users')
-    .select('role')
-    .eq('username', requester)
-    .single();
-
-  if (requesterError || !requesterData) {
-    return res.status(403).json({ success: false, message: 'Requester not found' });
-  }
-
-  const isAdmin = requesterData.role === 'admin' || requesterData.role === 'superadmin';
-
-  // Only allow deletion if requester is admin
-  if (!isAdmin) {
-    return res.status(403).json({ success: false, message: 'Only admins can delete users' });
-  }
-
-  // Fetch target user data to check if it's superadmin
-  const { data: targetUser, error: targetError } = await supabase
-    .from('videochat_users')
-    .select('role')
-    .eq('username', username)
-    .single();
-
-  if (targetError || !targetUser) {
-    return res.status(404).json({ success: false, message: 'User not found' });
-  }
-
-  // Prevent deleting superadmins
-  if (targetUser.role === 'superadmin') {
-    return res.status(403).json({ success: false, message: 'Cannot delete superadmins' });
-  }
-
+  
+  // Simple authorization: only allow deletion if requester is the same user or an admin
+  // For now, anyone can delete any user (you can add admin check later)
   if (registeredUsers.has(username)) {
     registeredUsers.delete(username);
-
+    
     // Delete from Supabase
     const { error } = await supabase
       .from('videochat_users')
       .delete()
       .eq('username', username);
-
+    
     if (error) {
       console.error('[DELETE] Error deleting user from Supabase:', error);
     }
-
-    console.log(`[DELETE] User ${username} deleted by ${requester || 'unknown'} (role: ${requesterData.role})`);
+    
+    console.log(`[DELETE] User ${username} deleted by ${requester || 'unknown'}`);
     io.emit('user-deleted', username);
     io.emit('users-updated');
     res.json({ success: true, message: `User ${username} deleted` });
   } else {
     res.status(404).json({ success: false, message: 'User not found' });
-  }
-});
-
-// REST API endpoint to update user role
-app.put('/api/users/:username/role', async (req, res) => {
-  const username = req.params.username;
-  const { role } = req.body;
-  const requester = req.headers['x-username'];
-
-  // Fetch fresh data from Supabase to verify requester role
-  const { data: requesterData, error: requesterError } = await supabase
-    .from('videochat_users')
-    .select('role')
-    .eq('username', requester)
-    .single();
-
-  if (requesterError || !requesterData) {
-    return res.status(403).json({ success: false, message: 'Requester not found' });
-  }
-
-  const isAdmin = requesterData.role === 'admin' || requesterData.role === 'superadmin';
-
-  if (!isAdmin) {
-    return res.status(403).json({ success: false, message: 'Only admins can change user roles' });
-  }
-
-  // Prevent superadmins from changing their own role
-  if (requesterData.role === 'superadmin' && requester === username) {
-    return res.status(403).json({ success: false, message: 'Superadmins cannot change their own role' });
-  }
-
-  // Prevent changing superadmin role unless requester is also superadmin
-  if (role === 'superadmin' && requesterData.role !== 'superadmin') {
-    return res.status(403).json({ success: false, message: 'Only superadmins can grant superadmin role' });
-  }
-
-  // Validate role
-  const validRoles = ['user', 'moderator', 'admin', 'superadmin'];
-  if (!validRoles.includes(role)) {
-    return res.status(400).json({ success: false, message: 'Invalid role' });
-  }
-
-  const user = registeredUsers.get(username);
-  if (!user) {
-    return res.status(404).json({ success: false, message: 'User not found' });
-  }
-
-  // Update role in memory
-  user.role = role;
-  registeredUsers.set(username, user);
-
-  // Update role in Supabase
-  const { error } = await supabase
-    .from('videochat_users')
-    .update({ role })
-    .eq('username', username);
-
-  if (error) {
-    console.error('[ROLE] Error updating user role in Supabase:', error);
-    return res.status(500).json({ success: false, message: 'Error updating role' });
-  }
-
-  console.log(`[ROLE] User ${username} role changed to ${role} by ${requester}`);
-  io.emit('users-updated');
-  res.json({ success: true, message: `User ${username} role updated to ${role}` });
-});
-
-// REST API endpoint to mute/unmute user
-app.put('/api/users/:username/mute', async (req, res) => {
-  const username = req.params.username;
-  const { isMuted, duration } = req.body;  // duration in minutes, 0 for permanent
-  const requester = req.headers['x-username'];
-
-  // Fetch fresh data from Supabase to verify requester role
-  const { data: requesterData, error: requesterError } = await supabase
-    .from('videochat_users')
-    .select('role')
-    .eq('username', requester)
-    .single();
-
-  if (requesterError || !requesterData) {
-    return res.status(403).json({ success: false, message: 'Requester not found' });
-  }
-
-  const isAdmin = requesterData.role === 'admin' || requesterData.role === 'superadmin';
-  const isModerator = requesterData.role === 'moderator';
-
-  if (!isAdmin && !isModerator) {
-    return res.status(403).json({ success: false, message: 'Only admins and moderators can mute users' });
-  }
-
-  // Fetch target user data from Supabase
-  const { data: targetUser, error: targetError } = await supabase
-    .from('videochat_users')
-    .select('*')
-    .eq('username', username)
-    .single();
-
-  if (targetError || !targetUser) {
-    return res.status(404).json({ success: false, message: 'User not found' });
-  }
-
-  // Prevent muting admins/superadmins
-  if (targetUser.role === 'admin' || targetUser.role === 'superadmin') {
-    return res.status(403).json({ success: false, message: 'Cannot mute admins or superadmins' });
-  }
-
-  // Calculate mute until time
-  const muteUntil = duration > 0 ? Date.now() + (duration * 60 * 1000) : 0;
-
-  // Update user in memory
-  const memoryUser = registeredUsers.get(username);
-  if (memoryUser) {
-    memoryUser.isMuted = isMuted;
-    memoryUser.muteUntil = muteUntil;
-    registeredUsers.set(username, memoryUser);
-  }
-
-  // Update user in Supabase
-  const { error } = await supabase
-    .from('videochat_users')
-    .update({ is_muted: isMuted, mute_until: muteUntil })
-    .eq('username', username);
-
-  if (error) {
-    console.error('[MUTE] Error updating user mute status in Supabase:', error);
-    return res.status(500).json({ success: false, message: 'Error updating mute status' });
-  }
-
-  console.log(`[MUTE] User ${username} ${isMuted ? 'muted' : 'unmuted'} by ${requester} for ${duration} minutes`);
-  io.emit('users-updated');
-
-  // Notify user
-  io.emit('user-muted', { username, isMuted, duration });
-
-  res.json({ success: true, message: `User ${username} ${isMuted ? 'muted' : 'unmuted'}` });
-});
-
-// REST API endpoint to kick user from room
-app.post('/api/users/:username/kick', async (req, res) => {
-  const username = req.params.username;
-  const { roomId } = req.body;
-  const requester = req.headers['x-username'];
-
-  // Fetch fresh data from Supabase to verify requester role
-  const { data: requesterData, error: requesterError } = await supabase
-    .from('videochat_users')
-    .select('role')
-    .eq('username', requester)
-    .single();
-
-  if (requesterError || !requesterData) {
-    return res.status(403).json({ success: false, message: 'Requester not found' });
-  }
-
-  const isAdmin = requesterData.role === 'admin' || requesterData.role === 'superadmin';
-  const isModerator = requesterData.role === 'moderator';
-
-  if (!isAdmin && !isModerator) {
-    return res.status(403).json({ success: false, message: 'Only admins and moderators can kick users' });
-  }
-
-  // Fetch target user data from Supabase
-  const { data: targetUser, error: targetError } = await supabase
-    .from('videochat_users')
-    .select('*')
-    .eq('username', username)
-    .single();
-
-  if (targetError || !targetUser) {
-    return res.status(404).json({ success: false, message: 'User not found' });
-  }
-
-  // Prevent kicking admins/superadmins
-  if (targetUser.role === 'admin' || targetUser.role === 'superadmin') {
-    return res.status(403).json({ success: false, message: 'Cannot kick admins or superadmins' });
-  }
-
-  // Update user's kicked rooms in memory
-  const memoryUser = registeredUsers.get(username);
-  let kickedRooms = memoryUser ? JSON.parse(memoryUser.kickedRooms || '[]') : JSON.parse(targetUser.kicked_rooms || '[]');
-  if (!kickedRooms.includes(roomId)) {
-    kickedRooms.push(roomId);
-    if (memoryUser) {
-      memoryUser.kickedRooms = JSON.stringify(kickedRooms);
-      registeredUsers.set(username, memoryUser);
-    }
-  }
-
-  // Update user in Supabase
-  const { error } = await supabase
-    .from('videochat_users')
-    .update({ kicked_rooms: JSON.stringify(kickedRooms) })
-    .eq('username', username);
-
-  if (error) {
-    console.error('[KICK] Error updating user kicked rooms in Supabase:', error);
-    return res.status(500).json({ success: false, message: 'Error kicking user' });
-  }
-
-  console.log(`[KICK] User ${username} kicked from room ${roomId} by ${requester}`);
-
-  // Force disconnect user from room
-  io.to(roomId).emit('user-kicked', { username, roomId });
-
-  // Find user's socket and disconnect from room
-  io.sockets.sockets.forEach(socket => {
-    if (socket.userName === username && socket.roomId === roomId) {
-      socket.leave(roomId);
-      socket.emit('kicked-from-room', { roomId });
-    }
-  });
-
-  res.json({ success: true, message: `User ${username} kicked from room ${roomId}` });
-});
-
-// REST API endpoint to unkick user from room
-app.post('/api/users/:username/unkick', async (req, res) => {
-  const username = req.params.username;
-  const { roomId } = req.body;
-  const requester = req.headers['x-username'];
-
-  // Fetch fresh data from Supabase to verify requester role
-  const { data: requesterData, error: requesterError } = await supabase
-    .from('videochat_users')
-    .select('role')
-    .eq('username', requester)
-    .single();
-
-  if (requesterError || !requesterData) {
-    return res.status(403).json({ success: false, message: 'Requester not found' });
-  }
-
-  const isAdmin = requesterData.role === 'admin' || requesterData.role === 'superadmin';
-
-  if (!isAdmin) {
-    return res.status(403).json({ success: false, message: 'Only admins can unkick users' });
-  }
-
-  // Fetch target user data from Supabase
-  const { data: targetUser, error: targetError } = await supabase
-    .from('videochat_users')
-    .select('*')
-    .eq('username', username)
-    .single();
-
-  if (targetError || !targetUser) {
-    return res.status(404).json({ success: false, message: 'User not found' });
-  }
-
-  // Update user's kicked rooms in memory
-  const memoryUser = registeredUsers.get(username);
-  let kickedRooms = memoryUser ? JSON.parse(memoryUser.kickedRooms || '[]') : JSON.parse(targetUser.kicked_rooms || '[]');
-  const index = kickedRooms.indexOf(roomId);
-  if (index > -1) {
-    kickedRooms.splice(index, 1);
-    if (memoryUser) {
-      memoryUser.kickedRooms = JSON.stringify(kickedRooms);
-      registeredUsers.set(username, memoryUser);
-    }
-  }
-
-  // Update user in Supabase
-  const { error } = await supabase
-    .from('videochat_users')
-    .update({ kicked_rooms: JSON.stringify(kickedRooms) })
-    .eq('username', username);
-
-  if (error) {
-    console.error('[UNKICK] Error updating user kicked rooms in Supabase:', error);
-    return res.status(500).json({ success: false, message: 'Error unkicking user' });
-  }
-
-  console.log(`[UNKICK] User ${username} unkicked from room ${roomId} by ${requester}`);
-  io.emit('users-updated');
-
-  res.json({ success: true, message: `User ${username} unkicked from room ${roomId}` });
-});
-
-// REST API endpoint to delete a message
-app.delete('/api/messages/:messageId', (req, res) => {
-  const messageId = req.params.messageId;
-  const requester = req.headers['x-username'];
-
-  // Check if requester is admin or moderator
-  const requesterUser = registeredUsers.get(requester);
-  const isAdmin = requesterUser && (requesterUser.role === 'admin' || requesterUser.role === 'superadmin');
-  const isModerator = requesterUser && requesterUser.role === 'moderator';
-
-  if (!isAdmin && !isModerator) {
-    return res.status(403).json({ success: false, message: 'Only admins and moderators can delete messages' });
-  }
-
-  // Emit event to delete message on all clients
-  io.emit('message-deleted', { messageId });
-
-  console.log(`[DELETE MESSAGE] Message ${messageId} deleted by ${requester}`);
-  res.json({ success: true, message: 'Message deleted' });
-});
-
-// REST API endpoint to force reload users from Supabase
-app.post('/api/admin/reload-users', async (req, res) => {
-  const requester = req.headers['x-username'];
-
-  // Fetch fresh data from Supabase to verify requester role
-  const { data: requesterData, error: requesterError } = await supabase
-    .from('videochat_users')
-    .select('role')
-    .eq('username', requester)
-    .single();
-
-  if (requesterError || !requesterData) {
-    return res.status(403).json({ success: false, message: 'Requester not found' });
-  }
-
-  if (requesterData.role !== 'admin' && requesterData.role !== 'superadmin') {
-    return res.status(403).json({ success: false, message: 'Only admins can reload users' });
-  }
-
-  console.log(`[RELOAD] Force reloading users from Supabase (requested by: ${requester})...`);
-
-  const freshUsers = await loadUsersFromSupabase();
-
-  // Replace registered users with fresh data
-  registeredUsers.clear();
-  freshUsers.forEach((user, username) => {
-    registeredUsers.set(username, user);
-  });
-
-  console.log(`[RELOAD] Reloaded ${freshUsers.size} users from Supabase`);
-  io.emit('users-updated');
-
-  res.json({ success: true, message: `Reloaded ${freshUsers.size} users from Supabase` });
-});
-
-// REST API endpoint to delete room
-app.delete('/api/rooms/:roomId', async (req, res) => {
-  const roomId = req.params.roomId;
-  const requester = req.headers['x-username'];
-
-  console.log(`[DELETE API] Request to delete room: ${roomId} by ${requester}`);
-
-  if (!requester) {
-    console.log(`[DELETE API] Rejected: no username in headers`);
-    return res.status(401).json({ success: false, message: 'Unauthorized' });
-  }
-
-  // Fetch user role from Supabase
-  const { data: requesterData, error: requesterError } = await supabase
-    .from('videochat_users')
-    .select('role')
-    .eq('username', requester)
-    .single();
-
-  if (requesterError || !requesterData) {
-    console.log(`[DELETE API] Rejected: user not found in Supabase`);
-    return res.status(403).json({ success: false, message: 'User not found' });
-  }
-
-  const storedRoom = roomStore.get(roomId);
-  const creator = storedRoom?.creator;
-  const isSuperAdmin = requesterData.role === 'superadmin';
-
-  console.log(`[DELETE API] Room details: stored=${!!storedRoom}, creator=${creator}, requesterRole=${requesterData.role}`);
-
-  // Allow deletion if:
-  // 1. User is the creator, OR
-  // 2. No creator is set (orphaned room), OR
-  // 3. User is superadmin
-  if (creator === requester || !creator || isSuperAdmin) {
-    console.log(`[DELETE API] Deleting room ${roomId} from roomStore`);
-    roomStore.delete(roomId);
-    if (rooms.has(roomId)) {
-      console.log(`[DELETE API] Deleting room ${roomId} from active rooms`);
-      rooms.delete(roomId);
-    }
-    console.log(`[DELETE API] Explicitly deleting from Supabase`);
-    const deleted = await deleteRoomFromSupabase(roomId);
-    if (deleted) {
-      console.log(`[DELETE API] Successfully deleted from Supabase`);
-    } else {
-      console.log(`[DELETE API] Failed to delete from Supabase, but removed from memory`);
-    }
-    io.emit('room-deleted', roomId);
-    io.emit('rooms-updated');
-    console.log(`[DELETE API] Room ${roomId} deleted successfully by ${requester} (role: ${requesterData.role})`);
-    res.json({ success: true, message: 'Room deleted' });
-  } else {
-    console.log(`[DELETE API] Rejected: ${requester} is not creator (creator=${creator}, role=${requesterData.role})`);
-    res.status(403).json({ success: false, message: 'Только создатель может удалить комнату' });
-  }
-});
-
-// REST API endpoint to clean ghost users from room metadata
-app.post('/api/admin/clean-ghost-users', async (req, res) => {
-  const requester = req.headers['x-username'];
-
-  // Fetch fresh data from Supabase to verify requester role
-  const { data: requesterData, error: requesterError } = await supabase
-    .from('videochat_users')
-    .select('role')
-    .eq('username', requester)
-    .single();
-
-  if (requesterError || !requesterData) {
-    return res.status(403).json({ success: false, message: 'Requester not found' });
-  }
-
-  if (requesterData.role !== 'admin' && requesterData.role !== 'superadmin') {
-    return res.status(403).json({ success: false, message: 'Only admins can clean ghost users' });
-  }
-
-  console.log(`[CLEAN] Cleaning ghost users from room metadata (requested by: ${requester})...`);
-
-  // Get all valid usernames from registered users
-  const validUsernames = new Set(registeredUsers.keys());
-  console.log(`[CLEAN] Valid usernames:`, Array.from(validUsernames));
-  console.log(`[CLEAN] Total rooms in roomStore: ${roomStore.size}`);
-
-  let totalCleaned = 0;
-  let roomsCleaned = 0;
-
-  // Clean ghost users from ALL rooms in roomStore (stored rooms from Supabase)
-  for (const [roomId, room] of roomStore) {
-    if (room.channels) {
-      let roomCleaned = false;
-      for (const [channelId, channel] of Object.entries(room.channels)) {
-        if (channel.users && Array.isArray(channel.users)) {
-          console.log(`[CLEAN] Room ${roomId}, channel ${channelId}, users: ${JSON.stringify(channel.users)}`);
-          const originalLength = channel.users.length;
-          channel.users = channel.users.filter(u => validUsernames.has(u));
-          const removed = originalLength - channel.users.length;
-          if (removed > 0) {
-            totalCleaned += removed;
-            roomCleaned = true;
-            console.log(`[CLEAN] Removed ${removed} ghost users from room ${roomId}, channel ${channelId}: ${channel.users}`);
-          }
-        }
-      }
-      if (roomCleaned) {
-        roomsCleaned++;
-      }
-    }
-  }
-
-  // Save cleaned rooms to Supabase
-  await saveRoomsToSupabase();
-
-  console.log(`[CLEAN] Cleaned ${totalCleaned} ghost users from ${roomsCleaned} rooms`);
-
-  res.json({ success: true, message: `Cleaned ${totalCleaned} ghost users from ${roomsCleaned} rooms` });
-});
-
-// REST API endpoint for VIP channels
-app.get('/api/vip-channels', async (req, res) => {
-  try {
-    const channels = await loadVIPChannelsFromSupabase();
-    res.json(channels);
-  } catch (err) {
-    console.error('[VIP] Error loading VIP channels:', err);
-    res.status(500).json({ error: 'Error loading VIP channels' });
-  }
-});
-
-app.post('/api/vip-channels', async (req, res) => {
-  const { name, password } = req.body;
-  const creator = req.headers['x-username'];
-
-  if (!name) {
-    return res.status(400).json({ success: false, message: 'Channel name is required' });
-  }
-
-  const newChannel = {
-    id: 'vip-' + Date.now(),
-    name,
-    password: password || '',
-    creator,
-    created: Date.now()
-  };
-
-  const saved = await saveVIPChannelToSupabase(newChannel);
-  if (saved) {
-    io.emit('channel-created', newChannel);
-    io.emit('channels-updated');
-    res.json({ success: true, channel: newChannel });
-  } else {
-    res.status(500).json({ success: false, message: 'Error saving VIP channel' });
-  }
-});
-
-app.put('/api/vip-channels/:id', async (req, res) => {
-  const channelId = req.params.id;
-  const { password } = req.body;
-  const creator = req.headers['x-username'];
-
-  const channels = await loadVIPChannelsFromSupabase();
-  const channel = channels.find(c => c.id === channelId);
-
-  if (!channel) {
-    return res.status(404).json({ success: false, message: 'Channel not found' });
-  }
-
-  // Only creator can update
-  if (channel.creator !== creator) {
-    return res.status(403).json({ success: false, message: 'Only creator can update channel' });
-  }
-
-  channel.password = password || '';
-  const saved = await saveVIPChannelToSupabase(channel);
-
-  if (saved) {
-    io.emit('channel-updated', channel);
-    io.emit('channels-updated');
-    res.json({ success: true, channel });
-  } else {
-    res.status(500).json({ success: false, message: 'Error updating VIP channel' });
-  }
-});
-
-app.delete('/api/vip-channels/:id', async (req, res) => {
-  const channelId = req.params.id;
-  const creator = req.headers['x-username'];
-
-  const channels = await loadVIPChannelsFromSupabase();
-  const channel = channels.find(c => c.id === channelId);
-
-  if (!channel) {
-    return res.status(404).json({ success: false, message: 'Channel not found' });
-  }
-
-  // Only creator can delete
-  if (channel.creator !== creator) {
-    return res.status(403).json({ success: false, message: 'Only creator can delete channel' });
-  }
-
-  const deleted = await deleteVIPChannelFromSupabase(channelId);
-
-  if (deleted) {
-    io.emit('channel-deleted', channelId);
-    io.emit('channels-updated');
-    res.json({ success: true, message: 'Channel deleted' });
-  } else {
-    res.status(500).json({ success: false, message: 'Error deleting VIP channel' });
   }
 });
 
@@ -1137,8 +278,7 @@ io.on('connection', (socket) => {
         name: username,
         avatar: avatar,
         isOnline: isOnline || false,
-        lastSeen: Date.now(),
-        role: 'user'  // Default role for new users
+        lastSeen: Date.now()
       });
       console.log(`[REGISTER] Created new user: ${username}, hasPassword: ${!!password}`);
     }
@@ -1172,32 +312,7 @@ io.on('connection', (socket) => {
     io.emit('users-updated');
   });
 
-  socket.on('join-room', (data) => {
-    console.log('[JOIN-ROOM] Received data:', data);
-
-    // Support both old format (separate params) and new format (object)
-    let roomId, userName, userAvatar, roomName, roomAvatar, isScreenSharing, callback;
-
-    if (typeof data === 'object' && data !== null) {
-      // New format: object
-      roomId = data.roomId;
-      userName = data.username;
-      userAvatar = data.avatar;
-      roomName = data.roomName;
-      roomAvatar = data.roomAvatar;
-      isScreenSharing = data.isScreenSharing;
-      console.log('[JOIN-ROOM] Parsed new format: roomId=', roomId, 'username=', userName);
-    } else {
-      // Old format: separate parameters
-      roomId = arguments[0];
-      userName = arguments[1];
-      userAvatar = arguments[2];
-      roomName = arguments[3];
-      roomAvatar = arguments[4];
-      callback = arguments[5];
-      console.log('[JOIN-ROOM] Parsed old format: roomId=', roomId, 'username=', userName);
-    }
-
+  socket.on('join-room', (roomId, userName, userAvatar, roomName, roomAvatar, callback) => {
     socket.join(roomId);
     socket.roomId = roomId;
     socket.userName = userName;
@@ -1217,29 +332,20 @@ io.on('connection', (socket) => {
 
     // Check if room exists in persistent store
     let storedRoom = roomStore.get(roomId);
-
-    console.log(`[JOIN-ROOM] Room ID: ${roomId}, Name: ${roomName}`);
-    console.log(`[JOIN-ROOM] Stored room exists: ${!!storedRoom}`);
-    console.log(`[JOIN-ROOM] Active room exists: ${rooms.has(roomId)}`);
-    if (storedRoom) {
-      console.log(`[JOIN-ROOM] Stored room data:`, storedRoom);
-    }
-
+    
     if (!rooms.has(roomId)) {
       // If room exists in store, use that name
       // Only create if room exists in persistent store OR roomName is provided (explicit creation)
       if (storedRoom || roomName) {
         const displayName = storedRoom ? storedRoom.name : (roomName || roomId);
-        rooms.set(roomId, {
-          name: displayName,
-          users: new Set(),
+        rooms.set(roomId, { 
+          name: displayName, 
+          users: new Set(), 
           screenSharingUsers: new Set(),
           channels: new Map([['general', { name: 'Общий', users: new Set() }]]) // Default channel
         });
-        console.log(`[JOIN-ROOM] Created active room: ${roomId} with name: ${displayName}`);
       } else {
         // Room doesn't exist anywhere and no name provided - reject join
-        console.log(`[JOIN-ROOM] Room not found anywhere, rejecting join for: ${roomId}`);
         socket.emit('room-error', { message: 'Комната не найдена' });
         return;
       }
@@ -1347,7 +453,7 @@ io.on('connection', (socket) => {
         creator: userName,
         created: Date.now()
       });
-      saveRoomsToSupabase();
+      saveRoomsToFile();
       isNewRoom = true;
     }
     
@@ -1377,11 +483,9 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('user-joined', { id: socket.id, name: userName, avatar: userAvatar });
 
     console.log(`${userName} joined room ${roomId} (${finalRoomName})`);
-
-    // Send callback for reconnect support (only for old format)
-    if (typeof callback === 'function') {
-      callback({ success: true });
-    }
+    
+    // Send callback for reconnect support
+    if (callback) callback({ success: true });
   });
   
   socket.on('get-available-rooms', (callback) => {
@@ -1520,18 +624,6 @@ io.on('connection', (socket) => {
     });
   });
 
-  socket.on('refresh-screen-offer', (requesterId) => {
-    console.log('[SCREEN] Received refresh-screen-offer from:', requesterId, 'target:', socket.id);
-    console.log('[SCREEN] isScreenSharing:', isScreenSharing);
-    console.log('[SCREEN] screenStream exists:', !!screenStream);
-    console.log('[SCREEN] screenStream tracks:', screenStream ? screenStream.getTracks().length : 0);
-
-    // Only respond if we are actively screen sharing
-    if (isScreenSharing && screenStream) {
-      console.log('[SCREEN] We are screen sharing, creating new peer connection for requester:', requesterId);
-    }
-  });
-
   // Handle theme changes - broadcast to other users in room
   socket.on('theme-changed', ({ roomId, theme }) => {
     console.log(`[THEME] User ${socket.userName} changed theme to ${theme} in room ${roomId}`);
@@ -1565,11 +657,6 @@ io.on('connection', (socket) => {
       if (userToRemove) {
         room.users.delete(userToRemove);
         console.log(`User ${socket.userName} removed from room ${roomId}`);
-      }
-      // Remove from screen sharing tracking
-      if (room.screenSharingUsers) {
-        room.screenSharingUsers.delete(socket.id);
-        console.log(`[SCREEN] Removed ${socket.userName} from screen sharing in room ${roomId}`);
       }
       // Remove from ALL channel.users Sets
       if (room.channels) {
@@ -1610,34 +697,28 @@ io.on('connection', (socket) => {
   socket.on('delete-room', (roomId) => {
     const storedRoom = roomStore.get(roomId);
     const activeRoom = rooms.get(roomId);
-
+    
     console.log(`[DELETE] Room ${roomId} delete attempt by ${socket.userName}`);
     console.log(`[DELETE] storedRoom:`, storedRoom);
     console.log(`[DELETE] activeRoom:`, activeRoom ? { name: activeRoom.name, creator: activeRoom.creator } : null);
-
+    
     // Check both stored room and active room for creator
     const creator = storedRoom?.creator || activeRoom?.creator;
-
-    // Get user role
-    const user = registeredUsers.get(socket.userName);
-    const userRole = user?.role || 'user';
-    const isSuperAdmin = userRole === 'superadmin';
-
+    
     // Allow deletion if:
     // 1. User is the creator, OR
-    // 2. No creator is set (orphaned room) - first user to delete becomes "owner", OR
-    // 3. User is superadmin
-    if (creator === socket.userName || !creator || isSuperAdmin) {
+    // 2. No creator is set (orphaned room) - first user to delete becomes "owner"
+    if (creator === socket.userName || !creator) {
       roomStore.delete(roomId);
       if (rooms.has(roomId)) {
         rooms.delete(roomId);
       }
-      saveRoomsToSupabase();
+      saveRoomsToFile();
       io.emit('room-deleted', roomId);
       io.emit('rooms-updated');
-      console.log(`[DELETE] Room ${roomId} deleted by ${socket.userName} (role: ${userRole})`);
+      console.log(`[DELETE] Room ${roomId} deleted by ${socket.userName}`);
     } else {
-      console.log(`[DELETE] Rejected: ${socket.userName} is not creator (creator=${creator}, role=${userRole})`);
+      console.log(`[DELETE] Rejected: ${socket.userName} is not creator (creator=${creator})`);
       socket.emit('room-error', { message: 'Только создатель может удалить комнату' });
     }
   });
@@ -1716,7 +797,7 @@ io.on('connection', (socket) => {
           createdBy: socket.userName,
           createdAt: Date.now()
         };
-        saveRoomsToSupabase();
+        saveRoomsToFile();
         console.log(`[CHANNEL] Saved channel "${channelName}" to roomStore`);
       }
       

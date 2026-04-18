@@ -2,21 +2,6 @@
 const socket = io();
 let socketConnected = false;
 
-// Hide screen share button on devices that don't support getDisplayMedia
-if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-  const hideScreenBtn = () => {
-    const screenBtn = document.getElementById('screenBtn');
-    if (screenBtn) {
-      screenBtn.style.display = 'none';
-      console.log('[SCREEN] Screen share button hidden - not supported on this device');
-    }
-  };
-  hideScreenBtn();
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', hideScreenBtn);
-  }
-}
-
 // Socket connection event
 socket.on('connect', () => {
   // Connected - only log on localhost
@@ -31,13 +16,15 @@ socket.on('connect', () => {
   // REJOIN ROOM: If we were in a room, rejoin to restore socket.roomId on server
   if (currentRoom && currentUser && currentUser.username) {
     console.log('[RECONNECT] Rejoining room after reconnect:', currentRoom);
-    socket.emit('join-room', {
-      roomId: currentRoom,
-      username: currentUser.username,
-      avatar: userAvatar || localStorage.getItem(`keroschat_avatar_${currentUser.username}`),
-      isScreenSharing: isScreenSharing
+    socket.emit('join-room', currentRoom, currentUser.username, userAvatar, currentRoomName, currentRoomAvatar, (response) => {
+      if (response && response.success) {
+        console.log('[RECONNECT] Successfully rejoined room:', currentRoom);
+        // Reload channels after rejoin
+        loadChannels();
+      } else {
+        console.error('[RECONNECT] Failed to rejoin room:', response?.error);
+      }
     });
-    console.log('[RECONNECT] Rejoin event sent');
   }
 
   // If lobby is already visible, reload rooms and users
@@ -49,45 +36,13 @@ socket.on('connect', () => {
 });
 
 socket.on('disconnect', () => {
-  console.log('[DISCONNECT] Disconnected from server');
-  console.log('[DISCONNECT] Current room:', currentRoom);
-  console.log('[DISCONNECT] Current user:', currentUser?.username);
+  console.log('Disconnected from server');
   socketConnected = false;
 });
 
 // Listen for user list updates
 socket.on('users-updated', () => {
   loadRegisteredUsers();
-});
-
-// Listen for mute event
-socket.on('user-muted', ({ username, isMuted, duration }) => {
-  if (currentUser && currentUser.username === username) {
-    if (isMuted) {
-      const durationText = duration > 0 ? `${duration} минут` : 'навсегда';
-      showAlertModal(`🔇 Вы были замучены на ${durationText}`, 'info');
-    } else {
-      showAlertModal('🔊 Ваш мут был снят', 'success');
-    }
-    // Reload user data to get updated mute status
-    loadRegisteredUsers();
-  }
-});
-
-// Listen for kick event
-socket.on('kicked-from-room', ({ roomId }) => {
-  if (currentRoom === roomId) {
-    showAlertModal(`👢 Вы были выгнаны из комнаты`, 'error');
-    leaveRoom();
-  }
-});
-
-// Listen for message deleted event
-socket.on('message-deleted', ({ messageId }) => {
-  const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
-  if (messageElement) {
-    messageElement.remove();
-  }
 });
 
 // State
@@ -100,348 +55,9 @@ let screenStream = null;
 let peers = new Map();
 let activeUsers = new Map();
 let isMicOn = true;
-let isCamOn = false; // Camera OFF by default - user must enable explicitly
+let isCamOn = true;
 let isSoundOn = true;
 let isScreenSharing = false;
-
-// Expose to window for admin panel access
-window.peers = peers;
-window.activeUsers = activeUsers;
-window.setRemoteVolume = setRemoteVolume;
-
-// Audio/Video device selection
-let selectedAudioInput = null; // microphone
-let selectedAudioOutput = null; // speakers
-let selectedVideoInput = null; // camera
-let availableDevices = {
-  audioinput: [],
-  audiooutput: [],
-  videoinput: []
-};
-
-// Microphone level indicator
-let micLevelAnalyzer = null;
-let micLevelInterval = null;
-let micLevelCallback = null;
-
-// Load saved device preferences
-function loadDevicePreferences() {
-  selectedAudioInput = localStorage.getItem('keroschat_audioInput') || null;
-  selectedAudioOutput = localStorage.getItem('keroschat_audioOutput') || null;
-  selectedVideoInput = localStorage.getItem('keroschat_videoInput') || null;
-  console.log('[DEVICES] Loaded preferences:', { selectedAudioInput, selectedAudioOutput, selectedVideoInput });
-}
-
-// Save device preferences
-function saveDevicePreferences() {
-  if (selectedAudioInput) localStorage.setItem('keroschat_audioInput', selectedAudioInput);
-  if (selectedAudioOutput) localStorage.setItem('keroschat_audioOutput', selectedAudioOutput);
-  if (selectedVideoInput) localStorage.setItem('keroschat_videoInput', selectedVideoInput);
-  console.log('[DEVICES] Saved preferences:', { selectedAudioInput, selectedAudioOutput, selectedVideoInput });
-}
-
-// Enumerate available devices
-async function enumerateDevices() {
-  try {
-    // Request permission first
-    await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-
-    const devices = await navigator.mediaDevices.enumerateDevices();
-
-    // Filter only devices with labels (available/active devices)
-    // Devices without labels are usually disconnected or not accessible
-    availableDevices = {
-      audioinput: devices.filter(d => d.kind === 'audioinput' && d.label),
-      audiooutput: devices.filter(d => d.kind === 'audiooutput' && d.label),
-      videoinput: devices.filter(d => d.kind === 'videoinput' && d.label)
-    };
-
-    console.log('[DEVICES] Available devices:', availableDevices);
-    console.log('[DEVICES] Total devices found:', devices.length, 'Active devices:', {
-      audioinput: availableDevices.audioinput.length,
-      audiooutput: availableDevices.audiooutput.length,
-      videoinput: availableDevices.videoinput.length
-    });
-
-    // Update UI if settings panel is open
-    updateDeviceSelectors();
-
-    return availableDevices;
-  } catch (err) {
-    console.error('[DEVICES] Error enumerating devices:', err);
-    return availableDevices;
-  }
-}
-
-// Update device selector UI
-function updateDeviceSelectors() {
-  const audioInputSelect = document.getElementById('audioInputSelect');
-  const audioOutputSelect = document.getElementById('audioOutputSelect');
-  const videoInputSelect = document.getElementById('videoInputSelect');
-
-  if (!audioInputSelect || !audioOutputSelect || !videoInputSelect) return;
-
-  // Check if selected devices are still available, reset if not
-  const audioInputIds = availableDevices.audioinput.map(d => d.deviceId);
-  const audioOutputIds = availableDevices.audiooutput.map(d => d.deviceId);
-  const videoInputIds = availableDevices.videoinput.map(d => d.deviceId);
-
-  if (selectedAudioInput && !audioInputIds.includes(selectedAudioInput)) {
-    console.log('[DEVICES] Selected audio input no longer available, resetting to default');
-    selectedAudioInput = null;
-    localStorage.removeItem('keroschat_audioInput');
-  }
-  if (selectedAudioOutput && !audioOutputIds.includes(selectedAudioOutput)) {
-    console.log('[DEVICES] Selected audio output no longer available, resetting to default');
-    selectedAudioOutput = null;
-    localStorage.removeItem('keroschat_audioOutput');
-  }
-  if (selectedVideoInput && !videoInputIds.includes(selectedVideoInput)) {
-    console.log('[DEVICES] Selected video input no longer available, resetting to default');
-    selectedVideoInput = null;
-    localStorage.removeItem('keroschat_videoInput');
-  }
-
-  // Audio input (microphone)
-  audioInputSelect.innerHTML = '<option value="">Default</option>';
-  availableDevices.audioinput.forEach(device => {
-    const option = document.createElement('option');
-    option.value = device.deviceId;
-    option.textContent = device.label || `Microphone ${device.deviceId.slice(0, 8)}`;
-    if (device.deviceId === selectedAudioInput) option.selected = true;
-    audioInputSelect.appendChild(option);
-  });
-
-  // Audio output (speakers)
-  audioOutputSelect.innerHTML = '<option value="">Default</option>';
-  availableDevices.audiooutput.forEach(device => {
-    const option = document.createElement('option');
-    option.value = device.deviceId;
-    option.textContent = device.label || `Speakers ${device.deviceId.slice(0, 8)}`;
-    if (device.deviceId === selectedAudioOutput) option.selected = true;
-    audioOutputSelect.appendChild(option);
-  });
-
-  // Video input (camera)
-  videoInputSelect.innerHTML = '<option value="">Default</option>';
-  availableDevices.videoinput.forEach(device => {
-    const option = document.createElement('option');
-    option.value = device.deviceId;
-    option.textContent = device.label || `Camera ${device.deviceId.slice(0, 8)}`;
-    if (device.deviceId === selectedVideoInput) option.selected = true;
-    videoInputSelect.appendChild(option);
-  });
-}
-
-// Select device
-function selectDevice(type, deviceId) {
-  console.log('[DEVICES] Selected device:', type, deviceId);
-
-  switch (type) {
-    case 'audioinput':
-      selectedAudioInput = deviceId;
-      // Restart mic level monitoring with new device
-      if (localStream) {
-        startMicLevelMonitoring();
-      }
-      break;
-    case 'audiooutput':
-      selectedAudioOutput = deviceId;
-      // Apply to all remote videos
-      document.querySelectorAll('.video-container:not(.local) video').forEach(video => {
-        if (deviceId) {
-          video.setSinkId(deviceId).catch(err => {
-            console.error('[DEVICES] Error setting output device:', err);
-          });
-        }
-      });
-      break;
-    case 'videoinput':
-      selectedVideoInput = deviceId;
-      break;
-  }
-
-  saveDevicePreferences();
-}
-
-// Start microphone level monitoring
-function startMicLevelMonitoring() {
-  stopMicLevelMonitoring();
-
-  if (!localStream) return;
-
-  try {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const source = audioContext.createMediaStreamSource(localStream);
-    const analyzer = audioContext.createAnalyser();
-    analyzer.fftSize = 256;
-    analyzer.smoothingTimeConstant = 0.8; // Smoother transitions
-    source.connect(analyzer);
-    micLevelAnalyzer = analyzer;
-
-    const dataArray = new Uint8Array(analyzer.frequencyBinCount);
-
-    micLevelInterval = setInterval(() => {
-      analyzer.getByteFrequencyData(dataArray);
-
-      // Calculate average volume with increased sensitivity
-      let sum = 0;
-      for (let i = 0; i < dataArray.length; i++) {
-        sum += dataArray[i];
-      }
-      const average = sum / dataArray.length;
-      // Increase sensitivity: multiply by 2.5 to use full range
-      const level = Math.min(100, Math.round((average / 128) * 100 * 2.5));
-
-      // Update UI
-      updateMicLevelIndicator(level);
-
-      // Call callback if set
-      if (micLevelCallback) {
-        micLevelCallback(level);
-      }
-    }, 100);
-
-    console.log('[MIC LEVEL] Monitoring started');
-  } catch (err) {
-    console.error('[MIC LEVEL] Error starting monitoring:', err);
-  }
-}
-
-// Stop microphone level monitoring
-function stopMicLevelMonitoring() {
-  if (micLevelInterval) {
-    clearInterval(micLevelInterval);
-    micLevelInterval = null;
-  }
-  if (micLevelAnalyzer) {
-    micLevelAnalyzer = null;
-  }
-  console.log('[MIC LEVEL] Monitoring stopped');
-}
-
-// Update microphone level indicator UI
-function updateMicLevelIndicator(level) {
-  const indicator = document.getElementById('micLevelIndicator');
-  if (!indicator) return;
-
-  // If microphone is muted, show no level
-  if (!isMicOn) {
-    resetMicLevelIndicator();
-    return;
-  }
-
-  // Create bars based on level (increased sensitivity to use all 5 bars)
-  const barsCount = 5;
-  // Use logarithmic scale for better sensitivity: level 0-100 maps to 0-5 bars
-  // Level 0-10: 1 bar, 10-30: 2 bars, 30-50: 3 bars, 50-70: 4 bars, 70-100: 5 bars
-  let activeBars;
-  if (level < 10) activeBars = 1;
-  else if (level < 30) activeBars = 2;
-  else if (level < 50) activeBars = 3;
-  else if (level < 70) activeBars = 4;
-  else activeBars = 5;
-
-  let html = '';
-
-  for (let i = 0; i < barsCount; i++) {
-    const isActive = i < activeBars;
-    const color = isActive ? (level > 80 ? '#ed4245' : level > 60 ? '#faa61a' : '#3ba55d') : '#40444b';
-    html += `<div style="width: 8px; height: 4px; background: ${color}; border-radius: 2px;"></div>`;
-  }
-
-  indicator.innerHTML = html;
-}
-
-// Reset mic level indicator to default state
-function resetMicLevelIndicator() {
-  const indicator = document.getElementById('micLevelIndicator');
-  if (!indicator) return;
-
-  const barsCount = 5;
-  let html = '';
-  for (let i = 0; i < barsCount; i++) {
-    html += `<div style="width: 8px; height: 4px; background: #40444b; border-radius: 2px;"></div>`;
-  }
-  indicator.innerHTML = html;
-}
-
-// Test audio output with melody
-async function testAudioOutput() {
-  try {
-    // Create audio context
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-
-    // Create audio element for output
-    const audioElement = new Audio();
-    audioElement.volume = 0.5;
-
-    // Apply selected output device BEFORE creating source
-    if (selectedAudioOutput && typeof audioElement.setSinkId === 'function') {
-      try {
-        await audioElement.setSinkId(selectedAudioOutput);
-        console.log('[AUDIO TEST] Successfully set output device to:', selectedAudioOutput);
-      } catch (err) {
-        console.error('[AUDIO TEST] Error setting sink ID:', err);
-        console.log('[AUDIO TEST] Falling back to default output');
-      }
-    } else {
-      console.log('[AUDIO TEST] Using default output device (setSinkId not available or no device selected)');
-    }
-
-    // Create oscillator for melody
-    const oscillator = audioContext.createOscillator();
-    oscillator.type = 'sine';
-
-    // Create gain node for volume control
-    const gainNode = audioContext.createGain();
-    gainNode.gain.value = 0.3;
-
-    // Connect oscillator to gain node
-    oscillator.connect(gainNode);
-
-    // Create media stream destination
-    const destination = audioContext.createMediaStreamDestination();
-    gainNode.connect(destination);
-
-    // Connect to audio element
-    audioElement.srcObject = destination.stream;
-
-    // Play the audio
-    await audioElement.play();
-    oscillator.start();
-
-    // Play a 3-second melody: C-E-G-C (C major chord arpeggio)
-    const notes = [
-      { freq: 261.63, start: 0, duration: 0.5 },    // C4
-      { freq: 329.63, start: 0.5, duration: 0.5 }, // E4
-      { freq: 392.00, start: 1.0, duration: 0.5 }, // G4
-      { freq: 523.25, start: 1.5, duration: 0.5 }, // C5
-      { freq: 392.00, start: 2.0, duration: 0.5 }, // G4
-      { freq: 329.63, start: 2.5, duration: 0.5 }  // E4
-    ];
-
-    notes.forEach(note => {
-      oscillator.frequency.setValueAtTime(note.freq, audioContext.currentTime + note.start);
-    });
-
-    // Fade out at the end
-    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 3);
-
-    setTimeout(() => {
-      oscillator.stop();
-      audioElement.pause();
-      audioElement.remove();
-      audioContext.close();
-      console.log('[AUDIO TEST] Test completed');
-    }, 3000);
-
-    console.log('[AUDIO TEST] Playing 3-second melody...');
-  } catch (err) {
-    console.error('[AUDIO TEST] Error:', err);
-    showAlertModal('Ошибка теста звука: ' + err.message, 'error');
-  }
-}
 let userAvatar = null;
 let pingInterval = null;
 let currentPing = 0;
@@ -508,84 +124,6 @@ const iceServers = {
     { urls: 'stun:stun1.l.google.com:19302' }
   ]
 };
-
-// Helper functions for custom modals
-function showConfirmModal(message, onConfirm) {
-  const modal = document.createElement('div');
-  modal.style.cssText = `
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
-    z-index: 10000;
-  `;
-  modal.innerHTML = `
-    <div style="background: #36393f; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%;">
-      <p style="color: #fff; margin-bottom: 20px; white-space: pre-line;">${message}</p>
-      <div style="display: flex; gap: 10px; justify-content: flex-end;">
-        <button class="cancel-btn" style="padding: 10px 20px; background: #4f545c; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Отмена</button>
-        <button class="confirm-btn" style="padding: 10px 20px; background: #ed4245; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Подтвердить</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-
-  modal.querySelector('.cancel-btn').addEventListener('click', () => modal.remove());
-  modal.querySelector('.confirm-btn').addEventListener('click', () => {
-    modal.remove();
-    onConfirm();
-  });
-}
-
-function showAlertModal(message, type = 'info') {
-  const colors = {
-    info: '#5865f2',
-    success: '#3ba55d',
-    error: '#ed4245'
-  };
-  const modal = document.createElement('div');
-  modal.style.cssText = `
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
-    z-index: 10000;
-  `;
-  modal.innerHTML = `
-    <div style="background: #36393f; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%;">
-      <p style="color: #fff; margin-bottom: 20px; white-space: pre-line;">${message}</p>
-      <button class="close-btn" style="width: 100%; padding: 10px 20px; background: ${colors[type]}; color: #fff; border: none; border-radius: 4px; cursor: pointer;">OK</button>
-    </div>
-  `;
-  document.body.appendChild(modal);
-
-  modal.querySelector('.close-btn').addEventListener('click', () => modal.remove());
-}
-
-function showPromptModal(message, defaultValue = '', onConfirm) {
-  const modal = document.createElement('div');
-  modal.style.cssText = `
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
-    z-index: 10000;
-  `;
-  modal.innerHTML = `
-    <div style="background: #36393f; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%;">
-      <p style="color: #b9bbbe; margin-bottom: 15px;">${message}</p>
-      <input type="text" id="promptInput" value="${defaultValue}" style="width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 4px; border: none; background: #40444b; color: #fff;">
-      <div style="display: flex; gap: 10px; justify-content: flex-end;">
-        <button class="cancel-btn" style="padding: 10px 20px; background: #4f545c; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Отмена</button>
-        <button class="confirm-btn" style="padding: 10px 20px; background: #5865f2; color: #fff; border: none; border-radius: 4px; cursor: pointer;">OK</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-
-  modal.querySelector('.cancel-btn').addEventListener('click', () => modal.remove());
-  modal.querySelector('.confirm-btn').addEventListener('click', () => {
-    const value = document.getElementById('promptInput').value;
-    modal.remove();
-    onConfirm(value);
-  });
-
-  setTimeout(() => document.getElementById('promptInput').focus(), 100);
-}
 
 // ========== SOUND SYSTEM ==========
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -655,53 +193,27 @@ const inviteRoomId = urlParams.get('room');
 sessionStorage.removeItem('pendingRoomInvite');
 
 window.addEventListener('load', () => {
-  // Load device preferences
-  loadDevicePreferences();
-
   const savedUser = localStorage.getItem('keroschat_user');
-  console.log('[AUTO-LOGIN] Checking localStorage for saved user...');
   if (savedUser) {
-    try {
-      currentUser = JSON.parse(savedUser);
-      userAvatar = localStorage.getItem(`keroschat_avatar_${currentUser.username}`);
-      console.log('[AUTO-LOGIN] Loaded user from localStorage:', currentUser.username, 'role:', currentUser.role);
-
-      // Refresh user data from API to get fresh role
-      fetch('/api/users')
-        .then(res => res.json())
-        .then(users => {
-          const freshUserData = users.find(u => u.username === currentUser.username);
-          if (freshUserData) {
-            // Always update role from fresh data
-            currentUser.role = freshUserData.role || 'user';
-            currentUser.isMuted = freshUserData.isMuted;
-            currentUser.muteUntil = freshUserData.muteUntil;
-            currentUser.kickedRooms = freshUserData.kickedRooms;
-            localStorage.setItem('keroschat_user', JSON.stringify(currentUser));
-            console.log('[AUTO-LOGIN] Refreshed user data from API, role:', currentUser.role);
-          }
-          showLobby();
-        })
-        .catch(err => {
-          console.error('[AUTO-LOGIN] Error refreshing user data:', err);
-          // Still show lobby even if API fails
-          showLobby();
-        });
-    } catch (err) {
-      console.error('[AUTO-LOGIN] Error parsing saved user:', err);
-      localStorage.removeItem('keroschat_user');
-      showAuth();
-    }
-
-    setTimeout(() => {
+    currentUser = JSON.parse(savedUser);
+    userAvatar = localStorage.getItem(`keroschat_avatar_${currentUser.username}`);
+    
+    // Only auto-join if explicit invite in URL (not from sessionStorage)
+    if (inviteRoomId) {
+      // Store invite for auto-join after lobby loads
+      sessionStorage.setItem('pendingRoomInvite', inviteRoomId);
+      showLobby();
+      
+      // Wait for server rooms to load, then auto-join
+      setTimeout(() => {
         const pendingRoom = sessionStorage.getItem('pendingRoomInvite');
         if (pendingRoom) {
           sessionStorage.removeItem('pendingRoomInvite');
-
+          
           // Check if room exists in server rooms or locally
           const localRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
           const localRoom = localRooms.find(r => r.id === pendingRoom);
-
+          
           if (localRoom) {
             // Room exists locally, join it
             joinRoomById(pendingRoom);
@@ -719,7 +231,7 @@ window.addEventListener('load', () => {
                 } else {
                   // Room doesn't exist - stay in lobby, show error
                   addLogEntry('Ошибка', `Комната ${pendingRoom} не найдена на сервере`);
-                  showAlertModal(`Комната ${pendingRoom} не найдена. Возможно, она была удалена.`, 'error');
+                  alert(`Комната ${pendingRoom} не найдена. Возможно, она была удалена.`);
                   // Stay in lobby, don't auto-create room
                 }
               })
@@ -727,13 +239,14 @@ window.addEventListener('load', () => {
                 console.error('Error checking room:', err);
                 // On error, stay in lobby
                 addLogEntry('Ошибка', 'Не удалось проверить комнату на сервере');
-                showAlertModal('Ошибка подключения к серверу. Остаёмся в лобби.', 'error');
+                alert('Ошибка подключения к серверу. Остаёмся в лобби.');
               });
           }
         }
       }, 800);
-  } else {
-    showLobby();
+    } else {
+      showLobby();
+    }
   }
 });
 
@@ -767,7 +280,6 @@ async function handleLogin(e) {
       const data = await response.json();
       if (data.success) {
         currentUser = data.user;
-        currentUser.role = data.user.role || 'user';  // Ensure role is set
         localStorage.setItem('keroschat_user', JSON.stringify(currentUser));
         userAvatar = data.user.avatar || localStorage.getItem(`keroschat_avatar_${username}`);
         addLogEntry('Авторизация', `Пользователь ${username} вошёл в систему`);
@@ -782,11 +294,11 @@ async function handleLogin(e) {
 
     // Login failed
     addLogEntry('Ошибка', `Неудачная попытка входа для ${username}`);
-    showAlertModal('Неверный никнейм или пароль!', 'error');
+    alert('Неверный никнейм или пароль!');
   } catch (err) {
     console.error('Login error:', err);
     addLogEntry('Ошибка', `Неудачная попытка входа для ${username}`);
-    showAlertModal('Ошибка соединения с сервером. Попробуйте позже.', 'error');
+    alert('Ошибка соединения с сервером. Попробуйте позже.');
   }
 }
 
@@ -797,7 +309,7 @@ async function handleRegister(e) {
   const passwordConfirm = document.getElementById('regPasswordConfirm').value;
   
   if (password !== passwordConfirm) {
-    showAlertModal('Пароли не совпадают!', 'error');
+    alert('Пароли не совпадают!');
     return;
   }
   
@@ -807,7 +319,7 @@ async function handleRegister(e) {
     const checkData = await checkResponse.json();
 
     if (checkData.exists) {
-      showAlertModal('Пользователь с таким именем уже зарегистрирован! Используйте форму входа.', 'error');
+      alert('Пользователь с таким именем уже зарегистрирован! Используйте форму входа.');
       return;
     }
 
@@ -819,15 +331,15 @@ async function handleRegister(e) {
     localUsers.push({ username, password, created: Date.now() });
     localStorage.setItem('keroschat_users', JSON.stringify(localUsers));
 
-    currentUser = { username, name: username, avatar: null, role: 'user' };
+    currentUser = { username, name: username, avatar: null };
     localStorage.setItem('keroschat_user', JSON.stringify(currentUser));
     addLogEntry('Авторизация', `Новый пользователь ${username} зарегистрирован`);
 
     showLobby();
-    showAlertModal('Регистрация успешна!', 'success');
+    alert('Регистрация успешна!');
   } catch (err) {
     console.error('Registration error:', err);
-    showAlertModal('Ошибка регистрации. Попробуйте снова.', 'error');
+    alert('Ошибка регистрации. Попробуйте снова.');
   }
 };
 
@@ -840,41 +352,19 @@ function logout() {
   location.reload();
 }
 
-// ========== AUTH ==========
-
-function showAuth() {
-  document.getElementById('authScreen').style.display = 'flex';
-  document.getElementById('roomScreen').style.display = 'none';
-  document.getElementById('lobbyScreen').style.display = 'none';
-}
-
 // ========== LOBBY ==========
 
 function showLobby() {
   document.getElementById('authScreen').style.display = 'none';
   document.getElementById('roomScreen').style.display = 'none';
   document.getElementById('lobbyScreen').style.display = 'flex';
-
+  
   // Update user info
   if (!currentUser || !currentUser.username) {
     console.error('showLobby: currentUser or username is undefined', currentUser);
-    // Try to restore from localStorage
-    const savedUser = localStorage.getItem('keroschat_user');
-    if (savedUser) {
-      try {
-        currentUser = JSON.parse(savedUser);
-        userAvatar = localStorage.getItem(`keroschat_avatar_${currentUser.username}`);
-        console.log('[LOBBY] Restored user from localStorage:', currentUser.username);
-      } catch (err) {
-        console.error('[LOBBY] Error restoring user:', err);
-        showAuth();
-        return;
-      }
-    } else {
-      console.log('[LOBBY] No saved user found, showing auth screen');
-      showAuth();
-      return;
-    }
+    alert('Ошибка: пользователь не найден. Пожалуйста, войдите снова.');
+    showAuth();
+    return;
   }
 
   document.getElementById('lobbyUsername').textContent = currentUser.username;
@@ -918,11 +408,11 @@ async function loadServerRooms() {
   if (isLoadingRooms || (now - lastLoadTime < 2000)) {
     return;
   }
-
+  
   isLoadingRooms = true;
   const list = document.getElementById('roomsList');
   list.innerHTML = '<p style="color: #72767d; padding: 16px; text-align: center;">⏳ Загрузка комнат...</p>';
-
+  
   try {
     // Use REST API instead of socket (more reliable on Render)
     const response = await fetch('/api/rooms');
@@ -937,72 +427,56 @@ async function loadServerRooms() {
     serverRooms = [];
     isLoadingRooms = false; // Reset on error
   }
-
-  // Deduplicate rooms by name (keep oldest room, prefer active rooms)
-  const roomsMap = new Map();
-  const roomsToDelete = [];
-
-  console.log('[ROOMS] Starting deduplication for rooms:', serverRooms.map(r => ({id: r.id, name: r.name, active: r.active, created: r.created})));
-
-  serverRooms.forEach(room => {
-    if (!roomsMap.has(room.name)) {
-      console.log(`[ROOMS] First occurrence of room "${room.name}": ${room.id}`);
-      roomsMap.set(room.name, room);
-    } else {
-      const existing = roomsMap.get(room.name);
-      console.log(`[ROOMS] Duplicate found for "${room.name}": existing=${existing.id}, new=${room.id}`);
-      // Keep the oldest room or the active one
-      if ((room.active && !existing.active) || (room.created || 0) < (existing.created || 0)) {
-        // Mark existing for deletion
-        console.log(`[ROOMS] Marking existing ${existing.id} for deletion (newer/active: ${room.id})`);
-        roomsToDelete.push(existing);
-        roomsMap.set(room.name, room);
-      } else {
-        // Mark current for deletion
-        console.log(`[ROOMS] Marking current ${room.id} for deletion (older: ${existing.id})`);
-        roomsToDelete.push(room);
-      }
+  
+  // Get local rooms and clean up those not on server (old/deleted)
+  let localRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+  const serverRoomIds = new Set(serverRooms.map(r => r.id));
+  
+  // Filter out "ghost" rooms - rooms where name looks like an ID (uppercase letters+numbers, 8 chars)
+  // These are auto-generated rooms that shouldn't exist
+  const isGhostRoom = (room) => {
+    // If name is same as ID and looks like random ID (8 uppercase chars/numbers)
+    if (room.name === room.id && /^[A-Z0-9]{8}$/.test(room.id)) {
+      return true;
     }
+    // If name is empty or just the ID
+    if (!room.name || room.name === room.id) {
+      return true;
+    }
+    return false;
+  };
+  
+  // AGGRESSIVE: Remove ALL ghost rooms regardless of creator!
+  const cleanedLocalRooms = localRooms.filter(r => {
+    if (isGhostRoom(r)) {
+      console.log('[GHOST] DELETING ghost room:', r.id, 'creator:', r.creator);
+      return false;
+    }
+    return serverRoomIds.has(r.id) || r.creator === currentUser?.username;
   });
-
-  // Automatically delete duplicate rooms from Supabase
-  if (roomsToDelete.length > 0) {
-    console.log('[ROOMS] Auto-deleting duplicate rooms:', roomsToDelete.map(r => ({id: r.id, name: r.name, created: r.created, active: r.active})));
-    roomsToDelete.forEach(async (room) => {
-      try {
-        console.log(`[ROOMS] Attempting to delete duplicate room: ${room.id} (${room.name})`);
-        const response = await fetch(`/api/rooms/${room.id}`, {
-          method: 'DELETE',
-          headers: {
-            'X-Username': currentUser?.username || 'system'
-          }
-        });
-        if (response.ok) {
-          const result = await response.json();
-          console.log(`[ROOMS] Auto-deleted duplicate room successfully: ${room.id}`, result);
-        } else {
-          const error = await response.json();
-          console.error(`[ROOMS] Failed to delete duplicate room ${room.id}:`, error);
-        }
-      } catch (err) {
-        console.error('[ROOMS] Error auto-deleting room:', err);
-      }
-    });
+  
+  // Save cleaned list back
+  if (cleanedLocalRooms.length !== localRooms.length) {
+    localStorage.setItem('keroschat_rooms', JSON.stringify(cleanedLocalRooms));
+    console.log('Cleaned up', localRooms.length - cleanedLocalRooms.length, 'old rooms from localStorage');
   }
-
-  allRooms = Array.from(roomsMap.values());
-
-  console.log(`[ROOMS] Deduplicated from ${serverRooms.length} to ${allRooms.length} rooms (auto-deleted ${roomsToDelete.length} duplicates)`);
-
+  
+  // Merge: server rooms take precedence (they have latest data like userCount)
+  const mergedMap = new Map();
+  cleanedLocalRooms.forEach(r => mergedMap.set(r.id, r));
+  serverRooms.forEach(r => mergedMap.set(r.id, r)); // Server overwrites local
+  
+  allRooms = Array.from(mergedMap.values());
+  
   // Sort: rooms with active users first, then by creation date
   allRooms.sort((a, b) => {
     if (a.active && !b.active) return -1;
     if (!a.active && b.active) return 1;
     return (b.created || 0) - (a.created || 0);
   });
-
+  
   renderRoomsList(allRooms);
-
+  
   // Reset loading state
   isLoadingRooms = false;
   lastLoadTime = Date.now();
@@ -1032,11 +506,18 @@ function renderRoomsList(roomsToRender) {
   roomsToRender.forEach(room => {
     const item = document.createElement('div');
     item.className = 'room-item' + (room.active ? ' active-room' : '');
-    item.onclick = () => joinRoomById(room.id);
+    item.onclick = (e) => {
+      if (e.target.closest('.room-actions')) return;
+      joinRoomById(room.id);
+    };
     
     const isCreator = room.creator === currentUser?.username;
-    // REMOVED: Edit and delete buttons from lobby - use admin panel instead
-    const actionsHtml = '';
+    const actionsHtml = isCreator ? `
+      <div class="room-actions" onclick="event.stopPropagation()">
+        <button onclick="editRoom('${room.id}', '${room.name}', '${room.avatar || ''}')" title="Редактировать">✏️</button>
+        <button onclick="deleteRoom('${room.id}')" title="Удалить">🗑️</button>
+      </div>
+    ` : '';
     
     const iconHtml = room.avatar ? 
       `<img src="${room.avatar}" alt="${room.name}">` : 
@@ -1082,7 +563,7 @@ function loadRoomsList(filter = '') {
 // Load and display registered users in lobby
 async function loadRegisteredUsers() {
   let users = [];
-
+  
   try {
     // Try to fetch from API first
     const response = await fetch('/api/users');
@@ -1093,17 +574,6 @@ async function loadRegisteredUsers() {
         avatar: u.avatar,
         isOnline: u.isOnline
       }));
-
-      // Update current user with mute and kick status
-      if (currentUser) {
-        const currentUserData = apiUsers.find(u => u.username === currentUser.username);
-        if (currentUserData) {
-          currentUser.isMuted = currentUserData.isMuted;
-          currentUser.muteUntil = currentUserData.muteUntil;
-          currentUser.kickedRooms = currentUserData.kickedRooms;
-          currentUser.role = currentUserData.role;
-        }
-      }
     }
   } catch (err) {
     // API failed, use localStorage fallback
@@ -1213,37 +683,40 @@ async function searchRooms(query) {
 }
 
 function editRoom(roomId, currentName, currentAvatar) {
-  showPromptModal('Введите новое название комнаты:', currentName, (newName) => {
-    if (!newName || newName.trim() === '') return;
-
-    showConfirmModal('Хотите изменить аватар комнаты?', (changeAvatar) => {
-      let newAvatar = currentAvatar;
-
-      if (changeAvatar) {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-        input.onchange = (e) => {
-          const file = e.target.files[0];
-          if (file) {
-            if (file.size > 2 * 1024 * 1024) {
-              showAlertModal('Файл слишком большой! Максимум 2MB', 'error');
-              return;
-            }
-            const reader = new FileReader();
-            reader.onload = (e) => {
-              newAvatar = e.target.result;
-              updateRoomInStorage(roomId, newName, newAvatar);
-            };
-            reader.readAsDataURL(file);
-          }
+  // Create custom modal for editing room
+  const newName = prompt('Введите новое название комнаты:', currentName);
+  if (!newName || newName.trim() === '') return;
+  
+  const changeAvatar = confirm('Хотите изменить аватар комнаты?');
+  let newAvatar = currentAvatar;
+  
+  if (changeAvatar) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        if (file.size > 2 * 1024 * 1024) {
+          alert('Файл слишком большой! Максимум 2MB');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          newAvatar = ev.target.result;
+          saveRoomEdit(roomId, newName.trim(), newAvatar);
         };
-        input.click();
+        reader.readAsDataURL(file);
       } else {
-        updateRoomInStorage(roomId, newName, newAvatar);
+        saveRoomEdit(roomId, newName.trim(), currentAvatar);
       }
-    });
-  });
+    };
+    input.click();
+  } else {
+    if (newName !== currentName) {
+      saveRoomEdit(roomId, newName.trim(), currentAvatar);
+    }
+  }
 }
 
 function saveRoomEdit(roomId, newName, newAvatar) {
@@ -1270,21 +743,29 @@ function saveRoomEdit(roomId, newName, newAvatar) {
     }
     
     addLogEntry('Комната', `Комната ${roomId} обновлена: название "${newName}"`);
-    showAlertModal('Комната обновлена!', 'success');
+    alert('Комната обновлена!');
   }
 }
 
 function deleteRoom(roomId) {
-  showConfirmModal('Удалить эту комнату? Все участники будут отключены.', () => {
-    const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
-    const filteredRooms = rooms.filter(r => r.id !== roomId);
+  if (!confirm('Удалить эту комнату? Все участники будут отключены.')) return;
+  
+  const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+  const filteredRooms = rooms.filter(r => r.id !== roomId);
+  
+  // Always update localStorage if room was found
+  if (filteredRooms.length !== rooms.length) {
     localStorage.setItem('keroschat_rooms', JSON.stringify(filteredRooms));
-
-    // Reload room list immediately
-    loadServerRooms();
-    addLogEntry('Комната', `Комната ${roomId} удалена`);
-    showAlertModal('Комната удалена!', 'success');
-  });
+    console.log(`[DELETE] Room ${roomId} removed from localStorage`);
+  }
+  
+  // Always notify server to delete (even if not in localStorage, might be on server)
+  socket.emit('delete-room', roomId);
+  
+  // Reload room list immediately
+  loadServerRooms();
+  addLogEntry('Комната', `Комната ${roomId} удалена`);
+  alert('Комната удалена!');
 }
 
 function showCreateRoomModal() {
@@ -1320,281 +801,90 @@ function previewRoomAvatar(input) {
   reader.readAsDataURL(file);
 }
 
-async function createRoom() {
+function createRoom() {
   const name = document.getElementById('newRoomName').value.trim();
   if (!name) {
-    showAlertModal('Введите название комнаты!', 'error');
+    alert('Введите название комнаты!');
     return;
   }
-
-  // Generate random 8-character room ID
-  const roomId = generateRandomId(8);
-
-  try {
-    // Create room via REST API for synchronization
-    const response = await fetch('/api/rooms', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-username': currentUser.username
-      },
-      body: JSON.stringify({
-        id: roomId,
-        name: name,
-        avatar: newRoomAvatar
-      })
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to create room');
-    }
-
-    const result = await response.json();
-    console.log('[CREATE ROOM] Room created:', result);
-
-    // Also store locally for immediate access
-    const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
-    rooms.push({ id: roomId, name, creator: currentUser.username, avatar: newRoomAvatar });
-    localStorage.setItem('keroschat_rooms', JSON.stringify(rooms));
-
-    hideCreateRoomModal();
-    await loadServerRooms(); // Wait for rooms to load before joining
-    joinRoomById(roomId);
-  } catch (err) {
-    console.error('[CREATE ROOM] Error:', err);
-    showAlertModal('Ошибка создания комнаты: ' + err.message, 'error');
+  
+  // Prevent creating ghost rooms (name that looks like ID)
+  if (/^[A-Z0-9]{8}$/.test(name)) {
+    alert('Название комнаты не должно выглядеть как ID (8 заглавных букв/цифр)! Придумайте нормальное название.');
+    return;
   }
+  
+  const roomId = generateRoomId();
+  const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+  const newRoom = { id: roomId, name, created: Date.now(), creator: currentUser.username, avatar: newRoomAvatar };
+  rooms.push(newRoom);
+  localStorage.setItem('keroschat_rooms', JSON.stringify(rooms));
+  
+  // Also store room info for server-side search
+  allRooms.push({ id: roomId, name, creator: currentUser.username, avatar: newRoomAvatar });
+  
+  hideCreateRoomModal();
+  loadServerRooms();
+  joinRoomById(roomId);
 }
 
-function generateRandomId(length) {
-  return Math.random().toString(36).substring(2, length + 2).toUpperCase();
+function generateRoomId() {
+  return Math.random().toString(36).substring(2, 10).toUpperCase();
 }
 
 // ========== ROOM ==========
 
 async function joinRoomById(roomId) {
-  try {
-    if (!currentUser) {
-      showLoginModal();
-      return;
-    }
-
-    // Find room from allRooms (loaded from server)
-    console.log('[JOIN] Looking for room:', roomId);
-    console.log('[JOIN] Available rooms:', allRooms.map(r => ({id: r.id, name: r.name})));
-    const room = allRooms.find(r => r.id === roomId);
-    if (!room) {
-      console.error('[JOIN] Room not found:', roomId);
-      showAlertModal('Комната не найдена', 'error');
-      return;
-    }
-    console.log('[JOIN] Room found:', room.name);
-
   currentRoom = roomId;
-  currentRoomName = room.name;
-  currentRoomAvatar = room.avatar;
+  
+  // Find room name from stored rooms (local or server)
+  const rooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
+  const localRoom = rooms.find(r => r.id === roomId);
+  const serverRoom = serverRooms.find(r => r.id === roomId);
+  const room = localRoom || serverRoom;
+  currentRoomName = room ? room.name : roomId;
+  currentRoomAvatar = room ? room.avatar : null;
 
-  // Check if user was screen sharing before (for restoration after join)
-  const wasScreenSharing = localStorage.getItem('keroschat_screen_sharing') === 'true';
-
-  // Stop screen sharing temporarily when joining (will restore after successful join)
-  if (isScreenSharing) {
-    console.log('[SCREEN] Stopping screen share temporarily for room join');
-  }
-
-  // Check if user is kicked from this room
-  const kickedRooms = JSON.parse(localStorage.getItem('keroschat_kicked_rooms') || '[]');
-  if (kickedRooms.includes(roomId)) {
-    showAlertModal('Вы были выгнаны из этой комнаты', 'error');
-    return;
-  }
-
-  // Request media stream with selected devices
-  const constraints = {
-    audio: selectedAudioInput ? { deviceId: { exact: selectedAudioInput } } : true,
-    video: isCamOn ? (selectedVideoInput ? { deviceId: { exact: selectedVideoInput } } : true) : false
-  };
-
-  console.log('[DEVICES] Requesting media with constraints:', constraints);
-
+  addLogEntry('Комната', `"${currentRoomName}" - вы подключились`);
+  
+  // Request media
   try {
-    localStream = await navigator.mediaDevices.getUserMedia(constraints);
-    console.log('[TRACK] Local track audio enabled:', localStream.getAudioTracks()[0]?.enabled);
-    console.log('[TRACK] Local track video enabled:', localStream.getVideoTracks()[0]?.enabled);
-
-    // Detect OBS Virtual Camera (log only, don't block)
-    const videoTrack = localStream.getVideoTracks()[0];
-    if (videoTrack) {
-      const label = videoTrack.label.toLowerCase();
-      console.log('[DEVICES] Video track label:', videoTrack.label);
-      if (label.includes('obs') || label.includes('virtual')) {
-        console.warn('[DEVICES] OBS Virtual Camera detected - may cause issues with screen share');
-        // NOT blocking - let user decide if they want to use it
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    
+    // Set default microphone volume to 50%
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (audioTrack) {
+      // Apply constraints to set volume (browser support varies)
+      try {
+        const capabilities = audioTrack.getCapabilities();
+        if (capabilities.volume) {
+          await audioTrack.applyConstraints({ volume: 0.5 });
+        }
+      } catch (e) {
+        console.log('Could not set default mic volume via constraints');
       }
-    }
-
-    // Stop mic level monitoring if running
-    if (micLevelInterval) {
-      clearInterval(micLevelInterval);
-      micLevelInterval = null;
-      console.log('[MIC LEVEL] Monitoring stopped');
     }
   } catch (err) {
-    console.error('[DEVICES] Error getting media:', err);
-
-    // Fallback to default devices if selected devices fail
-    if (selectedAudioInput || selectedVideoInput) {
-      console.log('[DEVICES] Fallback to default devices');
-      selectedAudioInput = null;
-      selectedVideoInput = null;
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: isCamOn
-        });
-        console.log('[TRACK] Local track audio enabled:', localStream.getAudioTracks()[0]?.enabled);
-        console.log('[TRACK] Local track video enabled:', localStream.getVideoTracks()[0]?.enabled);
-
-        // Detect OBS Virtual Camera (log only, don't block)
-        const videoTrack = localStream.getVideoTracks()[0];
-        if (videoTrack) {
-          const label = videoTrack.label.toLowerCase();
-          console.log('[DEVICES] Video track label:', videoTrack.label);
-          if (label.includes('obs') || label.includes('virtual')) {
-            console.warn('[DEVICES] OBS Virtual Camera detected in fallback - may cause issues');
-            // NOT blocking - let user decide
-          }
-        }
-      } catch (fallbackErr) {
-        console.error('[DEVICES] Fallback also failed:', fallbackErr);
-        // If no camera available, fallback to audio-only
-        try {
-          localStream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
-            video: false
-          });
-          console.log('[TRACK] Local track audio enabled:', localStream.getAudioTracks()[0]?.enabled);
-          showAlertModal('Камера не найдена или недоступна. Вход только с микрофоном.', 'info');
-        } catch (audioOnlyErr) {
-          console.error('[DEVICES] Audio-only also failed:', audioOnlyErr);
-          return;
-        }
-      }
-    } else {
-      // If no camera available, fallback to audio-only
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: false
-        });
-        console.log('[TRACK] Local track audio enabled:', localStream.getAudioTracks()[0]?.enabled);
-        showAlertModal('Камера не найдена или недоступна. Вход только с микрофоном.', 'info');
-      } catch (audioOnlyErr) {
-        console.error('[DEVICES] Audio-only also failed:', audioOnlyErr);
-        showAlertModal('Не удалось получить доступ к микрофону. Проверьте разрешения.', 'error');
-        return;
-      }
-    }
+    alert('Ошибка доступа к камере/микрофону: ' + err.message);
+    return;
   }
-
-  // Emit join-room event
-  console.log('[JOIN] Emitting join-room event');
-  socket.emit('join-room', {
-    roomId: currentRoom,
-    username: currentUser.username,
-    avatar: userAvatar || localStorage.getItem(`keroschat_avatar_${currentUser.username}`),
-    isScreenSharing: isScreenSharing
-  });
-  console.log('[JOIN] join-room event emitted');
-
-  // Play join sound for local user (if function exists)
-  if (typeof playSound === 'function') {
-    playSound('join');
-  }
-  console.log('[JOIN] Play sound called');
-
+  
+  // Join socket room with avatar, room name and room avatar
+  socket.emit('join-room', roomId, currentUser.username, userAvatar, currentRoomName, currentRoomAvatar);
+  
+  // Play sound for local user entering room
+  sounds.userJoin();
+  
   // Show room UI
-  console.log('[JOIN] Showing room UI');
-  const lobbyScreen = document.getElementById('lobbyScreen');
-  const roomScreen = document.getElementById('roomScreen');
-  console.log('[JOIN] lobbyScreen found:', !!lobbyScreen, 'roomScreen found:', !!roomScreen);
-  if (lobbyScreen) {
-    lobbyScreen.classList.remove('active');
-    lobbyScreen.style.display = 'none';
-    console.log('[JOIN] lobbyScreen classList after remove:', lobbyScreen.className);
-  }
-  if (roomScreen) {
-    roomScreen.classList.add('active');
-    roomScreen.style.display = 'flex';
-    console.log('[JOIN] roomScreen classList after add:', roomScreen.className);
-    console.log('[JOIN] roomScreen display:', roomScreen.style.display);
-  }
-  console.log('[JOIN] Room UI shown');
-
-  // Add local video stream
-  if (localStream.getVideoTracks().length > 0) {
-    console.log('[JOIN] Adding local video stream');
-    addVideoStream(socket.id, localStream, currentUser.username, true);
-    console.log('[JOIN] Local video stream added');
-  } else {
-    // No camera - add local container with avatar placeholder
-    console.log('[JOIN] No video track, adding local container with avatar');
-    addVideoStream(socket.id, localStream, currentUser.username, true);
-    console.log('[JOIN] Local avatar container added');
-  }
-
-  // Update active users list
-  console.log('[JOIN] Updating active users');
+  showRoomUI();
+  
+  // Add local video
+  addVideoStream('local', localStream, currentUser.username, true, false);
   updateActiveUsers();
-  console.log('[JOIN] Active users updated');
-
-  // Start speaking detection and mic level monitoring
-  console.log('[JOIN] Starting speaking detection');
-  try {
-    startSpeakingDetection();
-    console.log('[JOIN] Speaking detection started');
-  } catch (error) {
-    console.error('[JOIN] Error starting speaking detection:', error);
-  }
-  try {
-    startMicLevelMonitoring();
-    console.log('[JOIN] Mic level monitoring started');
-  } catch (error) {
-    console.error('[JOIN] Error starting mic level monitoring:', error);
-  }
-
-  // Load user settings
-  console.log('[JOIN] Loading user settings');
-  try {
-    loadUserSettings();
-    console.log('[JOIN] User settings loaded');
-  } catch (error) {
-    console.error('[JOIN] Error loading user settings:', error);
-  }
-
-  // Load chat history for this room (if function exists)
-  if (typeof loadChatHistory === 'function') {
-    console.log('[JOIN] Loading chat history');
-    loadChatHistory(currentRoom);
-    console.log('[JOIN] Chat history loaded');
-  }
-
-  // Restore screen sharing if it was active before join
-  if (wasScreenSharing) {
-    console.log('[SCREEN] Restoring screen share after join');
-    setTimeout(() => {
-      toggleScreen();
-    }, 1000);
-  }
-  console.log('[JOIN] joinRoomById completed successfully');
-  } catch (error) {
-    console.error('[JOIN] Error in joinRoomById:', error);
-    showAlertModal('Ошибка входа в комнату: ' + error.message, 'error');
-  }
+  
+  // Start speaking detection
+  startSpeakingDetection();
 }
-
-// ... (rest of the code remains the same)
 
 function showRoomUI() {
   document.getElementById('lobbyScreen').style.display = 'none';
@@ -1603,17 +893,16 @@ function showRoomUI() {
   
   // Reset current channel
   currentChannel = 'general';
-
-  // DISABLED: Load channels list
-  // const checkAndLoad = () => {
-  //   if (socketConnected && currentRoom) {
-  //     loadChannels();
-  //   } else {
-  //     setTimeout(checkAndLoad, 300);
-  //   }
-  // };
-  // checkAndLoad();
-
+  
+  // Load channels list - wait for socket to be fully connected
+  const checkAndLoad = () => {
+    if (socketConnected && currentRoom) {
+      loadChannels();
+    } else {
+      setTimeout(checkAndLoad, 300);
+    }
+  };
+  setTimeout(checkAndLoad, 500);
   // Always show room name, not ID
   const displayName = currentRoomName && currentRoomName !== currentRoom ? currentRoomName : currentRoom;
   document.getElementById('displayRoomId').textContent = displayName;
@@ -1658,7 +947,7 @@ function resetRoomStateAndUI() {
   // Reset state
   currentRoom = null;
   isMicOn = true;
-  isCamOn = false; // Camera OFF by default
+  isCamOn = true;
   isSoundOn = true;
   isScreenSharing = false;
 
@@ -1673,20 +962,9 @@ function resetRoomStateAndUI() {
 }
 
 function leaveRoom() {
-  // Play sound for local user leaving room
-  sounds.userLeave();
-
   // Close any open screen share modals
   closeAllScreenModals();
-
-  // Stop screen sharing if active
-  if (isScreenSharing) {
-    toggleScreen();
-  }
-
-  // Stop microphone level monitoring
-  stopMicLevelMonitoring();
-
+  
   // Stop streams
   if (localStream) {
     localStream.getTracks().forEach(t => t.stop());
@@ -1696,17 +974,17 @@ function leaveRoom() {
     screenStream.getTracks().forEach(t => t.stop());
     screenStream = null;
   }
-
+  
   // Stop ping measurement
   stopPingMeasurement();
-
+  
   // Leave socket room
   socket.emit('leave-room', currentRoom);
   resetRoomStateAndUI();
-
+  
   // Show settings panel if open
   document.getElementById('settingsPanel').classList.remove('active');
-
+  
   // Back to lobby
   showLobby();
 }
@@ -1714,11 +992,6 @@ function leaveRoom() {
 function disconnectAndJoinAnother() {
   // Close any open screen share modals
   closeAllScreenModals();
-  
-  // Stop screen sharing if active
-  if (isScreenSharing) {
-    toggleScreen();
-  }
   
   // Just disconnect and return to lobby without stopping streams
   // Leave socket room
@@ -1733,17 +1006,12 @@ function disconnectAndJoinAnother() {
   showLobby();
   
   // Show message to select another room
-  showAlertModal('Вы отключены от комнаты. Выберите другую комнату из списка или создайте новую.', 'info');
+  alert('Вы отключены от комнаты. Выберите другую комнату из списка или создайте новую.');
 }
 
 function disconnectAndShowLobby() {
   // Close any open screen share modals
   closeAllScreenModals();
-  
-  // Stop screen sharing if active
-  if (isScreenSharing) {
-    toggleScreen();
-  }
   
   // Leave socket room
   socket.emit('leave-room', currentRoom);
@@ -1760,7 +1028,7 @@ function disconnectAndShowLobby() {
 function copyLink() {
   const link = `${window.location.origin}?room=${currentRoom}`;
   navigator.clipboard.writeText(link).then(() => {
-    showAlertModal('Ссылка скопирована!', 'success');
+    alert('Ссылка скопирована!');
   });
 }
 
@@ -1769,49 +1037,28 @@ function copyLink() {
 function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false) {
   const videoGrid = document.getElementById('videoGrid');
   if (!videoGrid) return;
-
+  
   let container = document.getElementById(`video-${id}`);
   const isNew = !container;
-
-  const hasVideoTrack = stream.getVideoTracks() && stream.getVideoTracks().length > 0;
-
+  
   if (!container) {
     container = document.createElement('div');
     container.className = 'video-container' + (isScreenShare ? ' screen-share' : '') + (isLocal ? ' local' : '');
     container.id = `video-${id}`;
-
-    // Always create video element (even if no video track initially - needed for screen share)
+    
     const video = document.createElement('video');
     video.srcObject = stream;
     video.autoplay = true;
     video.playsInline = true;
     video.muted = isLocal;
     if (isLocal && !isScreenShare) video.style.transform = 'scaleX(-1)';
-
-    // Hide video element if no video track (show avatar instead)
-    if (!hasVideoTrack) {
-      video.style.display = 'none';
-    }
-
+    
     // Ensure video plays
     video.play().catch(e => {});
-
+    
     const label = document.createElement('div');
     label.className = 'video-label';
     label.textContent = isLocal ? `${name} (Вы)` : name;
-
-    // Add avatar placeholder for audio-only users (like Discord)
-    if (!hasVideoTrack) {
-      const avatarPlaceholder = document.createElement('div');
-      avatarPlaceholder.className = 'avatar-placeholder';
-      const avatar = isLocal ? (userAvatar || localStorage.getItem(`keroschat_avatar_${currentUser.username}`)) : (activeUsers.get(id)?.avatar);
-      if (avatar) {
-        avatarPlaceholder.innerHTML = `<img src="${avatar}" alt="${name}">`;
-      } else {
-        avatarPlaceholder.textContent = name.charAt(0).toUpperCase();
-      }
-      container.appendChild(avatarPlaceholder);
-    }
     
     if (!isLocal) {
       const volumeControl = document.createElement('div');
@@ -1824,109 +1071,62 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
       label.appendChild(volumeControl);
       // Set default volume to 50%
       video.volume = 0.5;
-      // IMPORTANT: Never mute remote videos - user controls via volume slider
-      video.muted = false;
-
-      // Apply selected audio output device
-      if (selectedAudioOutput && typeof video.setSinkId === 'function') {
-        video.setSinkId(selectedAudioOutput).catch(err => {
-          console.error('[DEVICES] Error setting output device:', err);
-        });
-      }
+      // Mute if sound is turned off globally
+      video.muted = !isSoundOn;
     }
     
     // Add fullscreen button for screen share (only for REMOTE users, not local)
     // Local user doesn't need fullscreen button for their own screen share
     // Remote users DO need fullscreen button to enlarge shared screen
     if (isScreenShare && !isLocal) {
-      // Extract original userId from screen ID (remove -screen suffix)
-      const originalId = id.replace('-screen', '');
-
       // Add preview toggle button
       const previewToggleBtn = document.createElement('button');
       previewToggleBtn.className = 'preview-toggle-btn';
       previewToggleBtn.innerHTML = '👁️ Превью';
       previewToggleBtn.title = 'Переключить режим превью (экономия ресурсов)';
-      previewToggleBtn.onclick = () => toggleScreenSharePreview(originalId);
+      previewToggleBtn.onclick = () => toggleScreenSharePreview(id);
       container.appendChild(previewToggleBtn);
-
+      
       const fullscreenBtn = document.createElement('button');
       fullscreenBtn.className = 'fullscreen-btn';
       fullscreenBtn.innerHTML = '🔍';
       fullscreenBtn.title = 'Увеличить демонстрацию экрана';
-      fullscreenBtn.onclick = () => openScreenModal(originalId);
+      fullscreenBtn.onclick = () => openScreenModal(id);
       container.appendChild(fullscreenBtn);
-
+      
       // Double-click on video to enlarge screen share
       video.style.cursor = 'pointer';
       video.title = 'Двойной клик для увеличения';
-      video.ondblclick = () => openScreenModal(originalId);
+      video.ondblclick = () => openScreenModal(id);
     }
     
     container.appendChild(video);
     container.appendChild(label);
     videoGrid.appendChild(container);
   } else {
-    // Container exists - update it
     const video = container.querySelector('video');
-    if (video) {
-      video.srcObject = stream;
-      video.play().catch(e => {});
-
-      // Show/hide video element based on video track
-      if (hasVideoTrack) {
-        video.style.display = 'block';
-      } else {
-        video.style.display = 'none';
-      }
-    }
-
-    // Handle avatar placeholder - remove if video track exists, add if no video track
-    const avatarPlaceholder = container.querySelector('.avatar-placeholder');
-    if (hasVideoTrack) {
-      // Video track exists - remove avatar placeholder
-      if (avatarPlaceholder) {
-        avatarPlaceholder.remove();
-        console.log(`[VIDEO] Removed avatar placeholder for ${id} (video track received)`);
-      }
-    } else {
-      // No video track - add avatar placeholder
-      if (!avatarPlaceholder) {
-        const newAvatarPlaceholder = document.createElement('div');
-        newAvatarPlaceholder.className = 'avatar-placeholder';
-        const avatar = isLocal ? (userAvatar || localStorage.getItem(`keroschat_avatar_${currentUser.username}`)) : (activeUsers.get(id)?.avatar);
-        if (avatar) {
-          newAvatarPlaceholder.innerHTML = `<img src="${avatar}" alt="${name}">`;
-        } else {
-          newAvatarPlaceholder.textContent = name.charAt(0).toUpperCase();
-        }
-        container.appendChild(newAvatarPlaceholder);
-        console.log(`[VIDEO] Added avatar placeholder for ${id} (no video track)`);
-      }
-    }
-
+    video.srcObject = stream;
+    video.play().catch(e => {});
+    
     // Update styles if this is a screen share (for replaceTrack case)
     if (isScreenShare && !isLocal) {
       container.classList.add('screen-share');
       // Force inline styles for visibility
       container.style.cssText = 'display: block !important; visibility: visible !important; opacity: 1 !important; min-width: 640px; min-height: 360px; border: 3px solid #3ba55d;';
       video.style.cssText = 'width: 100% !important; height: 100% !important; object-fit: contain !important; display: block !important; visibility: visible !important;';
-
-      // Extract original userId from screen ID (remove -screen suffix)
-      const originalId = id.replace('-screen', '');
-
+      
       // Add fullscreen button if not exists
       if (!container.querySelector('.fullscreen-btn')) {
         const fullscreenBtn = document.createElement('button');
         fullscreenBtn.className = 'fullscreen-btn';
         fullscreenBtn.innerHTML = '🔍';
         fullscreenBtn.title = 'Увеличить демонстрацию экрана';
-        fullscreenBtn.onclick = () => openScreenModal(originalId);
+        fullscreenBtn.onclick = () => openScreenModal(id);
         container.appendChild(fullscreenBtn);
-
+        
         video.style.cursor = 'pointer';
         video.title = 'Двойной клик для увеличения';
-        video.ondblclick = () => openScreenModal(originalId);
+        video.ondblclick = () => openScreenModal(id);
       }
     }
   }
@@ -1934,14 +1134,8 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
 }
 
 function removeVideoStream(id) {
-  // Remove camera container
   const container = document.getElementById(`video-${id}`);
   if (container) container.remove();
-
-  // Remove screen share container (if exists)
-  const screenContainer = document.getElementById(`video-${id}-screen`);
-  if (screenContainer) screenContainer.remove();
-
   updateUserCount();
 }
 
@@ -2052,101 +1246,86 @@ function startSpeakingDetection() {
 }
 
 async function createPeerConnection(userId) {
-  console.log(`[PEER] Creating peer connection for user: ${userId}, isScreenSharing: ${isScreenSharing}`);
   const pc = new RTCPeerConnection({
-    ...iceServers
+    ...iceServers,
+    // Low latency configuration
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require',
+    sdpSemantics: 'unified-plan'
   });
-
-  console.log(`[PEER] Adding local tracks to peer connection for ${userId}`);
-
-  // Add all tracks from localStream (camera + audio)
+  
+  // Enable low latency for audio
+  pc.getSenders().forEach(sender => {
+    if (sender.track && sender.track.kind === 'audio') {
+      const params = sender.getParameters();
+      if (params.encodings && params.encodings.length > 0) {
+        params.encodings[0].ptime = 20; // 20ms packet time for lower latency
+        sender.setParameters(params).catch(e => {});
+      }
+    }
+  });
+  
   localStream.getTracks().forEach(track => {
-    console.log(`[PEER] Adding track: ${track.kind}, label: ${track.label}, enabled: ${track.enabled}`);
     pc.addTrack(track, localStream);
   });
-
-  // If screen sharing is active, ADD screen track as well (Discord-style: camera + screen simultaneously)
-  if (isScreenSharing && screenStream) {
-    console.log(`[PEER] Screen sharing active, adding screen track for peer ${userId}`);
-    const screenTrack = screenStream.getVideoTracks()[0];
-    if (screenTrack) {
-      console.log(`[PEER] Screen track properties: label=${screenTrack.label}, enabled=${screenTrack.enabled}`);
-      pc.addTrack(screenTrack, screenStream);
-      console.log(`[PEER] Screen track added to peer ${userId} (in addition to camera)`);
-    }
-  }
-  console.log(`[PEER] Total tracks added to peer ${userId}`);
-
+  
   pc.ontrack = (e) => {
     const stream = e.streams[0];
-    const tracks = stream.getTracks();
-    const videoTrack = tracks.find(t => t.kind === 'video');
-    const audioTrack = tracks.find(t => t.kind === 'audio');
-
+    const videoTrack = stream.getVideoTracks()[0];
+    const audioTrack = stream.getAudioTracks()[0];
+    
     // Log detailed track info for debugging
-    const trackInfo = tracks.map(t => ({
+    const trackInfo = stream.getTracks().map(t => ({
       kind: t.kind,
       label: t.label,
       readyState: t.readyState,
       enabled: t.enabled,
       muted: t.muted
     }));
-    console.log(`[TRACK] Received track from ${userId}:`, JSON.stringify(trackInfo));
-
-    // Log video track settings
-    if (videoTrack) {
-      const videoSettings = videoTrack.getSettings();
-      console.log(`[TRACK] Video track settings from ${userId}:`, videoSettings);
-    }
-
+    console.log(`[TRACK] Received stream from ${userId}:`, JSON.stringify(trackInfo));
+    
     // Log audio track specifically
     if (audioTrack) {
       console.log(`[AUDIO] Received audio from ${userId}: enabled=${audioTrack.enabled}, muted=${audioTrack.muted}, state=${audioTrack.readyState}`);
     } else {
       console.warn(`[AUDIO] No audio track received from ${userId}!`);
     }
-
+    
     // Detect screen share by track label
     const isScreenByLabel = videoTrack && (
       videoTrack.label.toLowerCase().includes('screen') ||
       videoTrack.label.toLowerCase().includes('display') ||
       videoTrack.label.toLowerCase().includes('window')
     );
-
-    // Detect screen share by settings (screen share usually has higher resolution or aspect ratio)
+    
+    // Detect screen share by settings (screen share usually has higher resolution)
     const settings = videoTrack?.getSettings();
     const width = settings?.width || 0;
     const height = settings?.height || 0;
-    // Screen share typically has 16:9 or wider aspect ratio, or high resolution
-    const isScreenByResolution = width >= 720 || (width > 0 && width/height > 1.3);
-
+    // Screen share typically has resolution matching monitor (>1920x1080 common)
+    const isScreenByResolution = width > 1920 || height > 1080 || (width > 0 && width/height > 2.5);
+    
     console.log(`[TRACK] Video settings for ${userId}:`, width, 'x', height, 'aspect:', width/height);
-
+    
     socket.emit('get-user-name', userId, (name) => {
       const userName = name || 'Участник';
       if (!activeUsers.has(userId)) {
         activeUsers.set(userId, { id: userId, name: userName });
       }
-
-      // Check if this is a screen track
-      const isScreenShare = isScreenByLabel || isScreenByResolution;
-      console.log(`[TRACK] Screen detection for ${userId}: label=${isScreenByLabel}, resolution=${isScreenByResolution}, FINAL=${isScreenShare}`);
-
-      // Use unique ID for screen share container (userId + '-screen')
-      const videoId = isScreenShare ? `${userId}-screen` : userId;
-
-      // Add video stream with unique ID
-      addVideoStream(videoId, stream, userName, false, isScreenShare);
+      // Check if this user is screen sharing (socket event OR label OR resolution)
+      const isScreenShare = screenShareUsers.has(userId) || isScreenByLabel || isScreenByResolution;
+      console.log(`[TRACK] Screen detection for ${userId}: socket=${screenShareUsers.has(userId)}, label=${isScreenByLabel}, resolution=${isScreenByResolution}, FINAL=${isScreenShare}`);
+      addVideoStream(userId, stream, userName, false, isScreenShare);
       updateActiveUsers();
     });
   };
-
+  
   pc.onicecandidate = (e) => {
     if (e.candidate) {
       socket.emit('ice-candidate', userId, e.candidate);
     }
   };
-
+  
   pc.onconnectionstatechange = () => {
     if (pc.connectionState === 'disconnected') {
       removeVideoStream(userId);
@@ -2154,7 +1333,7 @@ async function createPeerConnection(userId) {
       updateActiveUsers();
     }
   };
-
+  
   peers.set(userId, pc);
   return pc;
 }
@@ -2253,65 +1432,31 @@ socket.on('room-deleted', (roomId) => {
   // If currently in this room, leave it
   if (currentRoom === roomId) {
     leaveRoom();
-    showAlertModal('Эта комната была удалена создателем.', 'info');
+    alert('Эта комната была удалена создателем.');
   }
 });
 
 socket.on('room-error', (error) => {
-  console.error('[ROOM-ERROR] Received room-error from server:', error);
   addLogEntry('Ошибка', error.message);
-  showAlertModal(error.message, 'error');
+  alert(error.message);
   // If in room, go back to lobby
   if (currentRoom) {
-    console.log('[ROOM-ERROR] Leaving room due to error');
     leaveRoom();
   }
 });
 
 socket.on('user-joined', async (user) => {
-  console.log('[USER-JOINED] Received user-joined:', user.id, user.name);
-
-  // Skip if already connected with this exact socket.id
+  // Skip if already connected to this user (prevent duplicates)
   if (activeUsers.has(user.id) || peers.has(user.id)) {
-    console.log('[USER-JOINED] User already connected with this socket.id, skipping:', user.id);
+    console.log('User already connected:', user.id);
     return;
   }
-
-  // Check if user with same name already exists (reconnect case)
-  let existingUserId = null;
-  for (const [id, existingUser] of activeUsers.entries()) {
-    if (existingUser.name === user.name && id !== user.id) {
-      existingUserId = id;
-      console.log('[USER-JOINED] Found existing user with same name, removing old entry:', existingUserId);
-      break;
-    }
-  }
-
-  // Remove old entry if found
-  if (existingUserId) {
-    activeUsers.delete(existingUserId);
-    // Also remove peer connection if exists
-    if (peers.has(existingUserId)) {
-      peers.get(existingUserId).close();
-      peers.delete(existingUserId);
-    }
-    // Remove video stream
-    removeVideoStream(existingUserId);
-  }
-
   // Avatar sync debug - disabled for production performance
   // console.log('[AVATAR] User joined:', user.name, 'has avatar:', !!user.avatar);
-  // REMOVED: sounds.userJoin() - sound should only play for the user who joined, not everyone in room
+  sounds.userJoin();
   activeUsers.set(user.id, user);
   addChatMessage('Система', `Комната "${currentRoomName}" - подключился ${user.name}`, true);
   updateActiveUsers();
-
-  // Update admin panel remote volume controls
-  if (typeof window.updateAdminRemoteVolumeControls === 'function') {
-    window.updateAdminRemoteVolumeControls();
-  }
-
-  console.log('[USER-JOINED] User added to activeUsers:', user.id, user.name);
 });
 
 socket.on('user-deleted', (username) => {
@@ -2328,13 +1473,13 @@ socket.on('user-deleted', (username) => {
   
   // If current user was deleted, log them out
   if (currentUser && currentUser.username === username) {
-    showAlertModal('Ваш аккаунт был удалён администратором', 'error');
+    alert('Ваш аккаунт был удалён администратором');
     logout();
   }
 });
 
 socket.on('user-left', (userId) => {
-  // REMOVED: sounds.userLeave() - sound should only play for the user who left, not everyone in room
+  sounds.userLeave();
   const user = activeUsers.get(userId);
   removeVideoStream(userId);
   if (peers.has(userId)) {
@@ -2345,52 +1490,6 @@ socket.on('user-left', (userId) => {
   const userName = user ? user.name : 'Участник';
   addChatMessage('Система', `Комната "${currentRoomName}" - отключился ${userName}`, true);
   updateActiveUsers();
-
-  // Update admin panel remote volume controls
-  if (typeof window.updateAdminRemoteVolumeControls === 'function') {
-    window.updateAdminRemoteVolumeControls();
-  }
-});
-
-// Room synchronization events
-socket.on('room-created', (room) => {
-  console.log('[SYNC] Room created:', room.name);
-  loadServerRooms();
-});
-
-socket.on('room-deleted', (roomId) => {
-  console.log('[SYNC] Room deleted:', roomId);
-  // Remove from local storage
-  const localRooms = JSON.parse(localStorage.getItem('keroschat_rooms') || '[]');
-  const filtered = localRooms.filter(r => r.id !== roomId);
-  localStorage.setItem('keroschat_rooms', JSON.stringify(filtered));
-  loadServerRooms();
-});
-
-socket.on('rooms-updated', () => {
-  console.log('[SYNC] Rooms updated');
-  loadServerRooms();
-});
-
-// Channel synchronization events
-socket.on('channel-created', (channel) => {
-  console.log('[SYNC] Channel created:', channel.name);
-  // Channels are disabled, but log for debugging
-});
-
-socket.on('channel-updated', (channel) => {
-  console.log('[SYNC] Channel updated:', channel.name);
-  // Channels are disabled, but log for debugging
-});
-
-socket.on('channel-deleted', (channelId) => {
-  console.log('[SYNC] Channel deleted:', channelId);
-  // Channels are disabled, but log for debugging
-});
-
-socket.on('channels-updated', () => {
-  console.log('[SYNC] Channels updated');
-  // Channels are disabled, but log for debugging
 });
 
 socket.on('offer', async (userId, offer) => {
@@ -2426,14 +1525,13 @@ socket.on('ice-candidate', async (userId, candidate) => {
 });
 
 socket.on('chat-message', (msg) => {
-  // TEMPORARILY DISABLED: Channel check - show all messages
-  // if (currentChannel === 'general') {
+  // Only show room messages if in general channel
+  if (currentChannel === 'general') {
     addChatMessage(msg.sender, msg.text, false, msg.time);
-  // }
+  }
 });
 
-// Channel-specific messages - TEMPORARILY DISABLED
-/*
+// Channel-specific messages
 socket.on('channel-message', (msg) => {
   // Only show if user is in this channel
   if (currentChannel === msg.channelId) {
@@ -2445,15 +1543,14 @@ socket.on('channel-message', (msg) => {
 socket.on('channel-created', (data) => {
   console.log('[CHANNEL DEBUG] Received channel-created event:', data);
   addLogEntry('Канал', `${data.createdBy} создал канал "${data.channelName}"`);
-  // DISABLED: Refresh channel list
-  // loadChannelsForRoom();
+  // Refresh channel list
+  loadChannels();
 });
 
 // Channels updated (counts changed)
 socket.on('channels-updated', (channels) => {
   console.log('[CHANNEL] Received updated channel counts:', channels);
-  // DISABLED: Update channel list
-  // updateChannelList(channels);
+  updateChannelList(channels);
 });
 
 // User joined channel
@@ -2461,15 +1558,14 @@ socket.on('user-joined-channel', (data) => {
   if (data.userId !== socket.id) {
     addSystemMessage(`${data.userName} присоединился к каналу "${data.channelName}"`);
     
-    // Update channel user counts
+    // Add to current channel users if in same channel
     if (data.channelId === currentChannel) {
       currentChannelUsers.set(data.userId, { userName: data.userName });
-      updateChannelParticipants();
-      
-      // Show user's video if they joined current channel
-      showUserVideo(data.userId, true);
+      // Refresh channel videos
+      refreshChannelVideos();
     }
   }
+  updateChannelParticipants();
 });
 
 // User left channel
@@ -2478,14 +1574,21 @@ socket.on('user-left-channel', (data) => {
     // Remove from current channel users
     if (data.channelId === currentChannel) {
       currentChannelUsers.delete(data.userId);
-      updateChannelParticipants();
-      
-      // Hide user's video if they left current channel
-      showUserVideo(data.userId, false);
+      // Update video visibility to hide this user's video
+      const channelUsers = Array.from(currentChannelUsers.entries()).map(([userId, user]) => ({
+        userId,
+        userName: user.userName || (activeUsers.get(userId)?.name) || 'Участник'
+      }));
+      // Add current user
+      channelUsers.push({
+        userId: socket.id,
+        userName: currentUser.username
+      });
+      updateVideoVisibilityForChannel(channelUsers);
     }
   }
+  updateChannelParticipants();
 });
-*/
 
 // Refresh channel videos - re-creates the channel video container
 function refreshChannelVideos() {
@@ -2508,12 +1611,65 @@ socket.on('screen-share-started', (userId) => {
   const user = activeUsers.get(userId);
   const userName = user ? user.name : 'Участник';
   addLogEntry('Демонстрация', `${userName} начал демонстрацию экрана`);
-
+  
   // Track this user as screen sharing
   screenShareUsers.add(userId);
-
-  // Screen container will be created automatically when screen track arrives via ontrack
-  console.log('[SCREEN] User started screen share, waiting for screen track:', userId);
+  
+  // Check if video container already exists and UPDATE it to screen share mode
+  const container = document.getElementById(`video-${userId}`);
+  if (container) {
+    // Update existing container to screen share style
+    container.classList.add('screen-share');
+    const video = container.querySelector('video');
+    if (video) {
+      video.style.objectFit = 'contain';
+      
+      // Log resolution for debugging (screen share styling already applied above)
+      const checkResolution = () => {
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+        const isLarge = w > 1920 || h > 1080 || (w > 0 && w/h > 2.5);
+        console.log(`[SCREEN] Video resolution for ${userId}: ${w}x${h}, aspect: ${(w/h).toFixed(2)}, largeRes: ${isLarge}`);
+      };
+      
+      // Check now and on metadata loaded (resolution may change with replaceTrack)
+      if (video.readyState >= 2) {
+        checkResolution();
+      }
+      video.onloadedmetadata = checkResolution;
+      video.onresize = checkResolution;
+    }
+    
+    // Add preview toggle button if not exists
+    if (!container.querySelector('.preview-toggle-btn')) {
+      const previewToggleBtn = document.createElement('button');
+      previewToggleBtn.className = 'preview-toggle-btn';
+      previewToggleBtn.innerHTML = '👁️ Превью';
+      previewToggleBtn.title = 'Переключить режим превью (экономия ресурсов)';
+      previewToggleBtn.onclick = () => toggleScreenSharePreview(userId);
+      container.appendChild(previewToggleBtn);
+    }
+    
+    // Add fullscreen button if not exists
+    if (!container.querySelector('.fullscreen-btn')) {
+      const fullscreenBtn = document.createElement('button');
+      fullscreenBtn.className = 'fullscreen-btn';
+      fullscreenBtn.innerHTML = '🔍';
+      fullscreenBtn.title = 'Увеличить демонстрацию экрана';
+      fullscreenBtn.onclick = () => openScreenModal(userId);
+      container.appendChild(fullscreenBtn);
+      
+      if (video) {
+        video.style.cursor = 'pointer';
+        video.title = 'Двойной клик для увеличения';
+        video.ondblclick = () => openScreenModal(userId);
+      }
+    }
+    
+    console.log('[SCREEN] Updated container for screen share:', userId);
+  } else {
+    console.log('[SCREEN] Container not found yet, will be styled when video arrives');
+  }
 });
 
 // Handle remote user screen share stopped
@@ -2521,32 +1677,49 @@ socket.on('screen-share-stopped', (userId) => {
   const user = activeUsers.get(userId);
   const userName = user ? user.name : 'Участник';
   addLogEntry('Демонстрация', `${userName} остановил демонстрацию экрана`);
-
+  
   // Remove from screen share tracking
   screenShareUsers.delete(userId);
-
-  // Remove screen container (camera container remains unchanged)
-  const screenContainer = document.getElementById(`video-${userId}-screen`);
-  if (screenContainer) {
-    screenContainer.remove();
-    console.log('[SCREEN] Removed screen container for:', userId);
+  
+  // Revert container to normal video mode (don't remove it!)
+  const container = document.getElementById(`video-${userId}`);
+  if (container) {
+    container.classList.remove('screen-share');
+    container.style.cssText = ''; // Clear forced screen share styles
+    
+    const video = container.querySelector('video');
+    if (video) {
+      video.style.cssText = ''; // Clear forced video styles
+      video.style.transform = 'scaleX(-1)'; // Restore mirror for normal camera
+      video.style.objectFit = 'cover';
+    }
+    
+    // Remove screen share specific buttons
+    const previewBtn = container.querySelector('.preview-toggle-btn');
+    if (previewBtn) previewBtn.remove();
+    const fullscreenBtn = container.querySelector('.fullscreen-btn');
+    if (fullscreenBtn) fullscreenBtn.remove();
   }
 });
 
 // Handle active screen shares when joining room (users already sharing)
 socket.on('active-screen-shares', (userIds) => {
   console.log('[SCREEN] Received active screen shares on join:', userIds);
-
+  
   userIds.forEach(async (userId) => {
     // Track this user as screen sharing
     screenShareUsers.add(userId);
     const user = activeUsers.get(userId);
     const userName = user ? user.name : 'Участник';
     addLogEntry('Демонстрация', `${userName} демонстрирует экран`);
-
-    console.log(`[SCREEN] Processing screen share for user: ${userId}, name: ${userName}`);
-
-    // Ensure peer connection exists
+    
+    // Ensure peer connection exists before requesting screen stream
+    if (!peers.has(userId) && !activeUsers.has(userId)) {
+      // Create user entry if not exists
+      activeUsers.set(userId, { name: userName, avatar: user?.avatar });
+    }
+    
+    // Create peer connection if not exists
     if (!peers.has(userId)) {
       try {
         console.log(`[SCREEN] Creating peer connection for screen share user: ${userId}`);
@@ -2554,67 +1727,86 @@ socket.on('active-screen-shares', (userIds) => {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         socket.emit('offer', userId, offer);
-        console.log(`[SCREEN] Peer connection created and offer sent for ${userId}`);
       } catch (e) {
         console.error('[SCREEN] Error creating peer connection for screen share:', e);
       }
-    } else {
-      console.log(`[SCREEN] Peer connection already exists for ${userId}`);
     }
-
-    // Screen container will be created automatically when screen track arrives via ontrack
-    console.log('[SCREEN] Waiting for screen track for:', userId);
+    
+    // Wait a bit for peer connection to establish before requesting screen stream
+    setTimeout(() => {
+      // Check if video container already exists and add buttons
+      const container = document.getElementById(`video-${userId}`);
+      if (container) {
+        // Add screen-share class
+        container.classList.add('screen-share');
+        
+        // Add preview toggle button if not exists
+        if (!container.querySelector('.preview-toggle-btn')) {
+          const previewToggleBtn = document.createElement('button');
+          previewToggleBtn.className = 'preview-toggle-btn';
+          previewToggleBtn.innerHTML = '👁️ Превью';
+          previewToggleBtn.title = 'Переключить режим превью (экономия ресурсов)';
+          previewToggleBtn.onclick = () => toggleScreenSharePreview(userId);
+          container.appendChild(previewToggleBtn);
+        }
+        
+        // Add fullscreen button if not exists
+        if (!container.querySelector('.fullscreen-btn')) {
+          const fullscreenBtn = document.createElement('button');
+          fullscreenBtn.className = 'fullscreen-btn';
+          fullscreenBtn.innerHTML = '🔍';
+          fullscreenBtn.title = 'Увеличить демонстрацию экрана';
+          fullscreenBtn.onclick = () => openScreenModal(userId);
+          container.appendChild(fullscreenBtn);
+        }
+        
+        // Add double-click handler to video
+        const video = container.querySelector('video');
+        if (video) {
+          video.style.cursor = 'pointer';
+          video.title = 'Двойной клик для увеличения';
+          video.ondblclick = () => openScreenModal(userId);
+          // Refresh video stream by re-setting srcObject
+          const currentStream = video.srcObject;
+          if (currentStream) {
+            video.srcObject = null;
+            setTimeout(() => {
+              video.srcObject = currentStream;
+              video.play().catch(e => console.log('[SCREEN] Refresh play error:', e));
+            }, 100);
+          }
+        }
+      }
+      
+      // Request fresh video stream from server for this user
+      console.log(`[SCREEN] Requesting fresh stream from user: ${userId}`);
+      socket.emit('request-screen-stream', userId);
+    }, 500); // Wait 500ms for peer connection to establish
   });
 });
 
 // Handle request to refresh screen offer (when new user joins and needs stream)
-socket.on('refresh-screen-offer', async ({ requesterId }) => {
-  console.log('[SCREEN] Received refresh-screen-offer from:', requesterId);
-  console.log('[SCREEN] isScreenSharing:', isScreenSharing, 'screenStream exists:', !!screenStream);
-
-  // Only respond if we are actively screen sharing
-  if (isScreenSharing && screenStream) {
-    console.log('[SCREEN] We are screen sharing, creating new peer connection for requester:', requesterId);
-
-    const screenTrack = screenStream.getVideoTracks()[0];
-    if (screenTrack) {
-      console.log('[SCREEN] Screen track found:', screenTrack.label, 'enabled:', screenTrack.enabled);
-      const screenSettings = screenTrack.getSettings();
-      console.log('[SCREEN] Screen track settings:', screenSettings);
-    } else {
-      console.warn('[SCREEN] No screen track found in screenStream!');
-    }
-
-    // Create peer connection if it doesn't exist
-    if (!peers.has(requesterId)) {
-      console.log('[SCREEN] Creating peer connection for requester:', requesterId);
-      createPeerConnection(requesterId);
-    }
-
-    const pc = peers.get(requesterId);
+socket.on('refresh-screen-offer', async ({ requesterId, targetId }) => {
+  console.log(`[SCREEN] Received refresh request from ${requesterId}, target: ${targetId}`);
+  // Only respond if we are the target and we're screen sharing
+  if (targetId === socket.id && isScreenSharing) {
+    console.log(`[SCREEN] Re-sending screen stream to ${requesterId}`);
+    // Create peer connection if not exists
+    let pc = peers.get(requesterId);
     if (!pc) {
-      console.error('[SCREEN] Failed to create peer connection for requester:', requesterId);
-      return;
-    }
-
-    // Send a new offer with the screen track
-    setTimeout(async () => {
       try {
-        console.log('[SCREEN] Creating offer with screen track for:', requesterId);
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socket.emit('offer', {
-          to: requesterId,
-          from: socket.id,
-          sdp: pc.localDescription
-        });
-        console.log('[SCREEN] Sent new offer with screen track to:', requesterId);
+        console.log(`[SCREEN] Creating new peer connection for ${requesterId}`);
+        pc = await createPeerConnection(requesterId);
       } catch (e) {
-        console.error('[SCREEN] Error creating offer for screen share:', e);
+        console.error('[SCREEN] Error creating peer connection:', e);
+        return;
       }
-    }, 100);
-  } else {
-    console.log('[SCREEN] Not screen sharing, ignoring refresh-screen-offer');
+    }
+    // Create new offer to trigger renegotiation
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit('offer', requesterId, offer);
+    console.log(`[SCREEN] Re-sent offer to ${requesterId}`);
   }
 });
 
@@ -2626,14 +1818,14 @@ function toggleMic() {
     if (audioTrack) {
       audioTrack.enabled = !audioTrack.enabled;
       isMicOn = audioTrack.enabled;
-
+      
       // Play sound
       if (isMicOn) {
         sounds.micOn();
       } else {
         sounds.micOff();
       }
-
+      
       const btn = document.getElementById('micBtn');
       if (isMicOn) {
         btn.classList.remove('danger');
@@ -2641,10 +1833,8 @@ function toggleMic() {
       } else {
         btn.classList.add('danger');
         btn.querySelector('.label').textContent = 'Мик выкл';
-        // Reset mic level indicator when muting
-        resetMicLevelIndicator();
       }
-
+      
       // Notify other users about mic state
       if (currentRoom) {
         socket.emit('user-mute-state', { roomId: currentRoom, isMicMuted: !isMicOn });
@@ -2653,21 +1843,20 @@ function toggleMic() {
   }
 }
 
-async function toggleCam() {
+function toggleCam() {
   if (localStream) {
     const videoTrack = localStream.getVideoTracks()[0];
     if (videoTrack) {
-      // Toggle existing video track
       videoTrack.enabled = !videoTrack.enabled;
       isCamOn = videoTrack.enabled;
-
+      
       // Play sound
       if (isCamOn) {
         sounds.camOn();
       } else {
         sounds.camOff();
       }
-
+      
       const btn = document.getElementById('camBtn');
       if (isCamOn) {
         btn.classList.remove('danger');
@@ -2675,40 +1864,6 @@ async function toggleCam() {
       } else {
         btn.classList.add('danger');
         btn.querySelector('.label').textContent = 'Камера выкл';
-      }
-    } else {
-      // No video track exists - request camera
-      try {
-        console.log('[CAM] Requesting camera...');
-        const camStream = await navigator.mediaDevices.getUserMedia({
-          video: selectedVideoInput ? { deviceId: { exact: selectedVideoInput } } : true,
-          audio: false
-        });
-
-        const newVideoTrack = camStream.getVideoTracks()[0];
-        if (newVideoTrack) {
-          localStream.addTrack(newVideoTrack);
-          isCamOn = true;
-
-          // Add to all peer connections
-          peers.forEach(pc => {
-            pc.addTrack(newVideoTrack, localStream);
-          });
-
-          // Update local video display
-          addVideoStream('local', localStream, currentUser.username, true, false);
-
-          sounds.camOn();
-
-          const btn = document.getElementById('camBtn');
-          btn.classList.remove('danger');
-          btn.querySelector('.label').textContent = 'Камера';
-
-          console.log('[CAM] Camera added successfully');
-        }
-      } catch (err) {
-        console.error('[CAM] Error requesting camera:', err);
-        showAlertModal('Не удалось получить доступ к камере. Проверьте разрешения.', 'error');
       }
     }
   }
@@ -2739,10 +1894,9 @@ function toggleSound() {
     label.textContent = 'Звук выкл';
   }
   
-  // Change volume instead of muting to ensure audio can always be heard
+  // Mute/unmute all remote videos
   document.querySelectorAll('.video-container:not(.local) video').forEach(video => {
-    video.volume = isSoundOn ? 0.5 : 0;
-    video.muted = false; // Never mute, just use volume
+    video.muted = !isSoundOn;
   });
   
   // Notify other users about sound state
@@ -2753,11 +1907,11 @@ function toggleSound() {
 
 async function toggleScreen() {
   console.log('[SCREEN] Toggle called, isScreenSharing:', isScreenSharing);
-
+  
   if (isScreenSharing) {
     // Stop screen sharing
     sounds.screenOff();
-
+    
     if (screenStream) {
       // Remove onended handler before stopping to prevent double toggle
       screenStream.getVideoTracks().forEach(track => {
@@ -2767,68 +1921,34 @@ async function toggleScreen() {
       screenStream.getAudioTracks().forEach(track => track.stop());
       screenStream = null;
     }
-
-    // Remove screen track from all peer connections (keep camera track)
-    peers.forEach(async (pc, peerId) => {
-      const senders = pc.getSenders();
-      let removed = false;
-      senders.forEach(sender => {
-        if (sender.track && sender.track.kind === 'video') {
-          const track = sender.track;
-          // Check if this is a screen track by label
-          if (track.label && (track.label.toLowerCase().includes('screen') ||
-              track.label.toLowerCase().includes('display') ||
-              track.label.toLowerCase().includes('window'))) {
-            console.log('[SCREEN] Removing screen track from peer');
-            sender.replaceTrack(null).catch(err => {
-              console.error('[SCREEN] Error removing screen track:', err);
-            });
-            removed = true;
-          }
+    
+    // Replace with camera track
+    const videoTrack = localStream ? localStream.getVideoTracks()[0] : null;
+    if (videoTrack) {
+      peers.forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender && videoTrack) {
+          sender.replaceTrack(videoTrack).catch(err => {
+            console.error('[SCREEN] Error replacing track:', err);
+          });
         }
       });
-
-      // Renegotiate to notify remote peer that screen track is removed
-      if (removed) {
-        try {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          socket.emit('offer', peerId, offer);
-          console.log(`[SCREEN] Renegotiation offer sent after removing screen track for peer ${peerId}`);
-        } catch (renegErr) {
-          console.error(`[SCREEN] Error renegotiating for peer ${peerId}:`, renegErr);
-        }
-      }
-    });
-
-    // Restore local container (camera continues to work)
-    const localContainer = document.getElementById('video-local');
-    if (localContainer) {
-      // Remove screen share indicator
-      const screenIndicator = localContainer.querySelector('[style*="background: rgba(59, 165, 93"]');
-      if (screenIndicator) {
-        screenIndicator.remove();
-      }
-
-      // Remove screen-share class
-      localContainer.classList.remove('screen-share');
-
-      // Restore camera stream (it was never stopped)
-      const localVideo = localContainer.querySelector('video');
-      if (localVideo && localStream) {
-        localVideo.srcObject = localStream;
-        localVideo.playbackRate = 1.0;
-        localVideo.style.objectFit = 'cover';
-        localVideo.style.transform = 'scaleX(-1)';
-      }
-
-      console.log('[SCREEN] Local container restored (camera still active)');
+    }
+    
+    // Remove screen share preview window
+    const preview = document.getElementById('screen-share-preview');
+    if (preview) {
+      preview.remove();
+    }
+    
+    // Restore camera preview
+    if (localStream) {
+      addVideoStream('local', localStream, currentUser.username, true, false);
     }
     
     isScreenSharing = false;
-    localStorage.removeItem('keroschat_screen_sharing');
     socket.emit('screen-share-stopped');
-
+    
     const btn = document.getElementById('screenBtn');
     if (btn) {
       btn.classList.remove('active');
@@ -2841,21 +1961,17 @@ async function toggleScreen() {
     // Start screen sharing
     try {
       console.log('[SCREEN] Starting screen share...');
-
-      // Check if getDisplayMedia is supported (not available on mobile devices)
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-        showAlertModal('Демонстрация экрана недоступна на этом устройстве. Эта функция работает только на десктопных браузерах.', 'error');
-        return;
-      }
-
-      // Request screen share with original constraints
+      
+      // Request screen share with constraints - allow maximum resolution
       const constraints = {
         video: {
-          cursor: 'always'
+          cursor: 'always',
+          width: { ideal: 3840, max: 3840 }, // Up to 4K
+          height: { ideal: 2160, max: 2160 }
         },
-        audio: false
+        audio: false // Disable audio to reduce bandwidth
       };
-
+      
       screenStream = await navigator.mediaDevices.getDisplayMedia(constraints);
       sounds.screenOn();
       
@@ -2871,78 +1987,48 @@ async function toggleScreen() {
           toggleScreen();
         }
       };
-
-      // Add screen track to all peer connections (Discord-style: camera + screen simultaneously)
-      console.log(`[SCREEN] Adding screen track to ${peers.size} peer connections`);
-      let addedCount = 0;
-      peers.forEach(async (pc, peerId) => {
-        try {
-          pc.addTrack(screenTrack, screenStream);
-          console.log(`[SCREEN] Screen track added successfully for peer ${peerId}`);
-          addedCount++;
-
-          // Renegotiate to send the new track to remote peer
-          try {
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            socket.emit('offer', peerId, offer);
-            console.log(`[SCREEN] Renegotiation offer sent for peer ${peerId}`);
-          } catch (renegErr) {
-            console.error(`[SCREEN] Error renegotiating for peer ${peerId}:`, renegErr);
-          }
-        } catch (err) {
-          console.error(`[SCREEN] Error adding screen track for peer ${peerId}:`, err);
+      
+      // Replace camera track with screen track in all peer connections
+      peers.forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender) {
+          sender.replaceTrack(screenTrack).catch(err => {
+            console.error('[SCREEN] Error replacing track:', err);
+          });
         }
       });
-      console.log(`[SCREEN] Screen track addition complete: ${addedCount} added`);
-
-      // Replace local container avatar with screen preview (instead of removing container)
+      
+      // Remove local camera preview - no need to see own screen share
       const localContainer = document.getElementById('video-local');
       if (localContainer) {
-        // Remove avatar placeholder
-        const avatarPlaceholder = localContainer.querySelector('.avatar-placeholder');
-        if (avatarPlaceholder) {
-          avatarPlaceholder.remove();
-        }
-
-        // Get or create video element
-        let localVideo = localContainer.querySelector('video');
-        if (!localVideo) {
-          localVideo = document.createElement('video');
-          localVideo.autoplay = true;
-          localVideo.muted = true;
-          localVideo.playsInline = true;
-          localVideo.style.width = '100%';
-          localVideo.style.height = '100%';
-          localVideo.style.objectFit = 'cover';
-          localVideo.style.transform = 'scaleX(-1)';
-          localContainer.appendChild(localVideo);
-          console.log('[SCREEN] Created new video element in local container');
-        }
-
-        // Replace video with screen stream
-        localVideo.srcObject = screenStream;
-        localVideo.style.objectFit = 'contain';
-        localVideo.style.transform = 'none';
-        // Limit to 5fps to reduce CPU usage
-        localVideo.playbackRate = 0.1;
-
-        // Add screen share indicator
-        const screenIndicator = document.createElement('div');
-        screenIndicator.innerHTML = '🖥️ Демонстрация';
-        screenIndicator.style.cssText = 'position: absolute; top: 8px; left: 8px; background: rgba(59, 165, 93, 0.9); color: white; padding: 4px 12px; border-radius: 4px; font-size: 12px; z-index: 10;';
-        localContainer.appendChild(screenIndicator);
-
-        // Mark as screen share
-        localContainer.classList.add('screen-share');
-
-        console.log('[SCREEN] Local container updated with screen preview');
+        localContainer.remove();
       }
-
+      
+      // Add small low-res preview window (160x90) - not CPU intensive
+      const previewContainer = document.createElement('div');
+      previewContainer.id = 'screen-share-preview';
+      previewContainer.style.cssText = 'position: absolute; bottom: 80px; right: 20px; width: 160px; height: 90px; z-index: 100; border-radius: 4px; overflow: hidden; border: 2px solid #3ba55d; background: #000;';
+      
+      const previewVideo = document.createElement('video');
+      previewVideo.srcObject = screenStream;
+      previewVideo.autoplay = true;
+      previewVideo.muted = true;
+      previewVideo.playsInline = true;
+      previewVideo.style.cssText = 'width: 100%; height: 100%; object-fit: contain;';
+      // Limit to 5fps to reduce CPU usage
+      previewVideo.playbackRate = 0.1;
+      
+      const previewLabel = document.createElement('div');
+      previewLabel.innerHTML = '🖥️ Демонстрация';
+      previewLabel.style.cssText = 'position: absolute; bottom: 0; left: 0; right: 0; background: rgba(59, 165, 93, 0.9); color: white; padding: 2px 4px; font-size: 10px; text-align: center;';
+      
+      previewContainer.appendChild(previewVideo);
+      previewContainer.appendChild(previewLabel);
+      document.getElementById('videoGrid').appendChild(previewContainer);
+      
       isScreenSharing = true;
-      localStorage.setItem('keroschat_screen_sharing', 'true');
       socket.emit('screen-share-started');
-
+      
       const btn = document.getElementById('screenBtn');
       if (btn) {
         btn.classList.add('active');
@@ -2953,15 +2039,7 @@ async function toggleScreen() {
       console.log('[SCREEN] Screen sharing started');
     } catch (err) {
       console.error('[SCREEN] Error starting screen share:', err);
-
-      // Handle specific permission denied error
-      if (err.name === 'NotAllowedError' || err.message.includes('Permission denied')) {
-        showAlertModal('❌ Вы отказали в разрешении на демонстрацию экрана. Нажмите кнопку "Экран" снова и разрешите доступ.', 'error');
-      } else if (err.name === 'NotFoundError') {
-        showAlertModal('❌ Не выбран экран для демонстрации. Пожалуйста, выберите экран или окно.', 'error');
-      } else {
-        showAlertModal('Ошибка при запуске демонстрации: ' + err.message, 'error');
-      }
+      alert('Ошибка при запуске демонстрации: ' + err.message);
     }
   }
 }
@@ -2971,12 +2049,12 @@ let currentScreenResolution = '1080p'; // Default resolution
 
 // Toggle screen share between full size and preview/thumbnail mode
 function toggleScreenSharePreview(videoId) {
-  const container = document.getElementById(`video-${videoId}-screen`);
+  const container = document.getElementById(`video-${videoId}`);
   if (!container) return;
-
+  
   const isPreview = container.classList.contains('preview-mode');
   const toggleBtn = container.querySelector('.preview-toggle-btn');
-
+  
   if (isPreview) {
     // Switch to full mode
     container.classList.remove('preview-mode');
@@ -2999,11 +2077,15 @@ function closeAllScreenModals() {
 }
 
 function openScreenModal(videoId) {
-  // REMOVED: Channel restriction - screen share is now visible to all users in room
-  // This ensures screen share works in any room/channel and is visible to everyone
-
-  // Find the screen share video element by id (use -screen suffix for screen share containers)
-  const container = document.getElementById(`video-${videoId}-screen`);
+  // Check if user is in the same channel as the screen sharing user
+  if (!currentChannelUsers.has(videoId) && videoId !== 'local') {
+    console.log('[SCREEN] Cannot open modal: user', videoId, 'is not in current channel');
+    addSystemMessage('Вы не можете просматривать демонстрацию экрана пользователя из другого канала');
+    return;
+  }
+  
+  // Find the screen share video element by id
+  const container = document.getElementById(`video-${videoId}`);
   if (!container) {
     console.warn('Screen share container not found:', videoId);
     return;
@@ -3206,24 +2288,6 @@ function sendMessage() {
   const input = document.getElementById('chatInput');
   const text = input.value.trim();
   if (text && currentRoom) {
-    // Check if user is muted
-    if (currentUser && (currentUser.isMuted === true || currentUser.isMuted === 'true')) {
-      // Check if mute has expired
-      if (currentUser.muteUntil && currentUser.muteUntil > Date.now()) {
-        const remainingMinutes = Math.ceil((currentUser.muteUntil - Date.now()) / 60000);
-        showAlertModal(`🔇 Вы замучены. Осталось ${remainingMinutes} минут`, 'error');
-        return;
-      } else if (currentUser.muteUntil && currentUser.muteUntil <= Date.now()) {
-        // Mute has expired, auto-unmute
-        currentUser.isMuted = false;
-        currentUser.muteUntil = 0;
-      } else if (!currentUser.muteUntil || currentUser.muteUntil === 0) {
-        // Permanent mute
-        showAlertModal('🔇 Вы замучены навсегда', 'error');
-        return;
-      }
-    }
-
     // Send to current channel if in a channel, otherwise to room
     if (currentChannel && currentChannel !== 'general') {
       socket.emit('channel-message', currentChannel, text);
@@ -3329,10 +2393,10 @@ function switchChannel(channelId) {
         }));
         updateVideoVisibilityForChannel(channelUsers);
       }
-
-      // DISABLED: Refresh channel list to update user counts
-      // loadChannels();
-
+      
+      // Refresh channel list to update user counts
+      loadChannels();
+      
       // Clear chat messages when switching channels
       const chatMessages = document.getElementById('chatMessages');
       if (chatMessages) {
@@ -3462,18 +2526,10 @@ function loadChannels() {
 let currentChannelUsers = new Map(); // Track which users are in current channel
 
 function showUserVideo(userId, show) {
-  // Show/hide camera container
   const videoContainer = document.getElementById(`video-${userId}`);
   if (videoContainer) {
     videoContainer.style.display = show ? 'block' : 'none';
     console.log(`[CHANNEL] Video for ${userId}: ${show ? 'shown' : 'hidden'}`);
-  }
-
-  // Show/hide screen container (if exists)
-  const screenContainer = document.getElementById(`video-${userId}-screen`);
-  if (screenContainer) {
-    screenContainer.style.display = show ? 'block' : 'none';
-    console.log(`[CHANNEL] Screen for ${userId}: ${show ? 'shown' : 'hidden'}`);
   }
 }
 
@@ -3486,10 +2542,7 @@ function updateVideoVisibilityForChannel(channelUsers) {
 
   // Show/hide videos in the main video grid based on channel membership
   document.querySelectorAll('.video-container').forEach(container => {
-    let userId = container.id.replace('video-', '');
-    // Remove -screen suffix if present to get original userId
-    userId = userId.replace('-screen', '');
-
+    const userId = container.id.replace('video-', '');
     // For local user, check if socket.id is in the channel; for others, check userId directly
     const isLocalUser = userId === 'local';
     const isInChannel = isLocalUser ? userIdsInChannel.has(socket.id) : userIdsInChannel.has(userId);
@@ -3617,16 +2670,6 @@ function toggleSettings() {
   panel.classList.toggle('active');
   if (panel.classList.contains('active')) {
     updateRemoteVolumeControls();
-    enumerateDevices();
-    // Start mic level monitoring if in room
-    if (localStream) {
-      startMicLevelMonitoring();
-    }
-  } else {
-    // Stop monitoring when closing settings
-    stopMicLevelMonitoring();
-    // Reset indicator to default state
-    resetMicLevelIndicator();
   }
 }
 
@@ -3674,6 +2717,10 @@ function setRemoteVolume(userId, value) {
   if (settingsVolume) {
     settingsVolume.value = value;
   }
+}
+
+function setMicVolume(value) {
+  localStorage.setItem('micVolume', value);
 }
 
 function uploadAvatar(input) {
@@ -3761,42 +2808,12 @@ function clearLogs() {
   }
 }
 
-async function clearAllCache() {
-  showConfirmModal('Очистить весь кэш браузера? Это удалит все сохранённые данные (аватары, темы, настройки, комнаты).', async () => {
-    try {
-      // Clear all localStorage
-      localStorage.clear();
-
-      // Clear sessionStorage
-      sessionStorage.clear();
-
-      // Clear IndexedDB (for larger data)
-      if (window.indexedDB) {
-        const databases = await indexedDB.databases();
-        databases.forEach(db => {
-          indexedDB.deleteDatabase(db.name);
-        });
-      }
-
-      showAlertModal('✅ Кэш очищен! Страница перезагрузится.', 'success');
-      setTimeout(() => location.reload(), 1500);
-    } catch (err) {
-      console.error('Error clearing cache:', err);
-      showAlertModal('❌ Ошибка очистки кэша', 'error');
-    }
-  });
-}
-
-function emergencyClearCache() {
-  try {
-    // Clear all storage immediately without confirmation
-    localStorage.clear();
-    sessionStorage.clear();
-    console.log('[EMERGENCY] Cache cleared, reloading...');
+function clearAllCache() {
+  if (confirm('Удалить все локальные комнаты? Это не удалит их с сервера, только почистит ваш кэш.')) {
+    localStorage.removeItem('keroschat_rooms');
+    console.log('Local rooms cache cleared');
+    alert('Кэш очищен! Страница перезагрузится.');
     location.reload();
-  } catch (err) {
-    console.error('[EMERGENCY] Error clearing cache:', err);
-    alert('Ошибка очистки кэша. Пожалуйста, очистите кэш вручную в настройках браузера.');
   }
 }
 
