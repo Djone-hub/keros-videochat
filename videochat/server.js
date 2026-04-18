@@ -1172,7 +1172,32 @@ io.on('connection', (socket) => {
     io.emit('users-updated');
   });
 
-  socket.on('join-room', (roomId, userName, userAvatar, roomName, roomAvatar, callback) => {
+  socket.on('join-room', (data) => {
+    console.log('[JOIN-ROOM] Received data:', data);
+    
+    // Support both old format (separate params) and new format (object)
+    let roomId, userName, userAvatar, roomName, roomAvatar, isScreenSharing;
+    
+    if (typeof data === 'object' && data !== null) {
+      // New format: object
+      roomId = data.roomId;
+      userName = data.username;
+      userAvatar = data.avatar;
+      roomName = data.roomName;
+      roomAvatar = data.roomAvatar;
+      isScreenSharing = data.isScreenSharing;
+      console.log('[JOIN-ROOM] Parsed new format: roomId=', roomId, 'username=', userName);
+    } else {
+      // Old format: separate parameters
+      roomId = arguments[0];
+      userName = arguments[1];
+      userAvatar = arguments[2];
+      roomName = arguments[3];
+      roomAvatar = arguments[4];
+      callback = arguments[5];
+      console.log('[JOIN-ROOM] Parsed old format: roomId=', roomId, 'username=', userName);
+    }
+
     socket.join(roomId);
     socket.roomId = roomId;
     socket.userName = userName;
