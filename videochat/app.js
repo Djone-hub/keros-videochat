@@ -2395,24 +2395,34 @@ socket.on('channels-updated', () => {
 
 socket.on('offer', async (userId, offer) => {
   // Offer received - debug disabled
-  // console.log('Received offer from:', userId);
-  const pc = await createPeerConnection(userId);
+  console.log('[OFFER] Received offer from:', userId);
+  let pc;
+  if (peers.has(userId)) {
+    // Use existing peer connection (renegotiation)
+    pc = peers.get(userId);
+    console.log('[OFFER] Using existing peer connection for renegotiation');
+  } else {
+    // Create new peer connection (initial connection)
+    pc = await createPeerConnection(userId);
+    console.log('[OFFER] Created new peer connection');
+  }
   await pc.setRemoteDescription(offer);
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
   // Answer sent
   socket.emit('answer', userId, answer);
+  console.log('[OFFER] Answer sent to:', userId);
   updateActiveUsers();
 });
 
 socket.on('answer', async (userId, answer) => {
-  // Answer received - debug disabled
-  // console.log('Received answer from:', userId);
+  // Answer received
+  console.log('[ANSWER] Received answer from:', userId);
   if (peers.has(userId)) {
     await peers.get(userId).setRemoteDescription(answer);
-    // Remote description set
+    console.log('[ANSWER] Remote description set for:', userId);
   } else {
-    // No peer for answer
+    console.warn('[ANSWER] No peer for answer from:', userId);
   }
 });
 
