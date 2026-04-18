@@ -1379,15 +1379,16 @@ async function joinRoomById(roomId) {
     return;
   }
 
-  const storedRoom = roomStore.get(roomId);
-  if (!storedRoom) {
+  // Find room from allRooms (loaded from server)
+  const room = allRooms.find(r => r.id === roomId);
+  if (!room) {
     showAlertModal('Комната не найдена', 'error');
     return;
   }
 
   currentRoom = roomId;
-  currentRoomName = storedRoom.name;
-  currentRoomAvatar = storedRoom.avatar;
+  currentRoomName = room.name;
+  currentRoomAvatar = room.avatar;
 
   // Check if user was screen sharing before (for restoration after join)
   const wasScreenSharing = localStorage.getItem('keroschat_screen_sharing') === 'true';
