@@ -2205,11 +2205,19 @@ async function createPeerConnection(userId, forceScreen = false) {
 
   pc.onicecandidate = (e) => {
     if (e.candidate) {
+      console.log(`[ICE] Candidate for ${userId}:`, e.candidate.type, e.candidate.protocol);
       socket.emit('ice-candidate', userId, e.candidate);
+    } else {
+      console.log(`[ICE] ICE gathering complete for ${userId}`);
     }
   };
 
+  pc.oniceconnectionstatechange = () => {
+    console.log(`[ICE] Connection state for ${userId}:`, pc.iceConnectionState);
+  };
+
   pc.onconnectionstatechange = () => {
+    console.log(`[ICE] Peer connection state for ${userId}:`, pc.connectionState);
     if (pc.connectionState === 'disconnected') {
       removeVideoStream(userId);
       peers.delete(userId);
@@ -2517,11 +2525,13 @@ socket.on('answer', async (userId, answer) => {
 });
 
 socket.on('ice-candidate', async (userId, candidate) => {
-  // ICE candidate received - too verbose, disabled
+  // ICE candidate received
+  console.log(`[ICE] Received candidate from ${userId}:`, candidate.type, candidate.protocol);
   if (peers.has(userId)) {
     await peers.get(userId).addIceCandidate(new RTCIceCandidate(candidate));
+    console.log(`[ICE] Candidate added for ${userId}`);
   } else {
-    // No peer for ICE
+    console.warn(`[ICE] No peer for ICE candidate from ${userId}`);
   }
 });
 
