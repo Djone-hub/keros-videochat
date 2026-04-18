@@ -1876,6 +1876,7 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
       video.volume = 0.5;
       // IMPORTANT: Never mute remote videos - user controls via volume slider
       video.muted = false;
+      console.log(`[VIDEO] Video element created for ${id}, volume: ${video.volume}, muted: ${video.muted}`);
 
       // Apply selected audio output device
       if (selectedAudioOutput && typeof video.setSinkId === 'function') {
@@ -2200,7 +2201,11 @@ async function createPeerConnection(userId, forceScreen = false) {
             audioContainer.appendChild(audioEl);
           }
           audioEl.srcObject = stream;
-          console.log(`[AUDIO] Audio element created/updated for ${userId}`);
+          console.log(`[AUDIO] Audio element created/updated for ${userId}, isSoundOn: ${isSoundOn}`);
+
+          // Force volume to 0.5 to ensure audio can be heard
+          audioEl.volume = 0.5;
+          audioEl.muted = false;
 
           // Try to play audio
           audioEl.play().then(() => {
