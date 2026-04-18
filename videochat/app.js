@@ -1826,8 +1826,13 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     if (isLocal && !isScreenShare) video.style.transform = 'scaleX(-1)';
 
     // Hide video element if no video track (show avatar instead)
+    // Use visibility: hidden instead of display: none to ensure audio can still play
     if (!hasVideoTrack) {
-      video.style.display = 'none';
+      video.style.visibility = 'hidden';
+      video.style.position = 'absolute';
+      video.style.width = '1px';
+      video.style.height = '1px';
+      video.style.opacity = '0';
     }
 
     // Ensure video plays
@@ -1912,9 +1917,17 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
 
       // Show/hide video element based on video track
       if (hasVideoTrack) {
-        video.style.display = 'block';
+        video.style.visibility = 'visible';
+        video.style.position = '';
+        video.style.width = '';
+        video.style.height = '';
+        video.style.opacity = '1';
       } else {
-        video.style.display = 'none';
+        video.style.visibility = 'hidden';
+        video.style.position = 'absolute';
+        video.style.width = '1px';
+        video.style.height = '1px';
+        video.style.opacity = '0';
       }
     }
 
@@ -2185,11 +2198,19 @@ async function createPeerConnection(userId, forceScreen = false) {
           audioEl.play().then(() => {
             console.log(`[AUDIO] Audio playing for ${userId}`);
           }).catch(err => {
-            console.error(`[AUDIO] Error playing audio for ${userId}:`, err);
+            console.error(`[AUDIO] Error playing audio for ${userId}:`, err.name, err.message);
             // Try with user interaction
             audioEl.addEventListener('click', () => {
-              audioEl.play();
+              audioEl.play().then(() => {
+                console.log(`[AUDIO] Audio playing after click for ${userId}`);
+              }).catch(clickErr => {
+                console.error(`[AUDIO] Error playing audio after click for ${userId}:`, clickErr);
+              });
             });
+            // Also try on any user interaction with the container
+            audioContainer.addEventListener('click', () => {
+              audioEl.play().catch(e => console.error(`[AUDIO] Error playing audio on container click:`, e));
+            }, { once: true });
           });
         }
       }
@@ -2294,6 +2315,13 @@ async function createPeerConnection(userId, forceScreen = false) {
 
   pc.oniceconnectionstatechange = () => {
     console.log(`[ICE] Connection state for ${userId}:`, pc.iceConnectionState);
+    if (pc.iceConnectionState === 'connected') {
+      console.log(`[ICE] ICE connection established for ${userId} - audio should now work`);
+    } else if (pc.iceConnectionState === 'failed') {
+      console.error(`[ICE] ICE connection failed for ${userId} - audio will not work`);
+    } else if (pc.iceConnectionState === 'disconnected') {
+      console.warn(`[ICE] ICE connection disconnected for ${userId}`);
+    }
   };
 
   pc.onconnectionstatechange = () => {
@@ -2616,16 +2644,10 @@ socket.on('answer', async (userId, answer) => {
     const pc = peers.get(userId);
     console.log('[ANSWER] Peer connection state before setRemoteDescription:', pc.signalingState);
 
-    // If peer connection is already in stable state, recreate it
+    // If peer connection is already in stable state, it means the offer/answer exchange already completed
+    // This is likely a duplicate answer - just log and ignore it
     if (pc.signalingState === 'stable') {
-      console.log('[ANSWER] Peer connection is in stable state, recreating');
-      pc.close();
-      peers.delete(userId);
-      removeVideoStream(userId);
-      console.log('[ANSWER] Old peer connection removed, creating new one');
-      const newPc = await createPeerConnection(userId);
-      await newPc.setRemoteDescription(answer);
-      console.log('[ANSWER] Remote description set for new peer connection:', userId);
+      console.log('[ANSWER] Peer connection is already in stable state, ignoring duplicate answer');
       return;
     }
 
@@ -3027,6 +3049,12 @@ function toggleSound() {
   document.querySelectorAll('.video-container:not(.local) video').forEach(video => {
     video.volume = isSoundOn ? 0.5 : 0;
     video.muted = false; // Never mute, just use volume
+  });
+  
+  // Also control audio elements (for audio-only streams)
+  document.querySelectorAll('.video-container:not(.local) audio').forEach(audio => {
+    audio.volume = isSoundOn ? 0.5 : 0;
+    audio.muted = false; // Never mute, just use volume
   });
   
   // Notify other users about sound state
