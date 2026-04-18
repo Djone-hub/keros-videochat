@@ -2174,10 +2174,23 @@ async function createPeerConnection(userId, forceScreen = false) {
             audioEl.autoplay = true;
             audioEl.muted = false;
             audioEl.id = `audio-${userId}`;
+            audioEl.controls = false;
+            audioEl.style.display = 'none';
             audioContainer.appendChild(audioEl);
           }
           audioEl.srcObject = stream;
           console.log(`[AUDIO] Audio element created/updated for ${userId}`);
+
+          // Try to play audio
+          audioEl.play().then(() => {
+            console.log(`[AUDIO] Audio playing for ${userId}`);
+          }).catch(err => {
+            console.error(`[AUDIO] Error playing audio for ${userId}:`, err);
+            // Try with user interaction
+            audioEl.addEventListener('click', () => {
+              audioEl.play();
+            });
+          });
         }
       }
     } else {
@@ -2234,6 +2247,29 @@ async function createPeerConnection(userId, forceScreen = false) {
       // Add video stream with unique ID
       addVideoStream(videoId, stream, userName, false, isScreenShare);
       updateActiveUsers();
+
+      // Try to play video/audio elements
+      setTimeout(() => {
+        const container = document.getElementById(videoId);
+        if (container) {
+          const video = container.querySelector('video');
+          if (video) {
+            video.play().then(() => {
+              console.log(`[AUDIO] Video element playing for ${userId}`);
+            }).catch(err => {
+              console.error(`[AUDIO] Error playing video for ${userId}:`, err);
+            });
+          }
+          const audio = container.querySelector('audio');
+          if (audio) {
+            audio.play().then(() => {
+              console.log(`[AUDIO] Audio element playing for ${userId}`);
+            }).catch(err => {
+              console.error(`[AUDIO] Error playing audio for ${userId}:`, err);
+            });
+          }
+        }
+      }, 100);
     });
   };
 
