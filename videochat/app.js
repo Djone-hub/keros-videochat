@@ -1478,7 +1478,6 @@ async function joinRoomById(roomId) {
           showAlertModal('Камера не найдена или недоступна. Вход только с микрофоном.', 'info');
         } catch (audioOnlyErr) {
           console.error('[DEVICES] Audio-only also failed:', audioOnlyErr);
-          showAlertModal('Не удалось получить доступ к микрофону. Проверьте разрешения.', 'error');
           return;
         }
       }
@@ -2895,6 +2894,15 @@ async function toggleScreen() {
         },
         audio: false
       };
+
+      // Disable camera before starting screen share to prevent OBS Virtual Camera conflict
+      if (localStream && localStream.getVideoTracks().length > 0) {
+        console.log('[SCREEN] Disabling camera before screen share to prevent OBS conflict');
+        localStream.getVideoTracks().forEach(track => {
+          track.stop();
+          localStream.removeTrack(track);
+        });
+      }
 
       screenStream = await navigator.mediaDevices.getDisplayMedia(constraints);
       sounds.screenOn();
