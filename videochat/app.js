@@ -2569,6 +2569,20 @@ socket.on('answer', async (userId, answer) => {
   if (peers.has(userId)) {
     const pc = peers.get(userId);
     console.log('[ANSWER] Peer connection state before setRemoteDescription:', pc.signalingState);
+
+    // If peer connection is already in stable state, recreate it
+    if (pc.signalingState === 'stable') {
+      console.log('[ANSWER] Peer connection is in stable state, recreating');
+      pc.close();
+      peers.delete(userId);
+      removeVideoStream(userId);
+      console.log('[ANSWER] Old peer connection removed, creating new one');
+      const newPc = await createPeerConnection(userId);
+      await newPc.setRemoteDescription(answer);
+      console.log('[ANSWER] Remote description set for new peer connection:', userId);
+      return;
+    }
+
     try {
       await pc.setRemoteDescription(answer);
       console.log('[ANSWER] Remote description set for:', userId);
@@ -2577,6 +2591,14 @@ socket.on('answer', async (userId, answer) => {
       console.error('[ANSWER] Peer connection state:', pc.signalingState);
       console.error('[ANSWER] Local description:', pc.localDescription ? 'set' : 'not set');
       console.error('[ANSWER] Remote description:', pc.remoteDescription ? 'set' : 'not set');
+      // Recreate peer connection on error
+      console.log('[ANSWER] Recreating peer connection due to error');
+      pc.close();
+      peers.delete(userId);
+      removeVideoStream(userId);
+      const newPc = await createPeerConnection(userId);
+      await newPc.setRemoteDescription(answer);
+      console.log('[ANSWER] Remote description set for new peer connection:', userId);
     }
   } else {
     console.warn('[ANSWER] No peer for answer from:', userId);

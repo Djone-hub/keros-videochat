@@ -1455,6 +1455,7 @@ io.on('connection', (socket) => {
 
   socket.on('ice-candidate', (targetId, candidate) => {
     console.log(`[SERVER] ICE candidate from ${socket.id} to ${targetId}`);
+    console.log(`[SERVER] Candidate:`, JSON.stringify(candidate));
     io.to(targetId).emit('ice-candidate', socket.id, candidate);
   });
 
