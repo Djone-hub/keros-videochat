@@ -529,17 +529,28 @@ function updateVolume(type, value) {
 function updateAdminRemoteVolumeControls() {
   const container = document.getElementById('adminRemoteVolumeControls');
 
+  console.log('[ADMIN VOL] Updating remote volume controls');
+  console.log('[ADMIN VOL] window.peers defined:', typeof window.peers !== 'undefined');
+  console.log('[ADMIN VOL] window.peers size:', window.peers ? window.peers.size : 'N/A');
+  console.log('[ADMIN VOL] window.activeUsers defined:', typeof window.activeUsers !== 'undefined');
+  console.log('[ADMIN VOL] window.activeUsers size:', window.activeUsers ? window.activeUsers.size : 'N/A');
+
   // Check if we're in a room and have peers (need to access from app.js scope)
   if (typeof window.peers !== 'undefined' && window.peers.size > 0) {
+    console.log('[ADMIN VOL] Found peers, creating controls');
     container.innerHTML = '';
     window.peers.forEach((pc, id) => {
       const user = window.activeUsers ? window.activeUsers.get(id) : null;
       const name = user ? user.name : 'Участник';
 
+      console.log('[ADMIN VOL] Creating control for user:', id, name);
+
       // Get current volume from video element
       const videoContainer = document.getElementById(`video-${id}`);
       const video = videoContainer ? videoContainer.querySelector('video') : null;
       const currentVolume = video ? Math.round(video.volume * 100) : 50;
+
+      console.log('[ADMIN VOL] Video container found:', !!videoContainer, 'video found:', !!video, 'volume:', currentVolume);
 
       const div = document.createElement('div');
       div.style.cssText = 'display: flex; align-items: center; margin-bottom: 12px;';
@@ -553,7 +564,8 @@ function updateAdminRemoteVolumeControls() {
       container.appendChild(div);
     });
   } else {
-    container.innerHTML = '<p style="color: #72767d; font-size: 12px;">Нет других участников в комнате</p>';
+    console.log('[ADMIN VOL] No peers found, showing "no participants" message');
+    container.innerHTML = '<p style="color: #72767d; font-size: 12px;">Нет других участников</p>';
   }
 }
 
