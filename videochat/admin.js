@@ -463,23 +463,23 @@ function updateVolume(type, value) {
   if (greenEl && yellowEl && redEl) {
     const percentage = parseInt(value);
 
-    // Green: 0-33% (excellent)
-    if (percentage <= 33) {
-      greenEl.style.height = (percentage / 33 * 100) + '%';
+    // Green: 0-66 (0-33% of 200) - excellent
+    if (percentage <= 66) {
+      greenEl.style.height = (percentage / 66 * 100) + '%';
       yellowEl.style.height = '0%';
       redEl.style.height = '0%';
     }
-    // Yellow: 34-66% (level)
-    else if (percentage <= 66) {
+    // Yellow: 67-133 (33-66% of 200) - level
+    else if (percentage <= 133) {
       greenEl.style.height = '100%';
-      yellowEl.style.height = ((percentage - 33) / 33 * 100) + '%';
+      yellowEl.style.height = ((percentage - 66) / 67 * 100) + '%';
       redEl.style.height = '0%';
     }
-    // Red: 67-100% (peak)
+    // Red: 134-200 (67-100% of 200) - peak/amplification
     else {
       greenEl.style.height = '100%';
       yellowEl.style.height = '100%';
-      redEl.style.height = ((percentage - 66) / 34 * 100) + '%';
+      redEl.style.height = ((percentage - 133) / 67 * 100) + '%';
     }
   }
 
