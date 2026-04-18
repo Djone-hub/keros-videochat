@@ -933,16 +933,48 @@ async function loadServerRooms() {
     isLoadingRooms = false; // Reset on error
   }
 
-  // Deduplicate rooms by name (keep first occurrence, prefer active rooms)
+  // Deduplicate rooms by name (keep oldest room, prefer active rooms)
   const roomsMap = new Map();
+  const roomsToDelete = [];
+
   serverRooms.forEach(room => {
-    if (!roomsMap.has(room.name) || (room.active && !roomsMap.get(room.name).active)) {
+    if (!roomsMap.has(room.name)) {
       roomsMap.set(room.name, room);
+    } else {
+      const existing = roomsMap.get(room.name);
+      // Keep the oldest room or the active one
+      if ((room.active && !existing.active) || (room.created || 0) < (existing.created || 0)) {
+        // Mark existing for deletion
+        roomsToDelete.push(existing);
+        roomsMap.set(room.name, room);
+      } else {
+        // Mark current for deletion
+        roomsToDelete.push(room);
+      }
     }
   });
+
+  // Automatically delete duplicate rooms from Supabase
+  if (roomsToDelete.length > 0) {
+    console.log('[ROOMS] Auto-deleting duplicate rooms:', roomsToDelete.map(r => ({id: r.id, name: r.name})));
+    roomsToDelete.forEach(async (room) => {
+      try {
+        await fetch(`/api/rooms/${room.id}`, {
+          method: 'DELETE',
+          headers: {
+            'X-Username': currentUser?.username || 'system'
+          }
+        });
+        console.log('[ROOMS] Auto-deleted duplicate room:', room.id);
+      } catch (err) {
+        console.error('[ROOMS] Error auto-deleting room:', err);
+      }
+    });
+  }
+
   allRooms = Array.from(roomsMap.values());
 
-  console.log(`[ROOMS] Deduplicated from ${serverRooms.length} to ${allRooms.length} rooms`);
+  console.log(`[ROOMS] Deduplicated from ${serverRooms.length} to ${allRooms.length} rooms (auto-deleted ${roomsToDelete.length} duplicates)`);
 
   // Sort: rooms with active users first, then by creation date
   allRooms.sort((a, b) => {

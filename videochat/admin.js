@@ -257,20 +257,52 @@ function forceRefreshRooms() {
 
 function clearGhostRooms() {
   if (!window.allAdminRooms) return;
-  const ghostRooms = window.allAdminRooms.filter(r => r.id === r.name && /^[A-Z0-9]{8}$/.test(r.id));
+
+  // Find ghost rooms: rooms where id looks like random ID (8 uppercase chars/numbers) OR duplicate empty rooms with same name
+  const isGhostRoom = (room) => {
+    // Type 1: ID equals name and looks like random ID (8 uppercase chars/numbers)
+    if (room.id === room.name && /^[A-Z0-9]{8}$/.test(room.id)) {
+      return true;
+    }
+    // Type 2: Empty room with duplicate name
+    if (room.userCount === 0) {
+      const sameNameRooms = window.allAdminRooms.filter(r => r.name === room.name);
+      if (sameNameRooms.length > 1) {
+        // Keep the one with oldest created date, mark others as ghosts
+        const oldest = sameNameRooms.sort((a, b) => (a.created || 0) - (b.created || 0))[0];
+        if (room.id !== oldest.id) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  const ghostRooms = window.allAdminRooms.filter(isGhostRoom);
+
   if (ghostRooms.length === 0) {
     showAlertModal('Призрачные комнаты не найдены.', 'info');
     return;
   }
+
+  console.log('[GHOST] Found ghost rooms:', ghostRooms.map(r => ({id: r.id, name: r.name, users: r.userCount})));
+
   showConfirmModal(`Найдено ${ghostRooms.length} призрачных комнат. Удалить их?`, async () => {
     try {
       for (const room of ghostRooms) {
+        console.log('[GHOST] Deleting ghost room:', room.id, room.name);
         const response = await fetch(`/api/rooms/${room.id}`, {
           method: 'DELETE',
           headers: {
             'X-Username': currentUser?.username || 'unknown'
           }
         });
+        if (!response.ok) {
+          const error = await response.json();
+          console.error('[GHOST] Error deleting room:', error);
+        } else {
+          console.log('[GHOST] Successfully deleted:', room.id);
+        }
       }
       showAlertModal('Призрачные комнаты удалены!', 'success');
       setTimeout(renderAdminPanel, 500);
