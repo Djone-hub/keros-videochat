@@ -2454,11 +2454,11 @@ socket.on('room-error', (error) => {
   }
 });
 
-socket.on('user-joined', async (user) => {
+socket.on('user-joined', (user) => {
   console.log('[USER-JOINED] Received user-joined:', user.id, user.name);
 
-  // Play sound when someone joins
-  await sounds.userJoin();
+  // Play sound when someone joins (non-blocking)
+  sounds.userJoin();
 
   // Skip if already connected with this exact socket.id
   if (activeUsers.has(user.id) || peers.has(user.id)) {
@@ -2535,9 +2535,9 @@ socket.on('user-deleted', (username) => {
   }
 });
 
-socket.on('user-left', async (userId) => {
-  // Play sound when someone leaves
-  await sounds.userLeave();
+socket.on('user-left', (userId) => {
+  // Play sound when someone leaves (non-blocking)
+  sounds.userLeave();
 
   const user = activeUsers.get(userId);
   removeVideoStream(userId);
