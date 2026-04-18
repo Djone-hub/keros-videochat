@@ -606,40 +606,48 @@ function showPromptModal(message, defaultValue = '', onConfirm) {
 // ========== SOUND SYSTEM ==========
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-function playSoftTone(frequency, duration, type = 'sine', volume = 0.1) {
-  // Resume audio context if suspended (browser autoplay policy)
-  if (audioContext.state === 'suspended') {
-    audioContext.resume();
+async function playSoftTone(frequency, duration, type = 'sine', volume = 0.1) {
+  try {
+    // Resume audio context if suspended (browser autoplay policy)
+    if (audioContext.state === 'suspended') {
+      console.log('[SOUND] Resuming audio context...');
+      await audioContext.resume();
+      console.log('[SOUND] Audio context resumed');
+    }
+
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+
+    osc.connect(gain);
+    gain.connect(audioContext.destination);
+
+    osc.frequency.value = frequency;
+    osc.type = type;
+
+    gain.gain.setValueAtTime(0, audioContext.currentTime);
+    gain.gain.linearRampToValueAtTime(volume, audioContext.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+
+    osc.start(audioContext.currentTime);
+    osc.stop(audioContext.currentTime + duration);
+
+    console.log('[SOUND] Playing tone:', frequency, 'Hz', duration, 's');
+  } catch (err) {
+    console.error('[SOUND] Error playing tone:', err);
   }
-
-  const osc = audioContext.createOscillator();
-  const gain = audioContext.createGain();
-
-  osc.connect(gain);
-  gain.connect(audioContext.destination);
-
-  osc.frequency.value = frequency;
-  osc.type = type;
-
-  gain.gain.setValueAtTime(0, audioContext.currentTime);
-  gain.gain.linearRampToValueAtTime(volume, audioContext.currentTime + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
-
-  osc.start(audioContext.currentTime);
-  osc.stop(audioContext.currentTime + duration);
 }
 
 const sounds = {
-  micOn: () => playSoftTone(600, 0.15, 'sine', 0.1),
-  micOff: () => playSoftTone(350, 0.15, 'sine', 0.1),
-  camOn: () => playSoftTone(500, 0.15, 'triangle', 0.1),
-  camOff: () => playSoftTone(300, 0.15, 'triangle', 0.1),
-  screenOn: () => playSoftTone(700, 0.2, 'sine', 0.15),
-  screenOff: () => playSoftTone(400, 0.2, 'sine', 0.15),
-  soundOn: () => playSoftTone(450, 0.15, 'sine', 0.1),
-  soundOff: () => playSoftTone(280, 0.15, 'sine', 0.1),
-  userJoin: () => playSoftTone(550, 0.3, 'sine', 0.1),
-  userLeave: () => playSoftTone(380, 0.3, 'sine', 0.1)
+  micOn: async () => await playSoftTone(600, 0.15, 'sine', 0.1),
+  micOff: async () => await playSoftTone(350, 0.15, 'sine', 0.1),
+  camOn: async () => await playSoftTone(500, 0.15, 'triangle', 0.1),
+  camOff: async () => await playSoftTone(300, 0.15, 'triangle', 0.1),
+  screenOn: async () => await playSoftTone(700, 0.2, 'sine', 0.15),
+  screenOff: async () => await playSoftTone(400, 0.2, 'sine', 0.15),
+  soundOn: async () => await playSoftTone(450, 0.15, 'sine', 0.1),
+  soundOff: async () => await playSoftTone(280, 0.15, 'sine', 0.1),
+  userJoin: async () => await playSoftTone(550, 0.3, 'sine', 0.1),
+  userLeave: async () => await playSoftTone(380, 0.3, 'sine', 0.1)
 };
 
 // ========== SCREEN SHARING ==========
@@ -1546,7 +1554,7 @@ async function joinRoomById(roomId) {
   console.log('[JOIN] join-room event emitted');
 
   // Play join sound for local user
-  sounds.userJoin();
+  await sounds.userJoin();
   console.log('[JOIN] Play sound called');
 
   // Show room UI
@@ -1707,9 +1715,9 @@ function resetRoomStateAndUI() {
   document.getElementById('screenBtn').classList.remove('active');
 }
 
-function leaveRoom() {
+async function leaveRoom() {
   // Play sound for local user leaving room
-  sounds.userLeave();
+  await sounds.userLeave();
 
   // Close any open screen share modals
   closeAllScreenModals();
@@ -2610,16 +2618,8 @@ socket.on('offer', async (userId, offer) => {
     } catch (err) {
       console.error('[OFFER] Error in renegotiation:', err);
       console.error('[OFFER] Peer connection state:', existingPc.signalingState);
-      // If error, recreate peer connection
-      console.log('[OFFER] Recreating peer connection due to error');
-      existingPc.close();
-      peers.delete(userId);
-      removeVideoStream(userId);
-      const pc = await createPeerConnection(userId);
-      await pc.setRemoteDescription(offer);
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit('answer', userId, answer);
+      // Don't recreate peer connection - just log the error
+      // Recreating breaks ICE connection and causes audio to be muted
     }
   } else {
     // Create new peer connection (initial connection)
@@ -2643,11 +2643,12 @@ socket.on('answer', async (userId, answer) => {
   if (peers.has(userId)) {
     const pc = peers.get(userId);
     console.log('[ANSWER] Peer connection state before setRemoteDescription:', pc.signalingState);
+    console.log('[ANSWER] Has remote description:', !!pc.remoteDescription);
 
-    // If peer connection is already in stable state, it means the offer/answer exchange already completed
-    // This is likely a duplicate answer - just log and ignore it
-    if (pc.signalingState === 'stable') {
-      console.log('[ANSWER] Peer connection is already in stable state, ignoring duplicate answer');
+    // If peer connection is already in stable state AND has remote description, this is a duplicate answer
+    // Just log and ignore it
+    if (pc.signalingState === 'stable' && pc.remoteDescription) {
+      console.log('[ANSWER] Peer connection is already in stable state with remote description, ignoring duplicate answer');
       return;
     }
 
@@ -2659,14 +2660,8 @@ socket.on('answer', async (userId, answer) => {
       console.error('[ANSWER] Peer connection state:', pc.signalingState);
       console.error('[ANSWER] Local description:', pc.localDescription ? 'set' : 'not set');
       console.error('[ANSWER] Remote description:', pc.remoteDescription ? 'set' : 'not set');
-      // Recreate peer connection on error
-      console.log('[ANSWER] Recreating peer connection due to error');
-      pc.close();
-      peers.delete(userId);
-      removeVideoStream(userId);
-      const newPc = await createPeerConnection(userId);
-      await newPc.setRemoteDescription(answer);
-      console.log('[ANSWER] Remote description set for new peer connection:', userId);
+      // Don't recreate peer connection - just log the error
+      // Recreating breaks ICE connection and causes audio to be muted
     }
   } else {
     console.warn('[ANSWER] No peer for answer from:', userId);
@@ -2926,7 +2921,7 @@ socket.on('refresh-screen-offer', async ({ requesterId }) => {
 
 // ========== CONTROLS ==========
 
-function toggleMic() {
+async function toggleMic() {
   if (localStream) {
     const audioTrack = localStream.getAudioTracks()[0];
     if (audioTrack) {
@@ -2935,9 +2930,9 @@ function toggleMic() {
 
       // Play sound
       if (isMicOn) {
-        sounds.micOn();
+        await sounds.micOn();
       } else {
-        sounds.micOff();
+        await sounds.micOff();
       }
 
       const btn = document.getElementById('micBtn');
@@ -2969,9 +2964,9 @@ async function toggleCam() {
 
       // Play sound
       if (isCamOn) {
-        sounds.camOn();
+        await sounds.camOn();
       } else {
-        sounds.camOff();
+        await sounds.camOff();
       }
 
       const btn = document.getElementById('camBtn');
@@ -3004,7 +2999,7 @@ async function toggleCam() {
           // Update local video display
           addVideoStream('local', localStream, currentUser.username, true, false);
 
-          sounds.camOn();
+          await sounds.camOn();
 
           const btn = document.getElementById('camBtn');
           btn.classList.remove('danger');
@@ -3020,14 +3015,14 @@ async function toggleCam() {
   }
 }
 
-function toggleSound() {
+async function toggleSound() {
   isSoundOn = !isSoundOn;
-  
+
   // Play sound effect
   if (isSoundOn) {
-    sounds.soundOn();
+    await sounds.soundOn();
   } else {
-    sounds.soundOff();
+    await sounds.soundOff();
   }
   
   // Update button UI
@@ -3068,7 +3063,7 @@ async function toggleScreen() {
 
   if (isScreenSharing) {
     // Stop screen sharing
-    sounds.screenOff();
+    await sounds.screenOff();
 
     if (screenStream) {
       // Remove onended handler before stopping to prevent double toggle
@@ -3211,7 +3206,7 @@ async function toggleScreen() {
 
       console.log('[SCREEN] Screen quality:', screenQuality, 'Constraints:', JSON.stringify(constraints));
       screenStream = await navigator.mediaDevices.getDisplayMedia(constraints);
-      sounds.screenOn();
+      await sounds.screenOn();
       
       const screenTrack = screenStream.getVideoTracks()[0];
       if (!screenTrack) {
