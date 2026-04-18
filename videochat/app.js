@@ -2071,12 +2071,8 @@ async function createPeerConnection(userId) {
     const screenTrack = screenStream.getVideoTracks()[0];
     if (screenTrack) {
       console.log(`[PEER] Screen track properties: label=${screenTrack.label}, enabled=${screenTrack.enabled}`);
-      // Use addTransceiver for screen track
-      pc.addTransceiver('video', {
-        streams: [screenStream],
-        direction: 'sendrecv'
-      });
-      console.log(`[PEER] Screen transceiver added to peer ${userId} (in addition to camera)`);
+      pc.addTrack(screenTrack, screenStream);
+      console.log(`[PEER] Screen track added to peer ${userId} (in addition to camera)`);
     }
   }
   console.log(`[PEER] Total tracks added to peer ${userId}`);
@@ -2784,20 +2780,19 @@ async function toggleScreen() {
 
     // Remove screen track from all peer connections (keep camera track)
     peers.forEach(async (pc, peerId) => {
-      const transceivers = pc.getTransceivers();
+      const senders = pc.getSenders();
       let removed = false;
-      transceivers.forEach(transceiver => {
-        if (transceiver.sender.track && transceiver.sender.track.kind === 'video') {
-          const track = transceiver.sender.track;
+      senders.forEach(sender => {
+        if (sender.track && sender.track.kind === 'video') {
+          const track = sender.track;
           // Check if this is a screen track by label
           if (track.label && (track.label.toLowerCase().includes('screen') ||
               track.label.toLowerCase().includes('display') ||
               track.label.toLowerCase().includes('window'))) {
-            console.log('[SCREEN] Removing screen transceiver from peer');
-            transceiver.sender.replaceTrack(null).catch(err => {
+            console.log('[SCREEN] Removing screen track from peer');
+            sender.replaceTrack(null).catch(err => {
               console.error('[SCREEN] Error removing screen track:', err);
             });
-            transceiver.stop();
             removed = true;
           }
         }
@@ -2913,12 +2908,9 @@ async function toggleScreen() {
       let addedCount = 0;
       peers.forEach(async (pc, peerId) => {
         try {
-          // Use addTransceiver for renegotiation (better than addTrack)
-          const transceiver = pc.addTransceiver('video', {
-            streams: [screenStream],
-            direction: 'sendrecv'
-          });
-          console.log(`[SCREEN] Screen transceiver added for peer ${peerId}`);
+          // Use addTrack for renegotiation (addTransceiver doesn't work for existing connections)
+          pc.addTrack(screenTrack, screenStream);
+          console.log(`[SCREEN] Screen track added successfully for peer ${peerId}`);
           addedCount++;
 
           // Renegotiate to send the new track to remote peer
