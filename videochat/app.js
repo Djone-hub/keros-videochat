@@ -2576,23 +2576,25 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
   if (isScreenSharing && screenStream) {
     console.log('[SCREEN] We are screen sharing, renegotiating with:', requesterId);
     
-    // Recreate peer connection for requester with screen track
+    // Close and remove old peer connection
     if (peers.has(requesterId)) {
-      console.log(`[SCREEN] Recreating peer connection for requester: ${requesterId}`);
+      console.log(`[SCREEN] Closing old peer connection for requester: ${requesterId}`);
       const pc = peers.get(requesterId);
       pc.close();
       peers.delete(requesterId);
       removeVideoStream(requesterId);
     }
     
+    // Create new peer connection with screen track
     try {
+      console.log(`[SCREEN] Creating new peer connection with screen track for ${requesterId}`);
       const newPc = await createPeerConnection(requesterId);
       const offer = await newPc.createOffer();
       await newPc.setLocalDescription(offer);
       socket.emit('offer', requesterId, offer);
-      console.log(`[SCREEN] Peer connection recreated with screen track for ${requesterId}`);
+      console.log(`[SCREEN] Peer connection created with screen track for ${requesterId}`);
     } catch (e) {
-      console.error('[SCREEN] Error recreating peer connection:', e);
+      console.error('[SCREEN] Error creating peer connection:', e);
     }
   } else {
     console.log('[SCREEN] Not screen sharing, ignoring renegotiation request');
