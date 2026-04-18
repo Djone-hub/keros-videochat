@@ -1534,10 +1534,12 @@ async function joinRoomById(roomId) {
   console.log('[JOIN] lobbyScreen found:', !!lobbyScreen, 'roomScreen found:', !!roomScreen);
   if (lobbyScreen) {
     lobbyScreen.classList.remove('active');
+    lobbyScreen.style.display = 'none';
     console.log('[JOIN] lobbyScreen classList after remove:', lobbyScreen.className);
   }
   if (roomScreen) {
     roomScreen.classList.add('active');
+    roomScreen.style.display = 'flex';
     console.log('[JOIN] roomScreen classList after add:', roomScreen.className);
     console.log('[JOIN] roomScreen display:', roomScreen.style.display);
   }

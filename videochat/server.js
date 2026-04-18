@@ -1174,10 +1174,10 @@ io.on('connection', (socket) => {
 
   socket.on('join-room', (data) => {
     console.log('[JOIN-ROOM] Received data:', data);
-    
+
     // Support both old format (separate params) and new format (object)
-    let roomId, userName, userAvatar, roomName, roomAvatar, isScreenSharing;
-    
+    let roomId, userName, userAvatar, roomName, roomAvatar, isScreenSharing, callback;
+
     if (typeof data === 'object' && data !== null) {
       // New format: object
       roomId = data.roomId;
@@ -1377,9 +1377,11 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('user-joined', { id: socket.id, name: userName, avatar: userAvatar });
 
     console.log(`${userName} joined room ${roomId} (${finalRoomName})`);
-    
-    // Send callback for reconnect support
-    if (callback) callback({ success: true });
+
+    // Send callback for reconnect support (only for old format)
+    if (typeof callback === 'function') {
+      callback({ success: true });
+    }
   });
   
   socket.on('get-available-rooms', (callback) => {
