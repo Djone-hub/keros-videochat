@@ -2398,27 +2398,46 @@ socket.on('channels-updated', () => {
 socket.on('offer', async (userId, offer) => {
   // Offer received
   console.log('[OFFER] Received offer from:', userId, 'type:', offer.type);
-  let pc;
+  
+  // Check if this is a renegotiation (peer connection exists)
   if (peers.has(userId)) {
-    // Use existing peer connection (renegotiation)
-    pc = peers.get(userId);
-    console.log('[OFFER] Using existing peer connection for renegotiation');
-    console.log('[OFFER] Current senders:', pc.getSenders().map(s => ({ kind: s.track?.kind, label: s.track?.label })));
+    const existingPc = peers.get(userId);
+    const existingSenders = existingPc.getSenders();
+    console.log('[OFFER] Existing peer connection found, senders:', existingSenders.map(s => ({ kind: s.track?.kind, label: s.track?.label })));
+    
+    // Check if new offer has more senders (indicates renegotiation with screen track)
+    // Close old connection and create new one
+    console.log('[OFFER] Closing old peer connection for renegotiation');
+    existingPc.close();
+    peers.delete(userId);
+    removeVideoStream(userId);
+    
+    // Create new peer connection
+    const pc = await createPeerConnection(userId);
+    console.log('[OFFER] Created new peer connection for renegotiation');
+    await pc.setRemoteDescription(offer);
+    console.log('[OFFER] Remote description set');
+    const answer = await pc.createAnswer();
+    console.log('[OFFER] Answer created, type:', answer.type);
+    await pc.setLocalDescription(answer);
+    console.log('[OFFER] Local description set');
+    socket.emit('answer', userId, answer);
+    console.log('[OFFER] Answer sent to:', userId);
+    updateActiveUsers();
   } else {
     // Create new peer connection (initial connection)
-    pc = await createPeerConnection(userId);
+    const pc = await createPeerConnection(userId);
     console.log('[OFFER] Created new peer connection');
+    await pc.setRemoteDescription(offer);
+    console.log('[OFFER] Remote description set');
+    const answer = await pc.createAnswer();
+    console.log('[OFFER] Answer created, type:', answer.type);
+    await pc.setLocalDescription(answer);
+    console.log('[OFFER] Local description set');
+    socket.emit('answer', userId, answer);
+    console.log('[OFFER] Answer sent to:', userId);
+    updateActiveUsers();
   }
-  await pc.setRemoteDescription(offer);
-  console.log('[OFFER] Remote description set');
-  const answer = await pc.createAnswer();
-  console.log('[OFFER] Answer created, type:', answer.type);
-  await pc.setLocalDescription(answer);
-  console.log('[OFFER] Local description set');
-  // Answer sent
-  socket.emit('answer', userId, answer);
-  console.log('[OFFER] Answer sent to:', userId);
-  updateActiveUsers();
 });
 
 socket.on('answer', async (userId, answer) => {
