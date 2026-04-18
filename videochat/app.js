@@ -1359,7 +1359,7 @@ async function createRoom() {
     localStorage.setItem('keroschat_rooms', JSON.stringify(rooms));
 
     hideCreateRoomModal();
-    loadServerRooms();
+    await loadServerRooms(); // Wait for rooms to load before joining
     joinRoomById(roomId);
   } catch (err) {
     console.error('[CREATE ROOM] Error:', err);
@@ -1544,8 +1544,10 @@ async function joinRoomById(roomId) {
   // Load user settings
   loadUserSettings();
 
-  // Load chat history for this room
-  loadChatHistory(currentRoom);
+  // Load chat history for this room (if function exists)
+  if (typeof loadChatHistory === 'function') {
+    loadChatHistory(currentRoom);
+  }
 
   // Restore screen sharing if it was active before join
   if (wasScreenSharing) {
