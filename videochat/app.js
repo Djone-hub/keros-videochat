@@ -2908,11 +2908,13 @@ async function toggleScreen() {
 
       // Replace local container avatar with screen preview (instead of removing container)
       const localContainer = document.getElementById('video-local');
+      console.log('[SCREEN] Local container found:', !!localContainer);
       if (localContainer) {
         // Remove avatar placeholder
         const avatarPlaceholder = localContainer.querySelector('.avatar-placeholder');
         if (avatarPlaceholder) {
           avatarPlaceholder.remove();
+          console.log('[SCREEN] Avatar placeholder removed');
         }
 
         // Get or create video element
@@ -2928,6 +2930,8 @@ async function toggleScreen() {
           localVideo.style.transform = 'scaleX(-1)';
           localContainer.appendChild(localVideo);
           console.log('[SCREEN] Created new video element in local container');
+        } else {
+          console.log('[SCREEN] Using existing video element');
         }
 
         // Replace video with screen stream
@@ -2936,6 +2940,8 @@ async function toggleScreen() {
         localVideo.style.transform = 'none';
         // Limit to 5fps to reduce CPU usage
         localVideo.playbackRate = 0.1;
+
+        console.log('[SCREEN] Video srcObject set, screenStream tracks:', screenStream ? screenStream.getTracks().length : 0);
 
         // Add screen share indicator
         const screenIndicator = document.createElement('div');
@@ -2947,6 +2953,8 @@ async function toggleScreen() {
         localContainer.classList.add('screen-share');
 
         console.log('[SCREEN] Local container updated with screen preview');
+      } else {
+        console.error('[SCREEN] Local container not found!');
       }
 
       isScreenSharing = true;
