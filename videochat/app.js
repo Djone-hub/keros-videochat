@@ -52,7 +52,39 @@ socket.on('disconnect', () => {
   console.log('[DISCONNECT] Disconnected from server');
   console.log('[DISCONNECT] Current room:', currentRoom);
   console.log('[DISCONNECT] Current user:', currentUser?.username);
+  console.log('[DISCONNECT] peers.size before disconnect:', peers.size);
   socketConnected = false;
+  // DO NOT clear peers here - let them reconnect automatically
+  // peers will be cleaned up naturally when they fail
+});
+
+// Handle reconnect - rejoin room and recreate peer connections
+socket.on('connect', () => {
+  console.log('[CONNECT] Connected to server');
+  socketConnected = true;
+  
+  // If we were in a room, rejoin and recreate connections
+  if (currentRoom && currentUser) {
+    console.log('[CONNECT] Was in room', currentRoom, '- rejoining and recreating peer connections');
+    
+    // Rejoin the room
+    socket.emit('join-room', {
+      roomId: currentRoom,
+      userId: socket.id,
+      name: currentUser.username
+    }, (response) => {
+      console.log('[CONNECT] Rejoin response:', response);
+      if (response && response.success) {
+        // Clear old peers and recreate connections with all users
+        const oldPeers = Array.from(peers.keys());
+        peers.forEach(pc => pc.close());
+        peers.clear();
+        activeUsers.clear();
+        
+        console.log('[CONNECT] Cleared old peers, will recreate when users update');
+      }
+    });
+  }
 });
 
 // Listen for user list updates
@@ -1692,8 +1724,13 @@ function showRoomUI() {
 }
 
 function resetRoomStateAndUI() {
+  console.log(`[RESET] resetRoomStateAndUI called. peers.size before clear: ${peers.size}`);
+  console.trace('[RESET] Stack trace of who called resetRoomStateAndUI');
   // Close peer connections
-  peers.forEach(pc => pc.close());
+  peers.forEach((pc, id) => {
+    console.log(`[RESET] Closing peer connection: ${id}`);
+    pc.close();
+  });
   peers.clear();
   activeUsers.clear();
   screenShareUsers.clear(); // Clear screen share tracking
@@ -2333,6 +2370,36 @@ async function createPeerConnection(userId, forceScreen = false) {
     console.log(`[ICE] Connection state for ${userId}:`, pc.iceConnectionState);
     if (pc.iceConnectionState === 'connected') {
       console.log(`[ICE] ICE connection established for ${userId} - audio should now work`);
+      
+      // Get stats to verify audio is being sent/received
+      setTimeout(async () => {
+        const stats = await pc.getStats();
+        let audioSenders = 0;
+        let audioReceivers = 0;
+        let audioBytesSent = 0;
+        let audioBytesReceived = 0;
+        
+        stats.forEach(report => {
+          if (report.type === 'outbound-rtp' && report.mediaType === 'audio') {
+            audioSenders++;
+            audioBytesSent = report.bytesSent || 0;
+            console.log(`[STATS] ${userId} Audio outbound - bytesSent: ${audioBytesSent}, packetsSent: ${report.packetsSent || 0}`);
+          }
+          if (report.type === 'inbound-rtp' && report.mediaType === 'audio') {
+            audioReceivers++;
+            audioBytesReceived = report.bytesReceived || 0;
+            console.log(`[STATS] ${userId} Audio inbound - bytesReceived: ${audioBytesReceived}, packetsReceived: ${report.packetsReceived || 0}, jitter: ${report.jitter || 0}`);
+          }
+        });
+        
+        if (audioSenders === 0) {
+          console.error(`[STATS] ${userId} NO AUDIO SENDER FOUND - local audio track not being sent!`);
+        }
+        if (audioReceivers === 0) {
+          console.warn(`[STATS] ${userId} NO AUDIO RECEIVER FOUND - remote audio track not being received`);
+        }
+      }, 2000);
+      
     } else if (pc.iceConnectionState === 'failed') {
       console.error(`[ICE] ICE connection failed for ${userId} - audio will not work`);
     } else if (pc.iceConnectionState === 'disconnected') {
