@@ -1510,42 +1510,58 @@ async function joinRoomById(roomId) {
   }
 
   // Emit join-room event
+  console.log('[JOIN] Emitting join-room event');
   socket.emit('join-room', {
     roomId: currentRoom,
     username: currentUser.username,
     avatar: userAvatar || localStorage.getItem(`keroschat_avatar_${currentUser.username}`),
     isScreenSharing: isScreenSharing
   });
+  console.log('[JOIN] join-room event emitted');
 
   // Play join sound for local user (if function exists)
   if (typeof playSound === 'function') {
     playSound('join');
   }
+  console.log('[JOIN] Play sound called');
 
   // Show room UI
+  console.log('[JOIN] Showing room UI');
   const lobbyScreen = document.getElementById('lobbyScreen');
   const roomScreen = document.getElementById('roomScreen');
   if (lobbyScreen) lobbyScreen.classList.remove('active');
   if (roomScreen) roomScreen.classList.add('active');
+  console.log('[JOIN] Room UI shown');
 
   // Add local video stream
   if (localStream.getVideoTracks().length > 0) {
+    console.log('[JOIN] Adding local video stream');
     addVideoStream(socket.id, localStream, currentUser.username, true);
+    console.log('[JOIN] Local video stream added');
   }
 
   // Update active users list
+  console.log('[JOIN] Updating active users');
   updateActiveUsers();
+  console.log('[JOIN] Active users updated');
 
   // Start speaking detection and mic level monitoring
+  console.log('[JOIN] Starting speaking detection');
   startSpeakingDetection();
+  console.log('[JOIN] Speaking detection started');
   startMicLevelMonitoring();
+  console.log('[JOIN] Mic level monitoring started');
 
   // Load user settings
+  console.log('[JOIN] Loading user settings');
   loadUserSettings();
+  console.log('[JOIN] User settings loaded');
 
   // Load chat history for this room (if function exists)
   if (typeof loadChatHistory === 'function') {
+    console.log('[JOIN] Loading chat history');
     loadChatHistory(currentRoom);
+    console.log('[JOIN] Chat history loaded');
   }
 
   // Restore screen sharing if it was active before join
@@ -1555,6 +1571,7 @@ async function joinRoomById(roomId) {
       toggleScreen();
     }, 1000);
   }
+  console.log('[JOIN] joinRoomById completed successfully');
   } catch (error) {
     console.error('[JOIN] Error in joinRoomById:', error);
     showAlertModal('Ошибка входа в комнату: ' + error.message, 'error');
