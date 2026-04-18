@@ -2374,6 +2374,19 @@ socket.on('user-joined', async (user) => {
   }
 
   console.log('[USER-JOINED] User added to activeUsers:', user.id, user.name);
+
+  // Create peer connection and send offer
+  if (!peers.has(user.id)) {
+    console.log('[USER-JOINED] Creating peer connection for new user:', user.id);
+    createPeerConnection(user.id).then(async (pc) => {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit('offer', user.id, offer);
+      console.log('[USER-JOINED] Offer sent to:', user.id);
+    }).catch(err => {
+      console.error('[USER-JOINED] Error creating peer connection:', err);
+    });
+  }
 });
 
 socket.on('user-deleted', (username) => {
