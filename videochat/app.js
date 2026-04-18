@@ -2089,10 +2089,16 @@ async function createPeerConnection(userId, forceScreen = false) {
   // Add all tracks from localStream (camera + audio)
   localStream.getTracks().forEach(track => {
     console.log(`[PEER] Adding track: ${track.kind}, label: ${track.label}, enabled: ${track.enabled}, muted: ${track.muted}`);
-    // Ensure audio track is not muted
-    if (track.kind === 'audio' && track.muted) {
-      console.warn(`[PEER] WARNING: Local audio track is muted! Attempting to unmute`);
-      track.enabled = true;
+    // Ensure audio track is not muted and enabled
+    if (track.kind === 'audio') {
+      if (track.muted) {
+        console.warn(`[PEER] WARNING: Local audio track is muted! Attempting to unmute`);
+        track.enabled = true;
+      }
+      if (!track.enabled) {
+        console.warn(`[PEER] WARNING: Local audio track is disabled! Enabling`);
+        track.enabled = true;
+      }
     }
     pc.addTrack(track, localStream);
   });
@@ -2145,6 +2151,24 @@ async function createPeerConnection(userId, forceScreen = false) {
         setTimeout(() => {
           console.log(`[AUDIO] After unmute attempt - muted: ${audioTrack.muted}, enabled: ${audioTrack.enabled}`);
         }, 100);
+      }
+
+      // If no video track, create audio element for audio-only stream
+      if (!videoTrack) {
+        console.log(`[AUDIO] No video track, creating audio element for ${userId}`);
+        const audioContainer = document.getElementById(`video-${userId}`);
+        if (audioContainer) {
+          let audioEl = audioContainer.querySelector('audio');
+          if (!audioEl) {
+            audioEl = document.createElement('audio');
+            audioEl.autoplay = true;
+            audioEl.muted = false;
+            audioEl.id = `audio-${userId}`;
+            audioContainer.appendChild(audioEl);
+          }
+          audioEl.srcObject = stream;
+          console.log(`[AUDIO] Audio element created/updated for ${userId}`);
+        }
       }
     } else {
       console.warn(`[AUDIO] No audio track received from ${userId}!`);
