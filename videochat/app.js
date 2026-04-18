@@ -2178,6 +2178,16 @@ async function createPeerConnection(userId, forceScreen = false) {
       const isScreenShare = isScreenByLabel || isScreenByResolution;
       console.log(`[TRACK] Screen detection for ${userId}: label=${isScreenByLabel}, resolution=${isScreenByResolution}, FINAL=${isScreenShare}`);
 
+      // Retry mechanism: if video track is 0x0 and muted, and this is expected to be screen share, request renegotiation
+      if (width === 0 && height === 0 && videoTrack && videoTrack.muted && (screenShareUsers.has(userId) || isScreenByLabel)) {
+        console.log(`[TRACK] Screen track received with 0x0 resolution, requesting renegotiation retry for ${userId}`);
+        setTimeout(() => {
+          console.log(`[TRACK] Sending request-screen-renegotiation retry for ${userId}`);
+          socket.emit('request-screen-renegotiation', userId);
+        }, 500);
+        // Still add the stream (will be updated on retry)
+      }
+
       // Use unique ID for screen share container (userId + '-screen')
       const videoId = isScreenShare ? `${userId}-screen` : userId;
 
