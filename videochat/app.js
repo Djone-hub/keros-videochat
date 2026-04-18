@@ -49,7 +49,9 @@ socket.on('connect', () => {
 });
 
 socket.on('disconnect', () => {
-  console.log('Disconnected from server');
+  console.log('[DISCONNECT] Disconnected from server');
+  console.log('[DISCONNECT] Current room:', currentRoom);
+  console.log('[DISCONNECT] Current user:', currentUser?.username);
   socketConnected = false;
 });
 
@@ -1529,8 +1531,16 @@ async function joinRoomById(roomId) {
   console.log('[JOIN] Showing room UI');
   const lobbyScreen = document.getElementById('lobbyScreen');
   const roomScreen = document.getElementById('roomScreen');
-  if (lobbyScreen) lobbyScreen.classList.remove('active');
-  if (roomScreen) roomScreen.classList.add('active');
+  console.log('[JOIN] lobbyScreen found:', !!lobbyScreen, 'roomScreen found:', !!roomScreen);
+  if (lobbyScreen) {
+    lobbyScreen.classList.remove('active');
+    console.log('[JOIN] lobbyScreen classList after remove:', lobbyScreen.className);
+  }
+  if (roomScreen) {
+    roomScreen.classList.add('active');
+    console.log('[JOIN] roomScreen classList after add:', roomScreen.className);
+    console.log('[JOIN] roomScreen display:', roomScreen.style.display);
+  }
   console.log('[JOIN] Room UI shown');
 
   // Add local video stream
