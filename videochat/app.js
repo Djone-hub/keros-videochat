@@ -2138,22 +2138,13 @@ async function createPeerConnection(userId, forceScreen = false) {
       console.log(`[AUDIO] Received audio from ${userId}: enabled=${audioTrack.enabled}, muted=${audioTrack.muted}, state=${audioTrack.readyState}`);
 
       // Try to unmute the track if it's muted
-      if (audioTrack.muted && audioTrack.enabled) {
-        console.log(`[AUDIO] Attempting to unmute audio track for ${userId}`);
+      if (audioTrack.muted) {
+        console.log(`[AUDIO] Audio track is muted for ${userId}, attempting to unmute`);
         audioTrack.enabled = true;
         // Wait a bit and check if it worked
         setTimeout(() => {
           console.log(`[AUDIO] After unmute attempt - muted: ${audioTrack.muted}, enabled: ${audioTrack.enabled}`);
         }, 100);
-      }
-
-      // Retry mechanism: if audio track is still muted, request renegotiation
-      if (audioTrack.muted) {
-        console.log(`[AUDIO] Audio track is muted for ${userId}, requesting renegotiation retry`);
-        setTimeout(() => {
-          console.log(`[AUDIO] Sending request-screen-renegotiation retry for ${userId} (audio fix)`);
-          socket.emit('request-screen-renegotiation', userId);
-        }, 500);
       }
     } else {
       console.warn(`[AUDIO] No audio track received from ${userId}!`);
@@ -2202,16 +2193,6 @@ async function createPeerConnection(userId, forceScreen = false) {
       // Check if this is a screen track
       const isScreenShare = isScreenByLabel || isScreenByResolution;
       console.log(`[TRACK] Screen detection for ${userId}: label=${isScreenByLabel}, resolution=${isScreenByResolution}, FINAL=${isScreenShare}`);
-
-      // Retry mechanism: if video track is 0x0 and muted, and this is expected to be screen share, request renegotiation
-      if (width === 0 && height === 0 && videoTrack && videoTrack.muted && (screenShareUsers.has(userId) || isScreenByLabel)) {
-        console.log(`[TRACK] Screen track received with 0x0 resolution, requesting renegotiation retry for ${userId}`);
-        setTimeout(() => {
-          console.log(`[TRACK] Sending request-screen-renegotiation retry for ${userId}`);
-          socket.emit('request-screen-renegotiation', userId);
-        }, 500);
-        // Still add the stream (will be updated on retry)
-      }
 
       // Use unique ID for screen share container (userId + '-screen')
       const videoId = isScreenShare ? `${userId}-screen` : userId;
