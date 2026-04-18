@@ -190,6 +190,27 @@ async function saveRoomsToSupabase() {
   }
 }
 
+async function deleteRoomFromSupabase(roomId) {
+  try {
+    console.log(`[ROOMS] Deleting room ${roomId} from Supabase`);
+    const { error } = await supabase
+      .from('videochat_rooms')
+      .delete()
+      .eq('id', roomId);
+
+    if (error) {
+      console.error(`[ROOMS] Error deleting room ${roomId} from Supabase:`, error);
+      return false;
+    } else {
+      console.log(`[ROOMS] Successfully deleted room ${roomId} from Supabase`);
+      return true;
+    }
+  } catch (err) {
+    console.error(`[ROOMS] Error deleting room ${roomId} from Supabase:`, err);
+    return false;
+  }
+}
+
 async function loadVIPChannelsFromSupabase() {
   try {
     const { data, error } = await supabase
@@ -879,7 +900,10 @@ app.delete('/api/rooms/:roomId', async (req, res) => {
   const roomId = req.params.roomId;
   const requester = req.headers['x-username'];
 
+  console.log(`[DELETE API] Request to delete room: ${roomId} by ${requester}`);
+
   if (!requester) {
+    console.log(`[DELETE API] Rejected: no username in headers`);
     return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
@@ -891,6 +915,7 @@ app.delete('/api/rooms/:roomId', async (req, res) => {
     .single();
 
   if (requesterError || !requesterData) {
+    console.log(`[DELETE API] Rejected: user not found in Supabase`);
     return res.status(403).json({ success: false, message: 'User not found' });
   }
 
@@ -898,19 +923,29 @@ app.delete('/api/rooms/:roomId', async (req, res) => {
   const creator = storedRoom?.creator;
   const isSuperAdmin = requesterData.role === 'superadmin';
 
+  console.log(`[DELETE API] Room details: stored=${!!storedRoom}, creator=${creator}, requesterRole=${requesterData.role}`);
+
   // Allow deletion if:
   // 1. User is the creator, OR
   // 2. No creator is set (orphaned room), OR
   // 3. User is superadmin
   if (creator === requester || !creator || isSuperAdmin) {
+    console.log(`[DELETE API] Deleting room ${roomId} from roomStore`);
     roomStore.delete(roomId);
     if (rooms.has(roomId)) {
+      console.log(`[DELETE API] Deleting room ${roomId} from active rooms`);
       rooms.delete(roomId);
     }
-    await saveRoomsToSupabase();
+    console.log(`[DELETE API] Explicitly deleting from Supabase`);
+    const deleted = await deleteRoomFromSupabase(roomId);
+    if (deleted) {
+      console.log(`[DELETE API] Successfully deleted from Supabase`);
+    } else {
+      console.log(`[DELETE API] Failed to delete from Supabase, but removed from memory`);
+    }
     io.emit('room-deleted', roomId);
     io.emit('rooms-updated');
-    console.log(`[DELETE API] Room ${roomId} deleted by ${requester} (role: ${requesterData.role})`);
+    console.log(`[DELETE API] Room ${roomId} deleted successfully by ${requester} (role: ${requesterData.role})`);
     res.json({ success: true, message: 'Room deleted' });
   } else {
     console.log(`[DELETE API] Rejected: ${requester} is not creator (creator=${creator}, role=${requesterData.role})`);

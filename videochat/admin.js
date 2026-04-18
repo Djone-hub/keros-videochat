@@ -229,8 +229,10 @@ function filterAdminRooms(searchTerm) {
 }
 
 function adminDeleteRoom(roomId) {
+  console.log(`[ADMIN DELETE] Attempting to delete room: ${roomId}`);
   showConfirmModal(`Вы уверены, что хотите удалить комнату ${roomId}?`, async () => {
     try {
+      console.log(`[ADMIN DELETE] Sending DELETE request for room: ${roomId}`);
       const response = await fetch(`/api/rooms/${roomId}`, {
         method: 'DELETE',
         headers: {
@@ -238,14 +240,17 @@ function adminDeleteRoom(roomId) {
         }
       });
       const result = await response.json();
+      console.log(`[ADMIN DELETE] Response for room ${roomId}:`, result);
       if (result.success) {
+        console.log(`[ADMIN DELETE] Successfully deleted room: ${roomId}`);
         showAlertModal('Комната удалена!', 'success');
         setTimeout(renderAdminPanel, 300);
       } else {
+        console.error(`[ADMIN DELETE] Failed to delete room ${roomId}:`, result.message);
         showAlertModal('Ошибка: ' + result.message, 'error');
       }
     } catch (err) {
-      console.error('Error deleting room:', err);
+      console.error('[ADMIN DELETE] Error deleting room:', err);
       showAlertModal('Ошибка удаления комнаты', 'error');
     }
   });

@@ -942,18 +942,24 @@ async function loadServerRooms() {
   const roomsMap = new Map();
   const roomsToDelete = [];
 
+  console.log('[ROOMS] Starting deduplication for rooms:', serverRooms.map(r => ({id: r.id, name: r.name, active: r.active, created: r.created})));
+
   serverRooms.forEach(room => {
     if (!roomsMap.has(room.name)) {
+      console.log(`[ROOMS] First occurrence of room "${room.name}": ${room.id}`);
       roomsMap.set(room.name, room);
     } else {
       const existing = roomsMap.get(room.name);
+      console.log(`[ROOMS] Duplicate found for "${room.name}": existing=${existing.id}, new=${room.id}`);
       // Keep the oldest room or the active one
       if ((room.active && !existing.active) || (room.created || 0) < (existing.created || 0)) {
         // Mark existing for deletion
+        console.log(`[ROOMS] Marking existing ${existing.id} for deletion (newer/active: ${room.id})`);
         roomsToDelete.push(existing);
         roomsMap.set(room.name, room);
       } else {
         // Mark current for deletion
+        console.log(`[ROOMS] Marking current ${room.id} for deletion (older: ${existing.id})`);
         roomsToDelete.push(room);
       }
     }
@@ -961,16 +967,23 @@ async function loadServerRooms() {
 
   // Automatically delete duplicate rooms from Supabase
   if (roomsToDelete.length > 0) {
-    console.log('[ROOMS] Auto-deleting duplicate rooms:', roomsToDelete.map(r => ({id: r.id, name: r.name})));
+    console.log('[ROOMS] Auto-deleting duplicate rooms:', roomsToDelete.map(r => ({id: r.id, name: r.name, created: r.created, active: r.active})));
     roomsToDelete.forEach(async (room) => {
       try {
-        await fetch(`/api/rooms/${room.id}`, {
+        console.log(`[ROOMS] Attempting to delete duplicate room: ${room.id} (${room.name})`);
+        const response = await fetch(`/api/rooms/${room.id}`, {
           method: 'DELETE',
           headers: {
             'X-Username': currentUser?.username || 'system'
           }
         });
-        console.log('[ROOMS] Auto-deleted duplicate room:', room.id);
+        if (response.ok) {
+          const result = await response.json();
+          console.log(`[ROOMS] Auto-deleted duplicate room successfully: ${room.id}`, result);
+        } else {
+          const error = await response.json();
+          console.error(`[ROOMS] Failed to delete duplicate room ${room.id}:`, error);
+        }
       } catch (err) {
         console.error('[ROOMS] Error auto-deleting room:', err);
       }
