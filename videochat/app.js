@@ -600,19 +600,24 @@ function showPromptModal(message, defaultValue = '', onConfirm) {
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
 function playSoftTone(frequency, duration, type = 'sine', volume = 0.1) {
+  // Resume audio context if suspended (browser autoplay policy)
+  if (audioContext.state === 'suspended') {
+    audioContext.resume();
+  }
+
   const osc = audioContext.createOscillator();
   const gain = audioContext.createGain();
-  
+
   osc.connect(gain);
   gain.connect(audioContext.destination);
-  
+
   osc.frequency.value = frequency;
   osc.type = type;
-  
+
   gain.gain.setValueAtTime(0, audioContext.currentTime);
   gain.gain.linearRampToValueAtTime(volume, audioContext.currentTime + 0.02);
   gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
-  
+
   osc.start(audioContext.currentTime);
   osc.stop(audioContext.currentTime + duration);
 }
@@ -1533,10 +1538,8 @@ async function joinRoomById(roomId) {
   });
   console.log('[JOIN] join-room event emitted');
 
-  // Play join sound for local user (if function exists)
-  if (typeof playSound === 'function') {
-    playSound('join');
-  }
+  // Play join sound for local user
+  sounds.userJoin();
   console.log('[JOIN] Play sound called');
 
   // Show room UI
