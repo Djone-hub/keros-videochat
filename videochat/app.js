@@ -1770,7 +1770,9 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
   const videoGrid = document.getElementById('videoGrid');
   if (!videoGrid) return;
 
-  let container = document.getElementById(`video-${id}`);
+  // Use video-local for local user, video-${id} for remote users
+  const containerId = isLocal ? 'video-local' : `video-${id}`;
+  let container = document.getElementById(containerId);
   const isNew = !container;
 
   const hasVideoTrack = stream.getVideoTracks() && stream.getVideoTracks().length > 0;
@@ -1778,7 +1780,7 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
   if (!container) {
     container = document.createElement('div');
     container.className = 'video-container' + (isScreenShare ? ' screen-share' : '') + (isLocal ? ' local' : '');
-    container.id = `video-${id}`;
+    container.id = containerId;
 
     // Always create video element (even if no video track initially - needed for screen share)
     const video = document.createElement('video');
@@ -2859,7 +2861,7 @@ async function toggleScreen() {
     });
 
     // Restore local container (camera continues to work)
-    const localContainer = document.getElementById(`video-${socket.id}`);
+    const localContainer = document.getElementById('video-local');
     if (localContainer) {
       // Remove screen share indicator
       const screenIndicator = localContainer.querySelector('[style*="background: rgba(59, 165, 93"]');
@@ -2988,8 +2990,8 @@ async function toggleScreen() {
       }, 100);
 
       // Replace local container avatar with screen preview (instead of removing container)
-      const localContainer = document.getElementById(`video-${socket.id}`);
-      console.log('[SCREEN] Local container found:', !!localContainer, 'id:', `video-${socket.id}`);
+      const localContainer = document.getElementById('video-local');
+      console.log('[SCREEN] Local container found:', !!localContainer, 'id: video-local');
       if (localContainer) {
         // Remove avatar placeholder
         const avatarPlaceholder = localContainer.querySelector('.avatar-placeholder');
