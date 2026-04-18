@@ -400,17 +400,9 @@ function loadUserSettings() {
   if (micVolVal) micVolVal.textContent = micVol;
   if (vidVolVal) vidVolVal.textContent = vidVol;
 
-  // Update visual indicators
-  const micVolBar = document.getElementById('micVolBar');
-  const vidVolBar = document.getElementById('vidVolBar');
-  if (micVolBar) {
-    const micPercentage = Math.min(100, (parseInt(micVol) / 200) * 100);
-    micVolBar.style.width = micPercentage + '%';
-  }
-  if (vidVolBar) {
-    const vidPercentage = Math.min(100, (parseInt(vidVol) / 200) * 100);
-    vidVolBar.style.width = vidPercentage + '%';
-  }
+  // Update equalizer-style level indicators
+  updateVolume('mic', micVol);
+  updateVolume('vid', vidVol);
 
   // Update avatar preview in admin panel
   const avatar = userAvatar || localStorage.getItem(`keroschat_avatar_${currentUser?.username}`);
@@ -463,11 +455,32 @@ function updateVolume(type, value) {
   const displayEl = document.getElementById(type === 'mic' ? 'micVolVal' : 'vidVolVal');
   if (displayEl) displayEl.textContent = value;
 
-  // Update visual indicator
-  const barEl = document.getElementById(type === 'mic' ? 'micVolBar' : 'vidVolBar');
-  if (barEl) {
-    const percentage = Math.min(100, (value / 200) * 100);
-    barEl.style.width = percentage + '%';
+  // Update equalizer-style level indicator (vertical bars)
+  const greenEl = document.getElementById(type === 'mic' ? 'micVolLevelGreen' : 'vidVolLevelGreen');
+  const yellowEl = document.getElementById(type === 'mic' ? 'micVolLevelYellow' : 'vidVolLevelYellow');
+  const redEl = document.getElementById(type === 'mic' ? 'micVolLevelRed' : 'vidVolLevelRed');
+
+  if (greenEl && yellowEl && redEl) {
+    const percentage = parseInt(value);
+
+    // Green: 0-33% (excellent)
+    if (percentage <= 33) {
+      greenEl.style.height = (percentage / 33 * 100) + '%';
+      yellowEl.style.height = '0%';
+      redEl.style.height = '0%';
+    }
+    // Yellow: 34-66% (level)
+    else if (percentage <= 66) {
+      greenEl.style.height = '100%';
+      yellowEl.style.height = ((percentage - 33) / 33 * 100) + '%';
+      redEl.style.height = '0%';
+    }
+    // Red: 67-100% (peak)
+    else {
+      greenEl.style.height = '100%';
+      yellowEl.style.height = '100%';
+      redEl.style.height = ((percentage - 66) / 34 * 100) + '%';
+    }
   }
 
   localStorage.setItem(`keroschat_${type}_volume`, value);
