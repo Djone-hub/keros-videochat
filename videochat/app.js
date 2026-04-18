@@ -2134,6 +2134,24 @@ async function createPeerConnection(userId, forceScreen = false) {
       console.warn(`[AUDIO] No audio track received from ${userId}!`);
     }
 
+    // Add onended handler for video track to remove screen container
+    if (videoTrack) {
+      videoTrack.onended = () => {
+        console.log(`[TRACK] Video track ended for ${userId}`);
+        if (screenShareUsers.has(userId)) {
+          const screenContainer = document.getElementById(`video-${userId}-screen`);
+          if (screenContainer) {
+            screenContainer.remove();
+            console.log('[SCREEN] Removed screen container after track ended:', userId);
+          }
+          screenShareUsers.delete(userId);
+          const user = activeUsers.get(userId);
+          const userName = user ? user.name : 'Участник';
+          addLogEntry('Демонстрация', `${userName} остановил демонстрацию экрана`);
+        }
+      };
+    }
+
     // Detect screen share by track label
     const isScreenByLabel = videoTrack && (
       videoTrack.label.toLowerCase().includes('screen') ||
@@ -2579,11 +2597,14 @@ socket.on('screen-share-stopped', (userId) => {
   screenShareUsers.delete(userId);
 
   // Remove screen container (camera container remains unchanged)
-  const screenContainer = document.getElementById(`video-${userId}-screen`);
-  if (screenContainer) {
-    screenContainer.remove();
-    console.log('[SCREEN] Removed screen container for:', userId);
-  }
+  // Add delay to allow renegotiation to complete
+  setTimeout(() => {
+    const screenContainer = document.getElementById(`video-${userId}-screen`);
+    if (screenContainer) {
+      screenContainer.remove();
+      console.log('[SCREEN] Removed screen container for:', userId);
+    }
+  }, 500);
 });
 
 // Handle active screen shares when joining room (users already sharing)
