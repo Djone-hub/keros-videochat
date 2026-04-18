@@ -100,7 +100,7 @@ let screenStream = null;
 let peers = new Map();
 let activeUsers = new Map();
 let isMicOn = true;
-let isCamOn = true;
+let isCamOn = false; // Camera OFF by default - user must enable explicitly
 let isSoundOn = true;
 let isScreenSharing = false;
 
@@ -2109,6 +2109,12 @@ socket.on('room-error', (error) => {
 socket.on('user-joined', async (user) => {
   console.log('[USER-JOINED] Received user-joined:', user.id, user.name);
 
+  // Skip if already connected with this exact socket.id
+  if (activeUsers.has(user.id) || peers.has(user.id)) {
+    console.log('[USER-JOINED] User already connected with this socket.id, skipping:', user.id);
+    return;
+  }
+
   // Check if user with same name already exists (reconnect case)
   let existingUserId = null;
   for (const [id, existingUser] of activeUsers.entries()) {
@@ -2129,12 +2135,6 @@ socket.on('user-joined', async (user) => {
     }
     // Remove video stream
     removeVideoStream(existingUserId);
-  }
-
-  // Skip if already connected with this exact socket.id
-  if (activeUsers.has(user.id) || peers.has(user.id)) {
-    console.log('[USER-JOINED] User already connected with this socket.id, skipping:', user.id);
-    return;
   }
 
   // Avatar sync debug - disabled for production performance
