@@ -2891,16 +2891,47 @@ async function toggleScreen() {
         }
       });
     }
-    
-    // Remove screen share preview window
-    const preview = document.getElementById('screen-share-preview');
-    if (preview) {
-      preview.remove();
-    }
-    
-    // Restore camera preview
-    if (localStream) {
-      addVideoStream('local', localStream, currentUser.username, true, false);
+
+    // Restore local container with avatar or camera
+    const localContainer = document.getElementById('video-local');
+    if (localContainer) {
+      // Remove screen share indicator
+      const screenIndicator = localContainer.querySelector('[style*="background: rgba(59, 165, 93"]');
+      if (screenIndicator) {
+        screenIndicator.remove();
+      }
+
+      // Remove screen-share class
+      localContainer.classList.remove('screen-share');
+
+      // If no camera track, add avatar placeholder
+      if (!localStream.getVideoTracks() || localStream.getVideoTracks().length === 0) {
+        const avatarPlaceholder = document.createElement('div');
+        avatarPlaceholder.className = 'avatar-placeholder';
+        const avatar = userAvatar || localStorage.getItem(`keroschat_avatar_${currentUser.username}`);
+        if (avatar) {
+          avatarPlaceholder.innerHTML = `<img src="${avatar}" alt="${currentUser.username}">`;
+        } else {
+          avatarPlaceholder.textContent = currentUser.username.charAt(0).toUpperCase();
+        }
+        localContainer.appendChild(avatarPlaceholder);
+
+        // Clear video
+        const localVideo = localContainer.querySelector('video');
+        if (localVideo) {
+          localVideo.srcObject = null;
+        }
+      } else {
+        // Restore camera stream
+        const localVideo = localContainer.querySelector('video');
+        if (localVideo) {
+          localVideo.srcObject = localStream;
+          localVideo.playbackRate = 1.0;
+          localVideo.style.objectFit = 'cover';
+        }
+      }
+
+      console.log('[SCREEN] Local container restored');
     }
     
     isScreenSharing = false;
@@ -2986,34 +3017,38 @@ async function toggleScreen() {
         }
       });
       console.log(`[SCREEN] Track replacement complete: ${replacedCount} replaced, ${addedCount} added`);
-      
-      // Remove local camera preview - no need to see own screen share
+
+      // Replace local container avatar with screen preview (instead of removing container)
       const localContainer = document.getElementById('video-local');
       if (localContainer) {
-        localContainer.remove();
+        // Remove avatar placeholder
+        const avatarPlaceholder = localContainer.querySelector('.avatar-placeholder');
+        if (avatarPlaceholder) {
+          avatarPlaceholder.remove();
+        }
+
+        // Replace video with screen stream
+        const localVideo = localContainer.querySelector('video');
+        if (localVideo) {
+          localVideo.srcObject = screenStream;
+          localVideo.muted = true;
+          localVideo.autoplay = true;
+          localVideo.style.objectFit = 'contain';
+          // Limit to 5fps to reduce CPU usage
+          localVideo.playbackRate = 0.1;
+        }
+
+        // Add screen share indicator
+        const screenIndicator = document.createElement('div');
+        screenIndicator.innerHTML = '🖥️ Демонстрация';
+        screenIndicator.style.cssText = 'position: absolute; top: 8px; left: 8px; background: rgba(59, 165, 93, 0.9); color: white; padding: 4px 12px; border-radius: 4px; font-size: 12px; z-index: 10;';
+        localContainer.appendChild(screenIndicator);
+
+        // Mark as screen share
+        localContainer.classList.add('screen-share');
+
+        console.log('[SCREEN] Local container updated with screen preview');
       }
-      
-      // Add small low-res preview window (160x90) - not CPU intensive
-      const previewContainer = document.createElement('div');
-      previewContainer.id = 'screen-share-preview';
-      previewContainer.style.cssText = 'position: absolute; bottom: 80px; right: 20px; width: 160px; height: 90px; z-index: 100; border-radius: 4px; overflow: hidden; border: 2px solid #3ba55d; background: #000;';
-      
-      const previewVideo = document.createElement('video');
-      previewVideo.srcObject = screenStream;
-      previewVideo.autoplay = true;
-      previewVideo.muted = true;
-      previewVideo.playsInline = true;
-      previewVideo.style.cssText = 'width: 100%; height: 100%; object-fit: contain;';
-      // Limit to 5fps to reduce CPU usage
-      previewVideo.playbackRate = 0.1;
-      
-      const previewLabel = document.createElement('div');
-      previewLabel.innerHTML = '🖥️ Демонстрация';
-      previewLabel.style.cssText = 'position: absolute; bottom: 0; left: 0; right: 0; background: rgba(59, 165, 93, 0.9); color: white; padding: 2px 4px; font-size: 10px; text-align: center;';
-      
-      previewContainer.appendChild(previewVideo);
-      previewContainer.appendChild(previewLabel);
-      document.getElementById('videoGrid').appendChild(previewContainer);
 
       isScreenSharing = true;
       localStorage.setItem('keroschat_screen_sharing', 'true');
