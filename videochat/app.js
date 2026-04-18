@@ -2112,11 +2112,18 @@ function startSpeakingDetection() {
 
 async function createPeerConnection(userId, forceScreen = false) {
   console.log(`[PEER] Creating peer connection for user: ${userId}, isScreenSharing: ${isScreenSharing}, forceScreen: ${forceScreen}`);
+  
+  // Check if localStream exists
+  if (!localStream) {
+    console.error(`[PEER] CRITICAL ERROR: localStream is null! Cannot create peer connection.`);
+    return null;
+  }
+  
   const pc = new RTCPeerConnection({
     ...iceServers
   });
 
-  console.log(`[PEER] Adding local tracks to peer connection for ${userId}`);
+  console.log(`[PEER] Adding local tracks to peer connection for ${userId}, localStream tracks:`, localStream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled, muted: t.muted})));
 
   // Add all tracks from localStream (camera + audio)
   localStream.getTracks().forEach(track => {
@@ -2175,14 +2182,10 @@ async function createPeerConnection(userId, forceScreen = false) {
     if (audioTrack) {
       console.log(`[AUDIO] Received audio from ${userId}: enabled=${audioTrack.enabled}, muted=${audioTrack.muted}, state=${audioTrack.readyState}`);
 
-      // Try to unmute the track if it's muted
+      // Audio track muted is READ-ONLY - it means browser isn't receiving media data
+      // Cannot be changed directly, only indicates remote peer isn't sending
       if (audioTrack.muted) {
-        console.log(`[AUDIO] Audio track is muted for ${userId}, attempting to unmute`);
-        audioTrack.enabled = true;
-        // Wait a bit and check if it worked
-        setTimeout(() => {
-          console.log(`[AUDIO] After unmute attempt - muted: ${audioTrack.muted}, enabled: ${audioTrack.enabled}`);
-        }, 100);
+        console.warn(`[AUDIO] Audio track is muted for ${userId} - this means no data is being received from remote peer. Check if remote peer's microphone is working.`);
       }
 
       // If no video track, create audio element for audio-only stream
@@ -2347,6 +2350,7 @@ async function createPeerConnection(userId, forceScreen = false) {
   };
 
   peers.set(userId, pc);
+  console.log(`[PEER] Peer added to Map. peers.size is now: ${peers.size}, window.peers.size: ${window.peers?.size}`);
   return pc;
 }
 
@@ -2420,6 +2424,10 @@ socket.on('users-in-room', async (users) => {
   // console.log('Creating peer connection for user:', user.id);
     activeUsers.set(user.id, user);
     const pc = await createPeerConnection(user.id);
+    if (!pc) {
+      console.error(`[INIT] Failed to create peer connection for ${user.id}, skipping offer`);
+      return;
+    }
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     // Debug disabled
@@ -2511,6 +2519,10 @@ socket.on('user-joined', (user) => {
   if (!peers.has(user.id)) {
     console.log('[USER-JOINED] Creating peer connection for new user:', user.id);
     createPeerConnection(user.id).then(async (pc) => {
+      if (!pc) {
+        console.error(`[USER-JOINED] Failed to create peer connection for ${user.id}`);
+        return;
+      }
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       socket.emit('offer', user.id, offer);
@@ -2634,6 +2646,10 @@ socket.on('offer', async (userId, offer) => {
   } else {
     // Create new peer connection (initial connection)
     const pc = await createPeerConnection(userId);
+    if (!pc) {
+      console.error(`[OFFER] Failed to create peer connection for ${userId}, cannot process offer`);
+      return;
+    }
     console.log('[OFFER] Created new peer connection');
     await pc.setRemoteDescription(offer);
     console.log('[OFFER] Remote description set');
@@ -2855,6 +2871,10 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
       try {
         console.log(`[SCREEN] Creating new peer connection with screen track for ${requesterId}`);
         const newPc = await createPeerConnection(requesterId);
+        if (!newPc) {
+          console.error(`[SCREEN] Failed to create peer connection for ${requesterId}`);
+          return;
+        }
         // Wait for screen track to be ready before creating offer
         await new Promise(resolve => setTimeout(resolve, 1000));
         const offer = await newPc.createOffer();
@@ -3259,6 +3279,10 @@ async function toggleScreen() {
         for (const peerId of peerIds) {
           try {
             const pc = await createPeerConnection(peerId);
+            if (!pc) {
+              console.error(`[SCREEN] Failed to create peer connection for ${peerId}`);
+              return;
+            }
             // Wait for screen track to be ready before creating offer (increased to 1000ms)
             await new Promise(resolve => setTimeout(resolve, 1000));
             const offer = await pc.createOffer();
