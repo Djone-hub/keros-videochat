@@ -1984,6 +1984,14 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
         video.style.width = '';
         video.style.height = '';
         video.style.opacity = '1';
+        
+        // IMPORTANT: For screen share, ensure proper styling
+        if (isScreenShare) {
+          video.style.width = '100%';
+          video.style.height = '100%';
+          video.style.objectFit = 'contain';
+          console.log(`[VIDEO] Updated existing video for screen share: ${id}`);
+        }
       } else {
         video.style.visibility = 'hidden';
         video.style.position = 'absolute';
