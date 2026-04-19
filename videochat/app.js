@@ -2587,6 +2587,22 @@ async function createPeerConnection(userId, forceScreen = false) {
         }
         if (audioReceivers === 0) {
           console.warn(`[STATS] ${userId} NO AUDIO RECEIVER FOUND - remote audio track not being received`);
+          // DEBUG: List all receivers
+          const receivers = pc.getReceivers();
+          console.log(`[STATS] DEBUG All receivers for ${userId}:`, receivers.map(r => ({
+            kind: r.track?.kind,
+            readyState: r.track?.readyState,
+            muted: r.track?.muted
+          })));
+          // DEBUG: List all transceivers
+          const transceivers = pc.getTransceivers();
+          console.log(`[STATS] DEBUG All transceivers for ${userId}:`, transceivers.map(t => ({
+            direction: t.direction,
+            currentDirection: t.currentDirection,
+            senderTrack: t.sender.track?.kind,
+            receiverTrack: t.receiver.track?.kind,
+            receiverMuted: t.receiver.track?.muted
+          })));
         }
       }, 2000);
       
