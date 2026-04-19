@@ -2439,8 +2439,27 @@ async function createPeerConnection(userId, forceScreen = false) {
       // Use unique ID for screen share container (userId + '-screen')
       const videoId = isScreenShare ? `${userId}-screen` : userId;
 
-      // Add video stream with unique ID
-      addVideoStream(videoId, stream, userName, false, isScreenShare);
+      // IMPORTANT: For screen share, if no video tracks yet, wait for them
+      if (isScreenShare && !videoTrack) {
+        console.log(`[TRACK] Screen share detected but no video track yet for ${userId}, waiting...`);
+        // Set up a listener on the stream for when tracks are added
+        const checkForVideoTrack = () => {
+          const newVideoTrack = stream.getVideoTracks()[0];
+          if (newVideoTrack) {
+            console.log(`[TRACK] Video track now available for screen share ${userId}:`, newVideoTrack.label);
+            // Now add the video stream with the actual video track
+            addVideoStream(videoId, stream, userName, false, true);
+            updateActiveUsers();
+          } else {
+            console.log(`[TRACK] Still no video track for ${userId}, retrying...`);
+            setTimeout(checkForVideoTrack, 100);
+          }
+        };
+        setTimeout(checkForVideoTrack, 100);
+      } else {
+        // Add video stream immediately if we have video track or it's not screen share
+        addVideoStream(videoId, stream, userName, false, isScreenShare);
+      }
       updateActiveUsers();
 
       // Try to play video/audio elements
