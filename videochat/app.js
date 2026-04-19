@@ -3181,51 +3181,51 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
     screenShareUsers.add(requesterId);
     console.log('[SCREEN] Added requester to screenShareUsers:', requesterId, 'size:', screenShareUsers.size);
     
-    // CRITICAL: MUST recreate peer connection with both audio and screen tracks
-    // Adding track to existing peer causes SDP m-line order mismatch error
+    // Check if peer already exists with screen track
     if (peers.has(requesterId)) {
-      console.log(`[SCREEN] Recreating peer connection for ${requesterId} with screen track`);
+      const existingPc = peers.get(requesterId);
+      const senders = existingPc.getSenders();
+      const hasScreenTrack = senders.some(s => 
+        s.track && s.track.kind === 'video' && 
+        (s.track.label?.includes('screen') || s.track.label?.includes('window') || s.track.label?.includes('display'))
+      );
       
-      // Close old peer
-      const oldPc = peers.get(requesterId);
-      oldPc.close();
+      if (hasScreenTrack) {
+        // Peer already has screen track - just create and send offer
+        console.log(`[SCREEN] Peer already exists with screen track for ${requesterId}, sending offer`);
+        try {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          const offer = await existingPc.createOffer();
+          await existingPc.setLocalDescription(offer);
+          socket.emit('offer', requesterId, offer);
+          console.log(`[SCREEN] Offer sent to ${requesterId}`);
+        } catch (e) {
+          console.error('[SCREEN] Error creating offer:', e);
+        }
+        return;
+      }
+      
+      // Peer exists but no screen track - need to recreate
+      console.log(`[SCREEN] Peer exists but no screen track, recreating for ${requesterId}`);
+      existingPc.close();
       peers.delete(requesterId);
-      
-      // Create new peer with all tracks (audio + screen)
-      try {
-        const newPc = await createPeerConnection(requesterId, true); // forceScreen=true
-        if (!newPc) {
-          console.error(`[SCREEN] Failed to create peer connection for ${requesterId}`);
-          return;
-        }
-        
-        // CRITICAL: Wait for screen track to fully initialize before creating offer
-        await new Promise(resolve => setTimeout(resolve, 200));
-        
-        const offer = await newPc.createOffer();
-        await newPc.setLocalDescription(offer);
-        socket.emit('offer', requesterId, offer);
-        console.log(`[SCREEN] Peer recreated with screen track for ${requesterId}`);
-      } catch (e) {
-        console.error('[SCREEN] Error recreating peer connection:', e);
+    }
+    
+    // Create new peer with screen track
+    console.log(`[SCREEN] Creating new peer with screen track for ${requesterId}`);
+    try {
+      const newPc = await createPeerConnection(requesterId, true); // forceScreen=true
+      if (!newPc) {
+        console.error(`[SCREEN] Failed to create peer connection for ${requesterId}`);
+        return;
       }
-    } else {
-      // No existing peer - create new one (initial connection case)
-      console.log(`[SCREEN] No existing peer for ${requesterId}, creating new peer with screen track`);
-      try {
-        const newPc = await createPeerConnection(requesterId, true); // forceScreen=true
-        if (!newPc) {
-          console.error(`[SCREEN] Failed to create peer connection for ${requesterId}`);
-          return;
-        }
-        await new Promise(resolve => setTimeout(resolve, 200));
-        const offer = await newPc.createOffer();
-        await newPc.setLocalDescription(offer);
-        socket.emit('offer', requesterId, offer);
-        console.log(`[SCREEN] New peer created with screen track for ${requesterId}`);
-      } catch (e) {
-        console.error('[SCREEN] Error creating peer connection:', e);
-      }
+      await new Promise(resolve => setTimeout(resolve, 200));
+      const offer = await newPc.createOffer();
+      await newPc.setLocalDescription(offer);
+      socket.emit('offer', requesterId, offer);
+      console.log(`[SCREEN] New peer created with screen track for ${requesterId}`);
+    } catch (e) {
+      console.error('[SCREEN] Error creating peer connection:', e);
     }
   } else {
     console.log('[SCREEN] Not screen sharing, ignoring renegotiation request');
@@ -3625,6 +3625,8 @@ async function toggleScreen() {
       await new Promise(resolve => setTimeout(resolve, 100));
       
       // Recreate peer connections for all active users with screen track
+      // BUT: Don't send offer yet - wait for remote to request renegotiation
+      // This ensures both sides are synchronized and avoids SDP race conditions
       if (activeUsers.size > 0) {
         for (const [userId, userInfo] of activeUsers) {
           console.log(`[SCREEN] Recreating peer connection with screen track for ${userId}`);
@@ -3635,29 +3637,18 @@ async function toggleScreen() {
           }
           console.log(`[SCREEN] Peer connection recreated with screen track for ${userId}`);
           
-          // CRITICAL: Wait for screen track to fully initialize before creating offer
-          await new Promise(resolve => setTimeout(resolve, 200));
-          
-          // Verify screen track is in the peer before creating offer
+          // Verify screen track is in the peer
           const senders = pc.getSenders();
           const hasScreenTrack = senders.some(s => 
             s.track && s.track.kind === 'video' && 
             (s.track.label?.includes('screen') || s.track.label?.includes('window') || s.track.label?.includes('display'))
           );
-          console.log(`[SCREEN] Peer has screen track before offer: ${hasScreenTrack}, total senders: ${senders.length}`);
+          console.log(`[SCREEN] Peer has screen track: ${hasScreenTrack}, total senders: ${senders.length}`);
           
-          // Create and send offer
-          const offer = await pc.createOffer();
-          
-          // Log SDP to debug
-          console.log(`[SCREEN] Created offer SDP for ${userId}:`, offer.sdp.substring(0, 500));
-          const hasVideoInSDP = offer.sdp.includes('m=video');
-          const videoCount = (offer.sdp.match(/m=video/g) || []).length;
-          console.log(`[SCREEN] SDP has video section: ${hasVideoInSDP}, video m-lines: ${videoCount}`);
-          
-          await pc.setLocalDescription(offer);
-          socket.emit('offer', userId, offer);
-          console.log(`[SCREEN] Offer sent to ${userId} with screen track`);
+          // CRITICAL: Do NOT send offer here!
+          // Wait for remote side to receive 'screen-share-started' and send 'request-screen-renegotiation'
+          // This ensures proper synchronization and avoids SDP mismatches
+          console.log(`[SCREEN] Peer ready for ${userId}, waiting for renegotiation request...`);
         }
       } else {
         console.warn('[SCREEN] No active users. Screen share will not be visible to anyone.');
