@@ -3173,7 +3173,7 @@ socket.on('active-screen-shares', (userIds) => {
 socket.on('request-screen-renegotiation', async (requesterId) => {
   console.log('[SCREEN] Received request-screen-renegotiation from:', requesterId);
   
-  // Only respond if we are actively screen sharing
+  // Case 1: We are actively screen sharing - send offer WITH screen track
   if (isScreenSharing && screenStream) {
     console.log('[SCREEN] We are screen sharing, renegotiating with:', requesterId);
     
@@ -3227,8 +3227,23 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
     } catch (e) {
       console.error('[SCREEN] Error creating peer connection:', e);
     }
-  } else {
-    console.log('[SCREEN] Not screen sharing, ignoring renegotiation request');
+  }
+  // Case 2: We are NOT screen sharing - send offer WITHOUT screen track
+  else if (peers.has(requesterId)) {
+    console.log('[SCREEN] Not screen sharing but peer exists, sending offer without screen track to:', requesterId);
+    try {
+      const pc = peers.get(requesterId);
+      await new Promise(resolve => setTimeout(resolve, 100));
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit('offer', requesterId, offer);
+      console.log(`[SCREEN] Offer sent to ${requesterId} without screen track`);
+    } catch (e) {
+      console.error('[SCREEN] Error creating offer without screen track:', e);
+    }
+  }
+  else {
+    console.log('[SCREEN] Not screen sharing and no peer, ignoring renegotiation request from:', requesterId);
   }
 });
 
@@ -3460,7 +3475,8 @@ async function toggleScreen() {
     }
 
     // CRITICAL: Recreate peer connections without screen track
-    // This ensures consistent SDP m-line order and avoids renegotiation errors
+    // BUT: Don't send offer immediately - wait for remote to request renegotiation
+    // This ensures both sides are synchronized and avoids SDP m-line order errors
     const peerIds = Array.from(peers.keys());
     for (const peerId of peerIds) {
       console.log(`[SCREEN] Recreating peer connection without screen track for ${peerId}`);
@@ -3474,10 +3490,8 @@ async function toggleScreen() {
           console.error(`[SCREEN] Failed to recreate peer for ${peerId}`);
           continue;
         }
-        const offer = await newPc.createOffer();
-        await newPc.setLocalDescription(offer);
-        socket.emit('offer', peerId, offer);
-        console.log(`[SCREEN] Peer recreated without screen track for ${peerId}`);
+        console.log(`[SCREEN] Peer recreated without screen track for ${peerId}, waiting for renegotiation request`);
+        // Do NOT send offer here - remote will request renegotiation when ready
       } catch (err) {
         console.error(`[SCREEN] Error recreating peer ${peerId}:`, err);
       }
