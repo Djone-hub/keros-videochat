@@ -2072,6 +2072,11 @@ function updateActiveUsers() {
   
   // Remote users from activeUsers (only those currently in room)
   activeUsers.forEach((user, id) => {
+    // Skip if user has no name
+    if (!user || !user.name) {
+      console.warn(`[ACTIVE] User ${id} has no name, skipping`);
+      return;
+    }
     const username = user.name.toLowerCase();
     
     // Skip if already added (prevents duplicates)
@@ -3340,8 +3345,8 @@ async function toggleScreen() {
         console.warn('[SCREEN] No peers available yet. Screen share started but no one will see it until someone joins.');
       }
       
-      // Add screen track to all existing peer connections
-      peers.forEach(async (pc, peerId) => {
+      // Function to add screen track to a peer
+      const addScreenTrackToPeer = async (pc, peerId) => {
         try {
           console.log(`[SCREEN] Adding screen track to peer ${peerId}`);
           pc.addTrack(screenTrack, screenStream);
@@ -3354,7 +3359,16 @@ async function toggleScreen() {
         } catch (err) {
           console.error(`[SCREEN] Error adding screen track to peer ${peerId}:`, err);
         }
-      });
+      };
+      
+      // Add to existing peers
+      peers.forEach(addScreenTrackToPeer);
+      
+      // Store pending screen share for future peers
+      if (peers.size === 0) {
+        console.log('[SCREEN] No peers yet, storing pending screen share');
+        window.pendingScreenShare = true;
+      }
       
       // Notify all users to request renegotiation if needed
       socket.emit('screen-share-renegotiate-request', { screenSharerId: socket.id });
