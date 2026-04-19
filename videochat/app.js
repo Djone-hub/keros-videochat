@@ -1486,16 +1486,40 @@ async function joinRoomById(roomId) {
     return;
   }
 
-  // Request media stream with selected devices
-  const constraints = {
-    audio: selectedAudioInput ? { deviceId: { exact: selectedAudioInput } } : true,
-    video: isCamOn ? (selectedVideoInput ? { deviceId: { exact: selectedVideoInput } } : true) : false
-  };
+  // Check if we already have an active localStream (e.g., from disconnectAndJoinAnother)
+  // Reuse it to prevent device conflicts and "muted" track issues
+  if (localStream && localStream.getAudioTracks().length > 0 && localStream.getAudioTracks()[0].readyState === 'live') {
+    console.log('[DEVICES] Reusing existing localStream with', localStream.getTracks().length, 'tracks');
+    // If camera was toggled off but we want it on now, we need to add video track
+    if (isCamOn && localStream.getVideoTracks().length === 0) {
+      console.log('[DEVICES] Camera enabled but no video track in existing stream, will request camera...');
+      // Fall through to getUserMedia to add video
+    } else {
+      console.log('[DEVICES] Existing stream is ready, skipping getUserMedia');
+      // Update video track enabled state based on isCamOn
+      localStream.getVideoTracks().forEach(t => {
+        t.enabled = isCamOn;
+        console.log('[DEVICES] Video track enabled set to:', isCamOn);
+      });
+      // Continue with existing stream
+    }
+  }
 
-  console.log('[DEVICES] Requesting media with constraints:', constraints);
+  // Only request new media if we don't have an active stream (or need to add video)
+  const needsNewStream = !localStream || localStream.getAudioTracks().length === 0 || localStream.getAudioTracks()[0].readyState !== 'live';
+  const needsVideoTrack = isCamOn && localStream && localStream.getVideoTracks().length === 0;
 
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia(constraints);
+  if (needsNewStream || needsVideoTrack) {
+    // Request media stream with selected devices
+    const constraints = {
+      audio: selectedAudioInput ? { deviceId: { exact: selectedAudioInput } } : true,
+      video: isCamOn ? (selectedVideoInput ? { deviceId: { exact: selectedVideoInput } } : true) : false
+    };
+
+    console.log('[DEVICES] Requesting media with constraints:', constraints);
+
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia(constraints);
     console.log('[TRACK] Local track audio enabled:', localStream.getAudioTracks()[0]?.enabled);
     console.log('[TRACK] Local track audio muted:', localStream.getAudioTracks()[0]?.muted);
     console.log('[TRACK] Local track video enabled:', localStream.getVideoTracks()[0]?.enabled);
