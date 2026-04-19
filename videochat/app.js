@@ -1862,43 +1862,41 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     container.className = 'video-container' + (isScreenShare ? ' screen-share' : '') + (isLocal ? ' local' : '');
     container.id = containerId;
 
-    // Always create video element (even if no video track initially - needed for screen share)
-    const video = document.createElement('video');
-    video.srcObject = stream;
-    video.autoplay = true;
-    video.playsInline = true;
-    video.muted = isLocal;
-    if (isLocal && !isScreenShare) video.style.transform = 'scaleX(-1)';
+    // IMPORTANT: Only create video element if there are video tracks or it's screen share
+    // For audio-only streams, don't create video element at all
+    let video = null;
+    if (hasVideoTrack || isScreenShare) {
+      video = document.createElement('video');
+      video.srcObject = stream;
+      video.autoplay = true;
+      video.playsInline = true;
+      video.muted = isLocal;
+      if (isLocal && !isScreenShare) video.style.transform = 'scaleX(-1)';
+      
+      console.log(`[VIDEO] Created video element for ${id}, hasVideoTrack: ${hasVideoTrack}, isScreenShare: ${isScreenShare}`);
 
-    // Hide video element if no video track (show avatar instead)
-    // Use visibility: hidden instead of display: none to ensure audio can still play
-    if (!hasVideoTrack) {
-      video.style.visibility = 'hidden';
-      video.style.position = 'absolute';
-      video.style.width = '1px';
-      video.style.height = '1px';
-      video.style.opacity = '0';
-    }
+      // Log video dimensions when loaded (important for debugging screen share)
+      video.addEventListener('loadeddata', () => {
+        const streamTracks = stream.getVideoTracks();
+        const hasVideo = streamTracks.length > 0 && streamTracks[0].enabled && streamTracks[0].readyState === 'live';
+        console.log(`[VIDEO] Video loaded for ${id}: ${video.videoWidth}x${video.videoHeight}, readyState: ${video.readyState}, hasLiveVideo: ${hasVideo}`);
+        if (video.videoWidth === 0 || video.videoHeight === 0) {
+          console.error(`[VIDEO] CRITICAL: Video has 0x0 dimensions for ${id}! Stream has ${streamTracks.length} video tracks, enabled: ${streamTracks[0]?.enabled}, readyState: ${streamTracks[0]?.readyState}`);
+        }
+      });
 
-    // Ensure video plays
-    video.play().catch(e => {});
-
-    // Log video dimensions when loaded (important for debugging screen share)
-    video.addEventListener('loadeddata', () => {
-      const streamTracks = stream.getVideoTracks();
-      const hasVideo = streamTracks.length > 0 && streamTracks[0].enabled && streamTracks[0].readyState === 'live';
-      console.log(`[VIDEO] Video loaded for ${id}: ${video.videoWidth}x${video.videoHeight}, readyState: ${video.readyState}, hasLiveVideo: ${hasVideo}`);
-      if (video.videoWidth === 0 || video.videoHeight === 0) {
-        console.error(`[VIDEO] CRITICAL: Video has 0x0 dimensions for ${id}! Stream has ${streamTracks.length} video tracks, enabled: ${streamTracks[0]?.enabled}, readyState: ${streamTracks[0]?.readyState}`);
+      // For screen share, ensure it's visible
+      if (isScreenShare) {
+        video.style.width = '100%';
+        video.style.height = '100%';
+        video.style.objectFit = 'contain';
+        console.log(`[VIDEO] Screen share video styled for ${id}`);
       }
-    });
 
-    // For screen share, ensure it's visible
-    if (isScreenShare) {
-      video.style.width = '100%';
-      video.style.height = '100%';
-      video.style.objectFit = 'contain';
-      console.log(`[VIDEO] Screen share video styled for ${id}`);
+      // Ensure video plays
+      video.play().catch(e => {});
+    } else {
+      console.log(`[VIDEO] No video track for ${id}, skipping video element creation (audio-only)`);
     }
 
     const label = document.createElement('div');
@@ -1918,7 +1916,7 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
       container.appendChild(avatarPlaceholder);
     }
     
-    if (!isLocal) {
+    if (!isLocal && video) {
       const volumeControl = document.createElement('div');
       volumeControl.className = 'remote-volume';
       volumeControl.innerHTML = `
@@ -1944,7 +1942,7 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     // Add fullscreen button for screen share (only for REMOTE users, not local)
     // Local user doesn't need fullscreen button for their own screen share
     // Remote users DO need fullscreen button to enlarge shared screen
-    if (isScreenShare && !isLocal) {
+    if (isScreenShare && !isLocal && video) {
       // Extract original userId from screen ID (remove -screen suffix)
       const originalId = id.replace('-screen', '');
 
@@ -1969,7 +1967,9 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
       video.ondblclick = () => openScreenModal(originalId);
     }
     
-    container.appendChild(video);
+    if (video) {
+      container.appendChild(video);
+    }
     container.appendChild(label);
     videoGrid.appendChild(container);
   } else {
@@ -2284,11 +2284,28 @@ async function createPeerConnection(userId, forceScreen = false) {
     // Log audio track specifically
     if (audioTrack) {
       console.log(`[AUDIO] Received audio from ${userId}: enabled=${audioTrack.enabled}, muted=${audioTrack.muted}, state=${audioTrack.readyState}`);
+      console.log(`[AUDIO] Audio track details - id: ${audioTrack.id}, label: ${audioTrack.label}`);
 
       // Audio track muted is READ-ONLY - it means browser isn't receiving media data
-      // Cannot be changed directly, only indicates remote peer isn't sending
       if (audioTrack.muted) {
-        console.warn(`[AUDIO] Audio track is muted for ${userId} - this means no data is being received from remote peer. Check if remote peer's microphone is working.`);
+        console.warn(`[AUDIO] Audio track is MUTED for ${userId} - waiting for data from remote peer...`);
+        
+        // Add unmute listener to detect when audio starts flowing
+        audioTrack.addEventListener('unmute', () => {
+          console.log(`[AUDIO] Audio track UNMUTED for ${userId} - data is now flowing!`);
+          // Try to play any pending audio elements
+          const audioEl = document.getElementById(`audio-${userId}`);
+          if (audioEl) {
+            audioEl.play().then(() => {
+              console.log(`[AUDIO] Playing audio after unmute for ${userId}`);
+            }).catch(e => console.error(`[AUDIO] Error playing after unmute:`, e));
+          }
+        });
+        
+        // Also listen for mute event
+        audioTrack.addEventListener('mute', () => {
+          console.log(`[AUDIO] Audio track MUTED for ${userId} - data stopped flowing`);
+        });
       }
 
       // If no video track, create audio element for audio-only stream
@@ -3497,7 +3514,22 @@ async function toggleScreen() {
       socket.emit('screen-share-renegotiate-request', { screenSharerId: socket.id });
       console.log('[SCREEN] Sent screen-share-renegotiate-request to all users');
 
-      // Replace local container avatar with screen preview (instead of removing container)
+      // Create LOW QUALITY preview stream for local display only
+      const lowQualityPreviewConstraints = {
+        video: { cursor: 'always', width: { ideal: 320, max: 320 }, height: { ideal: 180, max: 180 }, frameRate: { ideal: 5, max: 10 } },
+        audio: false
+      };
+      
+      let previewStream = null;
+      try {
+        previewStream = await navigator.mediaDevices.getDisplayMedia(lowQualityPreviewConstraints);
+        console.log('[SCREEN] Created LOW QUALITY preview stream for local display');
+      } catch (err) {
+        console.warn('[SCREEN] Could not create low quality preview, using main stream:', err);
+        previewStream = screenStream; // Fallback to main stream
+      }
+
+      // Replace local container avatar with screen preview
       const localContainer = document.getElementById('video-local');
       console.log('[SCREEN] Local container found:', !!localContainer, 'id: video-local');
       if (localContainer) {
@@ -3525,21 +3557,21 @@ async function toggleScreen() {
           console.log('[SCREEN] Using existing video element');
         }
 
-        // Replace video with screen stream
-        localVideo.srcObject = screenStream;
+        // Use LOW QUALITY preview stream for local display
+        localVideo.srcObject = previewStream;
         localVideo.style.objectFit = 'contain';
         localVideo.style.transform = 'none';
-        // Limit to 5fps to reduce CPU usage
-        localVideo.playbackRate = 0.1;
         
         // Ensure video plays
         localVideo.play().then(() => {
-          console.log('[SCREEN] Local video playing');
+          console.log('[SCREEN] Local LOW QUALITY preview playing');
         }).catch(err => {
           console.error('[SCREEN] Error playing local video:', err);
         });
 
-        console.log('[SCREEN] Video srcObject set, screenStream tracks:', screenStream ? screenStream.getTracks().length : 0);
+        console.log('[SCREEN] Local preview set - LOW QUALITY for you, HIGH QUALITY sent to remote');
+        console.log('[SCREEN] Preview stream tracks:', previewStream ? previewStream.getTracks().length : 0);
+        console.log('[SCREEN] Screen stream (sent to remote) tracks:', screenStream ? screenStream.getTracks().length : 0);
 
         // Add screen share indicator
         const screenIndicator = document.createElement('div');
