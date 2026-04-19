@@ -2214,10 +2214,14 @@ async function createPeerConnection(userId, forceScreen = false) {
     console.log(`[PEER] Screen sharing active OR forceScreen=true, adding screen track for peer ${userId}`);
     const screenTrack = screenStream ? screenStream.getVideoTracks()[0] : null;
     if (screenTrack) {
-      console.log(`[PEER] Screen track properties: label=${screenTrack.label}, enabled=${screenTrack.enabled}`);
-      // Use addTrack for screen track (same as audio/camera tracks)
-      pc.addTrack(screenTrack, screenStream);
-      console.log(`[PEER] Screen track added via addTrack for peer ${userId}`);
+      console.log(`[PEER] Screen track properties: label=${screenTrack.label}, enabled=${screenTrack.enabled}, readyState=${screenTrack.readyState}`);
+      // CRITICAL: Use addTransceiver with sendonly to ensure screen track is in SDP
+      // addTrack doesn't guarantee the track will be in the initial offer
+      pc.addTransceiver(screenTrack, {
+        direction: 'sendonly',
+        streams: [screenStream]
+      });
+      console.log(`[PEER] Screen track added via addTransceiver (sendonly) for peer ${userId}`);
     } else if (forceScreen) {
       console.warn(`[PEER] forceScreen=true but no screenStream available!`);
     }
