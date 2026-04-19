@@ -2978,6 +2978,10 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
   if (isScreenSharing && screenStream) {
     console.log('[SCREEN] We are screen sharing, renegotiating with:', requesterId);
     
+    // IMPORTANT: Add requester to screenShareUsers so they detect incoming track as screen
+    screenShareUsers.add(requesterId);
+    console.log('[SCREEN] Added requester to screenShareUsers:', requesterId, 'size:', screenShareUsers.size);
+    
     // Close and remove old peer connection
     if (peers.has(requesterId)) {
       console.log(`[SCREEN] Closing old peer connection for requester: ${requesterId}`);
