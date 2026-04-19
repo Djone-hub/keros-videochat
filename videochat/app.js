@@ -2790,15 +2790,14 @@ socket.on('user-joined', (user) => {
 
   console.log('[USER-JOINED] User added to activeUsers:', user.id, user.name);
 
-  // CRITICAL: Only create peer connection if we are the "older" participant
-  // This avoids race condition where both sides create peers simultaneously
-  // The user who was already in the room creates the peer and sends offer
-  // The new user waits for the offer
-  const myJoinTime = currentUser?.joinTime || Date.now();
-  const otherJoinTime = user.joinTime || Date.now();
+  // CRITICAL: Only create peer connection if our socket.id is "smaller" (lexicographically)
+  // This ensures only ONE side creates the peer and sends offer
+  // The side with smaller socket.id creates peer, the other waits
+  const myId = socket.id;
+  const otherId = user.id;
   
-  if (myJoinTime < otherJoinTime && !peers.has(user.id)) {
-    console.log('[USER-JOINED] We are older participant, creating peer and sending offer to:', user.id);
+  if (myId < otherId && !peers.has(user.id)) {
+    console.log('[USER-JOINED] Our ID is smaller, creating peer and sending offer to:', user.id);
     createPeerConnection(user.id).then(async (pc) => {
       if (!pc) {
         console.error(`[USER-JOINED] Failed to create peer connection for ${user.id}`);
@@ -2812,7 +2811,7 @@ socket.on('user-joined', (user) => {
       console.error('[USER-JOINED] Error creating peer connection:', err);
     });
   } else {
-    console.log('[USER-JOINED] We are newer participant, waiting for offer from:', user.id);
+    console.log('[USER-JOINED] Our ID is larger, waiting for offer from:', user.id);
   }
 });
 
