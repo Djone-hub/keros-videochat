@@ -3111,36 +3111,30 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
     screenShareUsers.add(requesterId);
     console.log('[SCREEN] Added requester to screenShareUsers:', requesterId, 'size:', screenShareUsers.size);
     
-    // CRITICAL: Do NOT close the existing peer connection - this breaks audio!
-    // Instead, add screen track to existing peer and renegotiate
+    // CRITICAL: MUST recreate peer connection with both audio and screen tracks
+    // Adding track to existing peer causes SDP m-line order mismatch error
     if (peers.has(requesterId)) {
-      console.log(`[SCREEN] Using existing peer connection for ${requesterId}, adding screen track`);
-      const pc = peers.get(requesterId);
+      console.log(`[SCREEN] Recreating peer connection for ${requesterId} with screen track`);
       
+      // Close old peer
+      const oldPc = peers.get(requesterId);
+      oldPc.close();
+      peers.delete(requesterId);
+      
+      // Create new peer with all tracks (audio + screen)
       try {
-        // Add screen track to existing peer connection
-        const screenTrack = screenStream.getVideoTracks()[0];
-        if (screenTrack) {
-          // Check if this track is already added to avoid duplicate error
-          const existingSenders = pc.getSenders();
-          const alreadyAdded = existingSenders.some(s => s.track && s.track.id === screenTrack.id);
-          
-          if (alreadyAdded) {
-            console.log(`[SCREEN] Screen track already added to peer ${requesterId}, skipping addTrack`);
-          } else {
-            console.log(`[SCREEN] Adding screen track to existing peer ${requesterId}`);
-            pc.addTrack(screenTrack, screenStream);
-            console.log(`[SCREEN] Screen track added, renegotiating...`);
-          }
-          
-          // Create new offer to trigger renegotiation (even if track already added)
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          socket.emit('offer', requesterId, offer);
-          console.log(`[SCREEN] Renegotiation offer sent to ${requesterId}`);
+        const newPc = await createPeerConnection(requesterId, true); // forceScreen=true
+        if (!newPc) {
+          console.error(`[SCREEN] Failed to create peer connection for ${requesterId}`);
+          return;
         }
+        
+        const offer = await newPc.createOffer();
+        await newPc.setLocalDescription(offer);
+        socket.emit('offer', requesterId, offer);
+        console.log(`[SCREEN] Peer recreated with screen track for ${requesterId}`);
       } catch (e) {
-        console.error('[SCREEN] Error adding screen track to existing peer:', e);
+        console.error('[SCREEN] Error recreating peer connection:', e);
       }
     } else {
       // No existing peer - create new one (initial connection case)
