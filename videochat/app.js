@@ -3572,20 +3572,10 @@ async function toggleScreen() {
       socket.emit('screen-share-renegotiate-request', { screenSharerId: socket.id });
       console.log('[SCREEN] Sent screen-share-renegotiate-request to all users');
 
-      // Create LOW QUALITY preview stream for local display only
-      const lowQualityPreviewConstraints = {
-        video: { cursor: 'always', width: { ideal: 320, max: 320 }, height: { ideal: 180, max: 180 }, frameRate: { ideal: 5, max: 10 } },
-        audio: false
-      };
-      
-      let previewStream = null;
-      try {
-        previewStream = await navigator.mediaDevices.getDisplayMedia(lowQualityPreviewConstraints);
-        console.log('[SCREEN] Created LOW QUALITY preview stream for local display');
-      } catch (err) {
-        console.warn('[SCREEN] Could not create low quality preview, using main stream:', err);
-        previewStream = screenStream; // Fallback to main stream
-      }
+      // IMPORTANT: Use CLONE of main screen stream for local preview (same stream, one dialog)
+      // We clone to avoid issues with track ended events affecting both
+      const previewStream = screenStream.clone();
+      console.log('[SCREEN] Created local preview stream (clone of main stream)');
 
       // Replace local container avatar with screen preview
       const localContainer = document.getElementById('video-local');
@@ -3615,19 +3605,19 @@ async function toggleScreen() {
           console.log('[SCREEN] Using existing video element');
         }
 
-        // Use LOW QUALITY preview stream for local display
+        // Use cloned stream for local display
         localVideo.srcObject = previewStream;
         localVideo.style.objectFit = 'contain';
         localVideo.style.transform = 'none';
         
         // Ensure video plays
         localVideo.play().then(() => {
-          console.log('[SCREEN] Local LOW QUALITY preview playing');
+          console.log('[SCREEN] Local preview playing');
         }).catch(err => {
           console.error('[SCREEN] Error playing local video:', err);
         });
 
-        console.log('[SCREEN] Local preview set - LOW QUALITY for you, HIGH QUALITY sent to remote');
+        console.log('[SCREEN] Local preview set - ONE dialog for both preview and remote');
         console.log('[SCREEN] Preview stream tracks:', previewStream ? previewStream.getTracks().length : 0);
         console.log('[SCREEN] Screen stream (sent to remote) tracks:', screenStream ? screenStream.getTracks().length : 0);
 
