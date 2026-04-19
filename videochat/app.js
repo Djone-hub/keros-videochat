@@ -2983,8 +2983,16 @@ socket.on('screen-share-started', (userId, callback) => {
 // Handle remote user screen share stopped
 socket.on('screen-share-stopped', (userId) => {
   const user = activeUsers.get(userId);
-  const userName = user ? user.name : 'Участник';
-  addLogEntry('Демонстрация', `${userName} остановил демонстрацию экрана`);
+  if (user) {
+    const userName = user.name;
+    addLogEntry('Демонстрация', `${userName} остановил демонстрацию экрана`);
+  } else {
+    // Fetch name from server if not in activeUsers
+    socket.emit('get-user-name', userId, (name) => {
+      const userName = name || 'Участник';
+      addLogEntry('Демонстрация', `${userName} остановил демонстрацию экрана`);
+    });
+  }
 
   console.log('[SCREEN] Received screen-share-stopped for:', userId);
   console.log('[SCREEN] Screen share users before delete:', Array.from(screenShareUsers));
