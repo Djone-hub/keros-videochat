@@ -31,13 +31,16 @@ socket.on('connect', () => {
   // REJOIN ROOM: If we were in a room, rejoin to restore socket.roomId on server
   if (currentRoom && currentUser && currentUser.username) {
     console.log('[RECONNECT] Rejoining room after reconnect:', currentRoom);
+    // Update joinTime for proper peer ordering after reconnect
+    currentUser.joinTime = Date.now();
     socket.emit('join-room', {
       roomId: currentRoom,
       username: currentUser.username,
       avatar: userAvatar || localStorage.getItem(`keroschat_avatar_${currentUser.username}`),
-      isScreenSharing: isScreenSharing
+      isScreenSharing: isScreenSharing,
+      joinTime: currentUser.joinTime
     });
-    console.log('[RECONNECT] Rejoin event sent');
+    console.log('[RECONNECT] Rejoin event sent, joinTime:', currentUser.joinTime);
   }
 
   // If lobby is already visible, reload rooms and users
@@ -68,10 +71,12 @@ socket.on('connect', () => {
     console.log('[CONNECT] Was in room', currentRoom, '- rejoining and recreating peer connections');
     
     // Rejoin the room
+    currentUser.joinTime = Date.now();
     socket.emit('join-room', {
       roomId: currentRoom,
       userId: socket.id,
-      username: currentUser.username
+      username: currentUser.username,
+      joinTime: currentUser.joinTime
     }, (response) => {
       console.log('[CONNECT] Rejoin response:', response);
       if (response && response.success) {
@@ -1550,13 +1555,18 @@ async function joinRoomById(roomId) {
 
   // Emit join-room event
   console.log('[JOIN] Emitting join-room event');
+  
+  // Set joinTime for proper peer connection ordering
+  currentUser.joinTime = Date.now();
+  
   socket.emit('join-room', {
     roomId: currentRoom,
     username: currentUser.username,
     avatar: userAvatar || localStorage.getItem(`keroschat_avatar_${currentUser.username}`),
-    isScreenSharing: isScreenSharing
+    isScreenSharing: isScreenSharing,
+    joinTime: currentUser.joinTime
   });
-  console.log('[JOIN] join-room event emitted');
+  console.log('[JOIN] join-room event emitted, joinTime:', currentUser.joinTime);
 
   // Play join sound for local user
   await sounds.userJoin();
@@ -2780,9 +2790,15 @@ socket.on('user-joined', (user) => {
 
   console.log('[USER-JOINED] User added to activeUsers:', user.id, user.name);
 
-  // Create peer connection and send offer
-  if (!peers.has(user.id)) {
-    console.log('[USER-JOINED] Creating peer connection for new user:', user.id);
+  // CRITICAL: Only create peer connection if we are the "older" participant
+  // This avoids race condition where both sides create peers simultaneously
+  // The user who was already in the room creates the peer and sends offer
+  // The new user waits for the offer
+  const myJoinTime = currentUser?.joinTime || Date.now();
+  const otherJoinTime = user.joinTime || Date.now();
+  
+  if (myJoinTime < otherJoinTime && !peers.has(user.id)) {
+    console.log('[USER-JOINED] We are older participant, creating peer and sending offer to:', user.id);
     createPeerConnection(user.id).then(async (pc) => {
       if (!pc) {
         console.error(`[USER-JOINED] Failed to create peer connection for ${user.id}`);
@@ -2795,6 +2811,8 @@ socket.on('user-joined', (user) => {
     }).catch(err => {
       console.error('[USER-JOINED] Error creating peer connection:', err);
     });
+  } else {
+    console.log('[USER-JOINED] We are newer participant, waiting for offer from:', user.id);
   }
 });
 
