@@ -3408,6 +3408,13 @@ async function toggleScreen() {
         localVideo.style.transform = 'none';
         // Limit to 5fps to reduce CPU usage
         localVideo.playbackRate = 0.1;
+        
+        // Ensure video plays
+        localVideo.play().then(() => {
+          console.log('[SCREEN] Local video playing');
+        }).catch(err => {
+          console.error('[SCREEN] Error playing local video:', err);
+        });
 
         console.log('[SCREEN] Video srcObject set, screenStream tracks:', screenStream ? screenStream.getTracks().length : 0);
 
