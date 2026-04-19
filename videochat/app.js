@@ -1541,61 +1541,10 @@ async function joinRoomById(roomId) {
       micLevelInterval = null;
       console.log('[MIC LEVEL] Monitoring stopped');
     }
-  } catch (err) {
-    console.error('[DEVICES] Error getting media:', err);
-
-    // Fallback to default devices if selected devices fail
-    if (selectedAudioInput || selectedVideoInput) {
-      console.log('[DEVICES] Fallback to default devices');
-      selectedAudioInput = null;
-      selectedVideoInput = null;
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: isCamOn
-        });
-        console.log('[TRACK] Local track audio enabled:', localStream.getAudioTracks()[0]?.enabled);
-        console.log('[TRACK] Local track video enabled:', localStream.getVideoTracks()[0]?.enabled);
-
-        // Detect OBS Virtual Camera (log only, don't block)
-        const videoTrack = localStream.getVideoTracks()[0];
-        if (videoTrack) {
-          const label = videoTrack.label.toLowerCase();
-          console.log('[DEVICES] Video track label:', videoTrack.label);
-          if (label.includes('obs') || label.includes('virtual')) {
-            console.warn('[DEVICES] OBS Virtual Camera detected in fallback - may cause issues');
-            // NOT blocking - let user decide
-          }
-        }
-      } catch (fallbackErr) {
-        console.error('[DEVICES] Fallback also failed:', fallbackErr);
-        // If no camera available, fallback to audio-only
-        try {
-          localStream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
-            video: false
-          });
-          console.log('[TRACK] Local track audio enabled:', localStream.getAudioTracks()[0]?.enabled);
-          showAlertModal('Камера не найдена или недоступна. Вход только с микрофоном.', 'info');
-        } catch (audioOnlyErr) {
-          console.error('[DEVICES] Audio-only also failed:', audioOnlyErr);
-          return;
-        }
-      }
-    } else {
-      // If no camera available, fallback to audio-only
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: false
-        });
-        console.log('[TRACK] Local track audio enabled:', localStream.getAudioTracks()[0]?.enabled);
-        showAlertModal('Камера не найдена или недоступна. Вход только с микрофоном.', 'info');
-      } catch (audioOnlyErr) {
-        console.error('[DEVICES] Audio-only also failed:', audioOnlyErr);
-        showAlertModal('Не удалось получить доступ к микрофону. Проверьте разрешения.', 'error');
-        return;
-      }
+    } catch (err) {
+      console.error('[DEVICES] Error getting media:', err);
+      showAlertModal('Ошибка доступа к медиаустройствам: ' + err.message, 'error');
+      return;
     }
   }
 
