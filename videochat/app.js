@@ -2451,7 +2451,20 @@ async function createPeerConnection(userId, forceScreen = false) {
       if (isScreenShare && !videoTrack) {
         console.log(`[TRACK] Screen share detected but no video track yet for ${userId}, waiting...`);
         // Set up a listener on the stream for when tracks are added
+        let retryCount = 0;
+        const maxRetries = 50; // 5 seconds max (50 * 100ms)
+
         const checkForVideoTrack = () => {
+          // Stop if screen share was stopped or max retries reached
+          if (!screenShareUsers.has(userId)) {
+            console.log(`[TRACK] Screen share stopped for ${userId}, stopping retry`);
+            return;
+          }
+          if (retryCount >= maxRetries) {
+            console.warn(`[TRACK] Max retries reached for ${userId}, video track not available`);
+            return;
+          }
+
           const newVideoTrack = stream.getVideoTracks()[0];
           if (newVideoTrack) {
             console.log(`[TRACK] Video track now available for screen share ${userId}:`, newVideoTrack.label);
@@ -2459,7 +2472,10 @@ async function createPeerConnection(userId, forceScreen = false) {
             addVideoStream(videoId, stream, userName, false, true);
             updateActiveUsers();
           } else {
-            console.log(`[TRACK] Still no video track for ${userId}, retrying...`);
+            retryCount++;
+            if (retryCount % 10 === 0) { // Log only every 10 retries to reduce spam
+              console.log(`[TRACK] Still no video track for ${userId}, retry ${retryCount}/${maxRetries}...`);
+            }
             setTimeout(checkForVideoTrack, 100);
           }
         };
