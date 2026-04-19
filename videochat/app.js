@@ -3167,6 +3167,9 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
           return;
         }
         
+        // CRITICAL: Wait for screen track to fully initialize before creating offer
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
         const offer = await newPc.createOffer();
         await newPc.setLocalDescription(offer);
         socket.emit('offer', requesterId, offer);
@@ -3183,6 +3186,7 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
           console.error(`[SCREEN] Failed to create peer connection for ${requesterId}`);
           return;
         }
+        await new Promise(resolve => setTimeout(resolve, 200));
         const offer = await newPc.createOffer();
         await newPc.setLocalDescription(offer);
         socket.emit('offer', requesterId, offer);
@@ -3599,6 +3603,18 @@ async function toggleScreen() {
             continue;
           }
           console.log(`[SCREEN] Peer connection recreated with screen track for ${userId}`);
+          
+          // CRITICAL: Wait for screen track to fully initialize before creating offer
+          // This ensures the track is included in the SDP
+          await new Promise(resolve => setTimeout(resolve, 200));
+          
+          // Verify screen track is still in the peer before creating offer
+          const senders = pc.getSenders();
+          const hasScreenTrack = senders.some(s => 
+            s.track && s.track.kind === 'video' && 
+            (s.track.label?.includes('screen') || s.track.label?.includes('window') || s.track.label?.includes('display'))
+          );
+          console.log(`[SCREEN] Peer has screen track before offer: ${hasScreenTrack}, total senders: ${senders.length}`);
           
           // Create and send offer
           const offer = await pc.createOffer();
