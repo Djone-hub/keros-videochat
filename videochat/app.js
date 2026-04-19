@@ -71,7 +71,7 @@ socket.on('connect', () => {
     socket.emit('join-room', {
       roomId: currentRoom,
       userId: socket.id,
-      name: currentUser.username
+      username: currentUser.username
     }, (response) => {
       console.log('[CONNECT] Rejoin response:', response);
       if (response && response.success) {
