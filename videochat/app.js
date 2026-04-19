@@ -2249,21 +2249,20 @@ async function createPeerConnection(userId, forceScreen = false) {
 
           // Try to play audio
           audioEl.play().then(() => {
-            console.log(`[AUDIO] Audio playing for ${userId}`);
+            console.log(`[AUDIO] Audio playing for ${userId}, volume: ${audioEl.volume}, muted: ${audioEl.muted}, paused: ${audioEl.paused}`);
           }).catch(err => {
-            console.error(`[AUDIO] Error playing audio for ${userId}:`, err.name, err.message);
+            console.error(`[AUDIO] Error playing audio for ${userId}:`, err?.name, err?.message);
             // Try with user interaction
-            audioEl.addEventListener('click', () => {
+            const playOnInteraction = () => {
               audioEl.play().then(() => {
-                console.log(`[AUDIO] Audio playing after click for ${userId}`);
+                console.log(`[AUDIO] Audio playing after interaction for ${userId}`);
               }).catch(clickErr => {
-                console.error(`[AUDIO] Error playing audio after click for ${userId}:`, clickErr);
+                console.error(`[AUDIO] Error playing audio after interaction for ${userId}:`, clickErr);
               });
-            });
-            // Also try on any user interaction with the container
-            audioContainer.addEventListener('click', () => {
-              audioEl.play().catch(e => console.error(`[AUDIO] Error playing audio on container click:`, e));
-            }, { once: true });
+            };
+            audioEl.addEventListener('click', playOnInteraction);
+            audioContainer.addEventListener('click', playOnInteraction, { once: true });
+            document.body.addEventListener('click', playOnInteraction, { once: true });
           });
         }
       }
@@ -3430,14 +3429,15 @@ async function toggleScreen() {
       console.log('[SCREEN] Screen sharing started');
     } catch (err) {
       console.error('[SCREEN] Error starting screen share:', err);
+      console.error('[SCREEN] Error details:', err?.name, err?.message, err?.stack);
 
       // Handle specific permission denied error
-      if (err.name === 'NotAllowedError' || err.message.includes('Permission denied')) {
+      if (err?.name === 'NotAllowedError' || err?.message?.includes('Permission denied')) {
         showAlertModal('❌ Вы отказали в разрешении на демонстрацию экрана. Нажмите кнопку "Экран" снова и разрешите доступ.', 'error');
-      } else if (err.name === 'NotFoundError') {
+      } else if (err?.name === 'NotFoundError') {
         showAlertModal('❌ Не выбран экран для демонстрации. Пожалуйста, выберите экран или окно.', 'error');
       } else {
-        showAlertModal('Ошибка при запуске демонстрации: ' + err.message, 'error');
+        showAlertModal('Ошибка при запуске демонстрации: ' + (err?.message || err), 'error');
       }
     }
   }
