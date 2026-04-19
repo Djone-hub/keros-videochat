@@ -2891,16 +2891,23 @@ function refreshChannelVideos() {
 }
 
 // Handle remote user screen share started
-socket.on('screen-share-started', (userId) => {
+socket.on('screen-share-started', (userId, callback) => {
+  console.log('[SCREEN] RECEIVED screen-share-started for userId:', userId);
   const user = activeUsers.get(userId);
   const userName = user ? user.name : 'Участник';
   addLogEntry('Демонстрация', `${userName} начал демонстрацию экрана`);
 
   // Track this user as screen sharing
   screenShareUsers.add(userId);
+  console.log('[SCREEN] Added to screenShareUsers:', userId, 'size now:', screenShareUsers.size);
 
   // Screen container will be created automatically when screen track arrives via ontrack
   console.log('[SCREEN] User started screen share, waiting for screen track:', userId);
+  
+  // Send ACK if callback provided (server-side emit with ACK)
+  if (typeof callback === 'function') {
+    callback({ received: true });
+  }
 });
 
 // Handle remote user screen share stopped
@@ -3468,7 +3475,13 @@ async function toggleScreen() {
 
       isScreenSharing = true;
       localStorage.setItem('keroschat_screen_sharing', 'true');
-      socket.emit('screen-share-started');
+      socket.emit('screen-share-started', (ack) => {
+        if (ack && ack.success) {
+          console.log('[SCREEN] Server confirmed screen-share-started broadcast to', ack.recipientCount, 'recipients');
+        } else {
+          console.warn('[SCREEN] No ACK for screen-share-started, event may not have been delivered');
+        }
+      });
 
       const btn = document.getElementById('screenBtn');
       if (btn) {

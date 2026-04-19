@@ -1491,7 +1491,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('screen-share-started', () => {
+  socket.on('screen-share-started', (callback) => {
     // Track this user as screen sharing
     if (socket.roomId && rooms.has(socket.roomId)) {
       const room = rooms.get(socket.roomId);
@@ -1507,8 +1507,24 @@ io.on('connection', (socket) => {
       });
       room.screenSharingUsers.add(socket.id);
       console.log(`[SCREEN] User ${socket.userName} started screen share in room ${socket.roomId}`);
+      
+      // Get recipient count for ACK
+      const roomSockets = io.sockets.adapter.rooms.get(socket.roomId);
+      const recipientCount = roomSockets ? roomSockets.size - 1 : 0; // Exclude sender
+      console.log(`[SCREEN] Broadcasting screen-share-started to ${recipientCount} recipients in room ${socket.roomId}`);
+      
+      socket.to(socket.roomId).emit('screen-share-started', socket.id);
+      
+      // Send ACK to sender
+      if (typeof callback === 'function') {
+        callback({ success: true, recipientCount });
+      }
+    } else {
+      console.error(`[SCREEN] Cannot broadcast screen-share-started: socket.roomId=${socket.roomId}, rooms.has=${rooms.has(socket.roomId)}`);
+      if (typeof callback === 'function') {
+        callback({ success: false, error: 'Not in a room' });
+      }
     }
-    socket.to(socket.roomId).emit('screen-share-started', socket.id);
   });
 
   socket.on('screen-share-stopped', () => {
