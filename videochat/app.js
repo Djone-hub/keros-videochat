@@ -3056,7 +3056,7 @@ function refreshChannelVideos() {
 }
 
 // Handle remote user screen share started
-socket.on('screen-share-started', (userId, callback) => {
+socket.on('screen-share-started', async (userId, callback) => {
   console.log('[SCREEN] RECEIVED screen-share-started for userId:', userId);
   const user = activeUsers.get(userId);
   const userName = user ? user.name : 'Участник';
@@ -3065,6 +3065,24 @@ socket.on('screen-share-started', (userId, callback) => {
   // Track this user as screen sharing
   screenShareUsers.add(userId);
   console.log('[SCREEN] Added to screenShareUsers:', userId, 'size now:', screenShareUsers.size);
+
+  // CRITICAL: Close old peer and create new one to handle screen share properly
+  // This ensures proper SDP negotiation for the new screen track
+  if (peers.has(userId)) {
+    console.log(`[SCREEN] Closing old peer for ${userId} due to screen share start`);
+    const oldPc = peers.get(userId);
+    if (oldPc) oldPc.close();
+    peers.delete(userId);
+    
+    // Create new peer connection (without screen track - we'll receive screen from remote)
+    console.log(`[SCREEN] Creating new peer connection for ${userId}`);
+    const newPc = await createPeerConnection(userId, false);
+    if (newPc) {
+      console.log(`[SCREEN] New peer created for ${userId}, sending renegotiation request`);
+      // Request sharer to renegotiate with screen track
+      socket.emit('request-screen-renegotiation', userId);
+    }
+  }
 
   // Screen container will be created automatically when screen track arrives via ontrack
   console.log('[SCREEN] User started screen share, waiting for screen track:', userId);
@@ -3577,17 +3595,12 @@ async function toggleScreen() {
         }
       };
 
-      // CRITICAL: Recreate all peer connections with screen track
-      // This ensures consistent SDP m-line order and avoids renegotiation errors
-      console.log(`[SCREEN] Recreating ${peers.size} peer connections with screen track`);
-      console.log(`[SCREEN] Active users:`, Array.from(activeUsers.keys()));
-      
-      // First, notify all users that we're starting screen share
-      // This gives them time to prepare for the new peer connection
+      // CRITICAL: First notify all users that we're starting screen share
+      // Remote users will close their peers and request renegotiation
       socket.emit('screen-share-started');
       console.log('[SCREEN] Sent screen-share-started notification');
       
-      // Close all existing peers - we'll recreate them with screen track
+      // Close all existing peers - remote users will request renegotiation when ready
       const peerIds = Array.from(peers.keys());
       for (const peerId of peerIds) {
         console.log(`[SCREEN] Closing old peer connection for ${peerId}`);
@@ -3596,42 +3609,9 @@ async function toggleScreen() {
         peers.delete(peerId);
       }
       
-      // Small delay to ensure remote side processes the notification
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // Recreate peer connections for all active users with screen track
-      if (activeUsers.size > 0) {
-        for (const [userId, userInfo] of activeUsers) {
-          console.log(`[SCREEN] Recreating peer connection with screen track for ${userId}`);
-          const pc = await createPeerConnection(userId, true); // forceScreen=true
-          if (!pc) {
-            console.error(`[SCREEN] Failed to create peer connection for ${userId}`);
-            continue;
-          }
-          console.log(`[SCREEN] Peer connection recreated with screen track for ${userId}`);
-          
-          // CRITICAL: Wait for screen track to fully initialize before creating offer
-          // This ensures the track is included in the SDP
-          await new Promise(resolve => setTimeout(resolve, 200));
-          
-          // Verify screen track is still in the peer before creating offer
-          const senders = pc.getSenders();
-          const hasScreenTrack = senders.some(s => 
-            s.track && s.track.kind === 'video' && 
-            (s.track.label?.includes('screen') || s.track.label?.includes('window') || s.track.label?.includes('display'))
-          );
-          console.log(`[SCREEN] Peer has screen track before offer: ${hasScreenTrack}, total senders: ${senders.length}`);
-          
-          // Create and send offer
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          socket.emit('offer', userId, offer);
-          console.log(`[SCREEN] Offer sent to ${userId} with screen track`);
-        }
-      } else {
-        console.warn('[SCREEN] No active users. Screen share will not be visible to anyone.');
-        window.pendingScreenShare = true;
-      }
+      // Wait for remote users to request renegotiation via request-screen-renegotiation
+      // They will send this after creating new peer connections
+      console.log('[SCREEN] Closed old peers, waiting for renegotiation requests from remotes');
 
       // IMPORTANT: Use CLONE of main screen stream for local preview (same stream, one dialog)
       // We clone to avoid issues with track ended events affecting both
