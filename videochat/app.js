@@ -3082,22 +3082,14 @@ socket.on('screen-share-started', async (userId, callback) => {
   screenShareUsers.add(userId);
   console.log('[SCREEN] Added to screenShareUsers:', userId, 'size now:', screenShareUsers.size);
 
-  // CRITICAL: Close old peer and create new one to handle screen share properly
-  // This ensures proper SDP negotiation for the new screen track
+  // CRITICAL: Do NOT close peer connection here
+  // Sharer will send new offer with screen track via renegotiation
+  // We just need to wait for the offer and handle it in socket.on('offer')
+  
+  // If we have existing peer, request renegotiation to get screen track
   if (peers.has(userId)) {
-    console.log(`[SCREEN] Closing old peer for ${userId} due to screen share start`);
-    const oldPc = peers.get(userId);
-    if (oldPc) oldPc.close();
-    peers.delete(userId);
-    
-    // Create new peer connection (without screen track - we'll receive screen from remote)
-    console.log(`[SCREEN] Creating new peer connection for ${userId}`);
-    const newPc = await createPeerConnection(userId, false);
-    if (newPc) {
-      console.log(`[SCREEN] New peer created for ${userId}, sending renegotiation request`);
-      // Request sharer to renegotiate with screen track
-      socket.emit('request-screen-renegotiation', userId);
-    }
+    console.log(`[SCREEN] Existing peer found for ${userId}, requesting renegotiation`);
+    socket.emit('request-screen-renegotiation', userId);
   }
 
   // Screen container will be created automatically when screen track arrives via ontrack
