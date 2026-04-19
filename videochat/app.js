@@ -2716,8 +2716,8 @@ socket.on('room-error', (error) => {
 socket.on('user-joined', (user) => {
   console.log('[USER-JOINED] Received user-joined:', user.id, user.name);
 
-  // Play sound when someone joins (non-blocking)
-  sounds.userJoin();
+  // NOTE: Sound is played locally in joinRoomById for the joining user only
+  // Do NOT play sound here - it would play for ALL users in the room!
 
   // Skip if already connected with this exact socket.id
   if (activeUsers.has(user.id) || peers.has(user.id)) {
@@ -3299,10 +3299,22 @@ async function toggleCam() {
           localStream.addTrack(newVideoTrack);
           isCamOn = true;
 
-          // Add to all peer connections
-          peers.forEach(pc => {
-            pc.addTrack(newVideoTrack, localStream);
-          });
+          // Add to all peer connections and renegotiate
+          console.log('[CAM] Adding video track to', peers.size, 'peers and renegotiating...');
+          for (const [userId, pc] of peers) {
+            try {
+              pc.addTrack(newVideoTrack, localStream);
+              console.log(`[CAM] Added video track to peer ${userId}`);
+
+              // Renegotiate to notify remote peer about new track
+              const offer = await pc.createOffer();
+              await pc.setLocalDescription(offer);
+              socket.emit('offer', userId, offer);
+              console.log(`[CAM] Renegotiation offer sent to ${userId}`);
+            } catch (err) {
+              console.error(`[CAM] Error adding track to peer ${userId}:`, err);
+            }
+          }
 
           // Update local video display
           addVideoStream('local', localStream, currentUser.username, true, false);
