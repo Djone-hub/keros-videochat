@@ -2217,8 +2217,9 @@ async function createPeerConnection(userId, forceScreen = false) {
       console.log(`[PEER] Screen track properties: label=${screenTrack.label}, enabled=${screenTrack.enabled}`);
       // CRITICAL: Use addTransceiver instead of addTrack to ensure track is in SDP
       // This creates a dedicated m-line for the screen track
+      // Use sendrecv to allow bidirectional negotiation (remote can receive)
       pc.addTransceiver(screenTrack, {
-        direction: 'sendonly',
+        direction: 'sendrecv',
         streams: [screenStream]
       });
       console.log(`[PEER] Screen track added via addTransceiver for peer ${userId}`);
