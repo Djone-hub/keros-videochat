@@ -2215,13 +2215,13 @@ async function createPeerConnection(userId, forceScreen = false) {
     const screenTrack = screenStream ? screenStream.getVideoTracks()[0] : null;
     if (screenTrack) {
       console.log(`[PEER] Screen track properties: label=${screenTrack.label}, enabled=${screenTrack.enabled}, readyState=${screenTrack.readyState}`);
-      // CRITICAL: Use addTransceiver with sendonly to ensure screen track is in SDP
-      // addTrack doesn't guarantee the track will be in the initial offer
+      // CRITICAL: Use addTransceiver with sendrecv to ensure screen track is in SDP
+      // and allow bidirectional video (remote can send camera back)
       pc.addTransceiver(screenTrack, {
-        direction: 'sendonly',
+        direction: 'sendrecv',
         streams: [screenStream]
       });
-      console.log(`[PEER] Screen track added via addTransceiver (sendonly) for peer ${userId}`);
+      console.log(`[PEER] Screen track added via addTransceiver (sendrecv) for peer ${userId}`);
     } else if (forceScreen) {
       console.warn(`[PEER] forceScreen=true but no screenStream available!`);
     }
