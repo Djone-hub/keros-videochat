@@ -3108,34 +3108,46 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
     screenShareUsers.add(requesterId);
     console.log('[SCREEN] Added requester to screenShareUsers:', requesterId, 'size:', screenShareUsers.size);
     
-    // Close and remove old peer connection
+    // CRITICAL: Do NOT close the existing peer connection - this breaks audio!
+    // Instead, add screen track to existing peer and renegotiate
     if (peers.has(requesterId)) {
-      console.log(`[SCREEN] Closing old peer connection for requester: ${requesterId}`);
+      console.log(`[SCREEN] Using existing peer connection for ${requesterId}, adding screen track`);
       const pc = peers.get(requesterId);
-      pc.close();
-      peers.delete(requesterId);
-      removeVideoStream(requesterId);
-    }
-    
-    // Wait a bit for the old peer connection to close
-    setTimeout(async () => {
+      
       try {
-        console.log(`[SCREEN] Creating new peer connection with screen track for ${requesterId}`);
-        const newPc = await createPeerConnection(requesterId);
+        // Add screen track to existing peer connection
+        const screenTrack = screenStream.getVideoTracks()[0];
+        if (screenTrack) {
+          console.log(`[SCREEN] Adding screen track to existing peer ${requesterId}`);
+          pc.addTrack(screenTrack, screenStream);
+          console.log(`[SCREEN] Screen track added, renegotiating...`);
+          
+          // Create new offer to trigger renegotiation
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socket.emit('offer', requesterId, offer);
+          console.log(`[SCREEN] Renegotiation offer sent to ${requesterId}`);
+        }
+      } catch (e) {
+        console.error('[SCREEN] Error adding screen track to existing peer:', e);
+      }
+    } else {
+      // No existing peer - create new one (initial connection case)
+      console.log(`[SCREEN] No existing peer for ${requesterId}, creating new peer with screen track`);
+      try {
+        const newPc = await createPeerConnection(requesterId, true); // forceScreen=true
         if (!newPc) {
           console.error(`[SCREEN] Failed to create peer connection for ${requesterId}`);
           return;
         }
-        // Wait for screen track to be ready before creating offer
-        await new Promise(resolve => setTimeout(resolve, 1000));
         const offer = await newPc.createOffer();
         await newPc.setLocalDescription(offer);
         socket.emit('offer', requesterId, offer);
-        console.log(`[SCREEN] Peer connection created with screen track for ${requesterId}`);
+        console.log(`[SCREEN] New peer created with screen track for ${requesterId}`);
       } catch (e) {
         console.error('[SCREEN] Error creating peer connection:', e);
       }
-    }, 100);
+    }
   } else {
     console.log('[SCREEN] Not screen sharing, ignoring renegotiation request');
   }
