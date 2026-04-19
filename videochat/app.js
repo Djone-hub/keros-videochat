@@ -3118,11 +3118,19 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
         // Add screen track to existing peer connection
         const screenTrack = screenStream.getVideoTracks()[0];
         if (screenTrack) {
-          console.log(`[SCREEN] Adding screen track to existing peer ${requesterId}`);
-          pc.addTrack(screenTrack, screenStream);
-          console.log(`[SCREEN] Screen track added, renegotiating...`);
+          // Check if this track is already added to avoid duplicate error
+          const existingSenders = pc.getSenders();
+          const alreadyAdded = existingSenders.some(s => s.track && s.track.id === screenTrack.id);
           
-          // Create new offer to trigger renegotiation
+          if (alreadyAdded) {
+            console.log(`[SCREEN] Screen track already added to peer ${requesterId}, skipping addTrack`);
+          } else {
+            console.log(`[SCREEN] Adding screen track to existing peer ${requesterId}`);
+            pc.addTrack(screenTrack, screenStream);
+            console.log(`[SCREEN] Screen track added, renegotiating...`);
+          }
+          
+          // Create new offer to trigger renegotiation (even if track already added)
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
           socket.emit('offer', requesterId, offer);
