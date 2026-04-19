@@ -2550,6 +2550,21 @@ async function createPeerConnection(userId, forceScreen = false) {
   pc.onconnectionstatechange = () => {
     console.log(`[ICE] Peer connection state for ${userId}:`, pc.connectionState);
     if (pc.connectionState === 'disconnected') {
+      console.warn(`[ICE] Peer ${userId} disconnected - waiting 5 seconds before cleanup to allow reconnection`);
+      // Don't delete immediately - give time for reconnection
+      setTimeout(() => {
+        // Check if still disconnected
+        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+          console.log(`[ICE] Peer ${userId} still disconnected after timeout, cleaning up`);
+          removeVideoStream(userId);
+          peers.delete(userId);
+          updateActiveUsers();
+        } else {
+          console.log(`[ICE] Peer ${userId} reconnected, not cleaning up`);
+        }
+      }, 5000);
+    } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+      console.warn(`[ICE] Peer ${userId} ${pc.connectionState}, removing`);
       removeVideoStream(userId);
       peers.delete(userId);
       updateActiveUsers();
