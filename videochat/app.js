@@ -2249,6 +2249,14 @@ async function createPeerConnection(userId, forceScreen = false) {
     }
   }
   console.log(`[PEER] Total tracks added to peer ${userId}`);
+  
+  // Log all senders to verify tracks are in peer connection
+  const senders = pc.getSenders();
+  console.log(`[PEER] Peer ${userId} has ${senders.length} senders:`, senders.map(s => ({
+    trackKind: s.track?.kind,
+    trackLabel: s.track?.label,
+    trackEnabled: s.track?.enabled
+  })));
 
   pc.ontrack = (e) => {
     const stream = e.streams[0];
