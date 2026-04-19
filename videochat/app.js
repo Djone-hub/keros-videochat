@@ -3324,45 +3324,32 @@ async function toggleScreen() {
         }
       };
 
-      // Close and recreate all peer connections with screen track (reliable approach)
-      console.log(`[SCREEN] Recreating ${peers.size} peer connections with screen track`);
-      const peerIds = Array.from(peers.keys());
+      // Add screen track to existing peer connections (don't recreate - more reliable)
+      console.log(`[SCREEN] Adding screen track to ${peers.size} peer connections`);
       
-      // Close existing peer connections
-      peers.forEach((pc, peerId) => {
-        pc.close();
-        peers.delete(peerId);
-        removeVideoStream(peerId);
+      if (peers.size === 0) {
+        console.warn('[SCREEN] No peers available yet. Screen share started but no one will see it until someone joins.');
+      }
+      
+      // Add screen track to all existing peer connections
+      peers.forEach(async (pc, peerId) => {
+        try {
+          console.log(`[SCREEN] Adding screen track to peer ${peerId}`);
+          pc.addTrack(screenTrack, screenStream);
+          
+          // Renegotiate to notify remote peer about new track
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socket.emit('offer', peerId, offer);
+          console.log(`[SCREEN] Screen track added to peer ${peerId}, renegotiation sent`);
+        } catch (err) {
+          console.error(`[SCREEN] Error adding screen track to peer ${peerId}:`, err);
+        }
       });
-      console.log('[SCREEN] All peer connections closed');
-
-      // Notify all users to recreate their peer connections
+      
+      // Notify all users to request renegotiation if needed
       socket.emit('screen-share-renegotiate-request', { screenSharerId: socket.id });
       console.log('[SCREEN] Sent screen-share-renegotiate-request to all users');
-
-      // Wait a bit and recreate peer connections with screen track
-      setTimeout(async () => {
-        for (const peerId of peerIds) {
-          try {
-            const pc = await createPeerConnection(peerId);
-            if (!pc) {
-              console.error(`[SCREEN] Failed to create peer connection for ${peerId}`);
-              return;
-            }
-            // Wait for screen track to be ready before creating offer (increased to 1000ms)
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const offer = await pc.createOffer();
-            console.log(`[SCREEN] Offer created for ${peerId}, type: ${offer.type}`);
-            console.log(`[SCREEN] Offer SDP (first 4000 chars):`, offer.sdp.substring(0, 4000));
-            await pc.setLocalDescription(offer);
-            socket.emit('offer', peerId, offer);
-            console.log(`[SCREEN] Peer connection recreated for ${peerId} with screen track`);
-          } catch (err) {
-            console.error(`[SCREEN] Error recreating peer for ${peerId}:`, err);
-          }
-        }
-        console.log('[SCREEN] All peer connections recreated');
-      }, 100);
 
       // Replace local container avatar with screen preview (instead of removing container)
       const localContainer = document.getElementById('video-local');
