@@ -2215,14 +2215,9 @@ async function createPeerConnection(userId, forceScreen = false) {
     const screenTrack = screenStream ? screenStream.getVideoTracks()[0] : null;
     if (screenTrack) {
       console.log(`[PEER] Screen track properties: label=${screenTrack.label}, enabled=${screenTrack.enabled}`);
-      // CRITICAL: Use addTransceiver instead of addTrack to ensure track is in SDP
-      // This creates a dedicated m-line for the screen track
-      // Use sendrecv to allow bidirectional negotiation (remote can receive)
-      pc.addTransceiver(screenTrack, {
-        direction: 'sendrecv',
-        streams: [screenStream]
-      });
-      console.log(`[PEER] Screen track added via addTransceiver for peer ${userId}`);
+      // Use addTrack for screen track (same as audio/camera tracks)
+      pc.addTrack(screenTrack, screenStream);
+      console.log(`[PEER] Screen track added via addTrack for peer ${userId}`);
     } else if (forceScreen) {
       console.warn(`[PEER] forceScreen=true but no screenStream available!`);
     }
@@ -3595,12 +3590,16 @@ async function toggleScreen() {
         }
       };
 
-      // CRITICAL: First notify all users that we're starting screen share
-      // Remote users will close their peers and request renegotiation
+      // CRITICAL: Recreate all peer connections with screen track
+      // This ensures consistent SDP m-line order and avoids renegotiation errors
+      console.log(`[SCREEN] Recreating ${peers.size} peer connections with screen track`);
+      console.log(`[SCREEN] Active users:`, Array.from(activeUsers.keys()));
+      
+      // First, notify all users that we're starting screen share
       socket.emit('screen-share-started');
       console.log('[SCREEN] Sent screen-share-started notification');
       
-      // Close all existing peers - remote users will request renegotiation when ready
+      // Close all existing peers - we'll recreate them with screen track
       const peerIds = Array.from(peers.keys());
       for (const peerId of peerIds) {
         console.log(`[SCREEN] Closing old peer connection for ${peerId}`);
@@ -3609,9 +3608,48 @@ async function toggleScreen() {
         peers.delete(peerId);
       }
       
-      // Wait for remote users to request renegotiation via request-screen-renegotiation
-      // They will send this after creating new peer connections
-      console.log('[SCREEN] Closed old peers, waiting for renegotiation requests from remotes');
+      // Small delay to ensure clean state
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Recreate peer connections for all active users with screen track
+      if (activeUsers.size > 0) {
+        for (const [userId, userInfo] of activeUsers) {
+          console.log(`[SCREEN] Recreating peer connection with screen track for ${userId}`);
+          const pc = await createPeerConnection(userId, true); // forceScreen=true
+          if (!pc) {
+            console.error(`[SCREEN] Failed to create peer connection for ${userId}`);
+            continue;
+          }
+          console.log(`[SCREEN] Peer connection recreated with screen track for ${userId}`);
+          
+          // CRITICAL: Wait for screen track to fully initialize before creating offer
+          await new Promise(resolve => setTimeout(resolve, 200));
+          
+          // Verify screen track is in the peer before creating offer
+          const senders = pc.getSenders();
+          const hasScreenTrack = senders.some(s => 
+            s.track && s.track.kind === 'video' && 
+            (s.track.label?.includes('screen') || s.track.label?.includes('window') || s.track.label?.includes('display'))
+          );
+          console.log(`[SCREEN] Peer has screen track before offer: ${hasScreenTrack}, total senders: ${senders.length}`);
+          
+          // Create and send offer
+          const offer = await pc.createOffer();
+          
+          // Log SDP to debug
+          console.log(`[SCREEN] Created offer SDP for ${userId}:`, offer.sdp.substring(0, 500));
+          const hasVideoInSDP = offer.sdp.includes('m=video');
+          const videoCount = (offer.sdp.match(/m=video/g) || []).length;
+          console.log(`[SCREEN] SDP has video section: ${hasVideoInSDP}, video m-lines: ${videoCount}`);
+          
+          await pc.setLocalDescription(offer);
+          socket.emit('offer', userId, offer);
+          console.log(`[SCREEN] Offer sent to ${userId} with screen track`);
+        }
+      } else {
+        console.warn('[SCREEN] No active users. Screen share will not be visible to anyone.');
+        window.pendingScreenShare = true;
+      }
 
       // IMPORTANT: Use CLONE of main screen stream for local preview (same stream, one dialog)
       // We clone to avoid issues with track ended events affecting both
