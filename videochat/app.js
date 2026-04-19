@@ -2562,6 +2562,9 @@ async function createPeerConnection(userId, forceScreen = false) {
       }, 5000);
     } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
       console.warn(`[ICE] Peer ${userId} ${pc.connectionState}, removing`);
+      console.error(`[ICE] DEBUG: Peer failed - signalingState: ${pc.signalingState}, iceConnectionState: ${pc.iceConnectionState}`);
+      console.error(`[ICE] DEBUG: Local description:`, pc.localDescription?.sdp?.substring(0, 200));
+      console.error(`[ICE] DEBUG: Remote description:`, pc.remoteDescription?.sdp?.substring(0, 200));
       removeVideoStream(userId);
       peers.delete(userId);
       updateActiveUsers();
