@@ -3542,17 +3542,13 @@ async function toggleScreen() {
         console.warn('[SCREEN] No peers but active users exist! Recreating peer connections...');
         for (const [userId, userInfo] of activeUsers) {
           console.log(`[SCREEN] Recreating peer connection for ${userId}`);
-          const pc = createPeerConnection(userId);
-          // Add audio track first
-          if (localStream && localStream.getAudioTracks().length > 0) {
-            localStream.getAudioTracks().forEach(track => {
-              pc.addTrack(track, localStream);
-              console.log(`[SCREEN] Added audio track to recreated peer ${userId}`);
-            });
+          const pc = await createPeerConnection(userId);
+          if (!pc) {
+            console.error(`[SCREEN] Failed to create peer connection for ${userId}`);
+            continue;
           }
-          // Then add screen track
-          pc.addTrack(screenTrack, screenStream);
-          console.log(`[SCREEN] Added screen track to recreated peer ${userId}`);
+          // createPeerConnection already adds audio and screen tracks, just renegotiate
+          console.log(`[SCREEN] Peer connection recreated for ${userId}`);
           
           // Create and send offer
           const offer = await pc.createOffer();
