@@ -3512,14 +3512,38 @@ async function toggleScreen() {
         }
       };
 
-      // Add screen track to existing peer connections (don't recreate - more reliable)
+      // Add screen track to existing peer connections
       console.log(`[SCREEN] Adding screen track to ${peers.size} peer connections`);
+      console.log(`[SCREEN] Active users:`, Array.from(activeUsers.keys()));
       
-      if (peers.size === 0) {
-        console.warn('[SCREEN] No peers available yet. Screen share started but no one will see it until someone joins.');
+      // CRITICAL: If no peers but there are active users, recreate peer connections
+      if (peers.size === 0 && activeUsers.size > 0) {
+        console.warn('[SCREEN] No peers but active users exist! Recreating peer connections...');
+        for (const [userId, userInfo] of activeUsers) {
+          console.log(`[SCREEN] Recreating peer connection for ${userId}`);
+          const pc = createPeerConnection(userId);
+          // Add audio track first
+          if (localStream && localStream.getAudioTracks().length > 0) {
+            localStream.getAudioTracks().forEach(track => {
+              pc.addTrack(track, localStream);
+              console.log(`[SCREEN] Added audio track to recreated peer ${userId}`);
+            });
+          }
+          // Then add screen track
+          pc.addTrack(screenTrack, screenStream);
+          console.log(`[SCREEN] Added screen track to recreated peer ${userId}`);
+          
+          // Create and send offer
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socket.emit('offer', userId, offer);
+          console.log(`[SCREEN] Offer sent to recreated peer ${userId}`);
+        }
+      } else if (peers.size === 0) {
+        console.warn('[SCREEN] No peers and no active users. Screen share will not be visible to anyone.');
       }
       
-      // Function to add screen track to a peer
+      // Function to add screen track to existing peer
       const addScreenTrackToPeer = async (pc, peerId) => {
         try {
           console.log(`[SCREEN] Adding screen track to peer ${peerId}`);
@@ -3535,11 +3559,11 @@ async function toggleScreen() {
         }
       };
       
-      // Add to existing peers
+      // Add to existing peers (if any left)
       peers.forEach(addScreenTrackToPeer);
       
       // Store pending screen share for future peers
-      if (peers.size === 0) {
+      if (peers.size === 0 && activeUsers.size === 0) {
         console.log('[SCREEN] No peers yet, storing pending screen share');
         window.pendingScreenShare = true;
       }
