@@ -1883,6 +1883,22 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     // Ensure video plays
     video.play().catch(e => {});
 
+    // Log video dimensions when loaded (important for debugging screen share)
+    video.addEventListener('loadeddata', () => {
+      console.log(`[VIDEO] Video loaded for ${id}: ${video.videoWidth}x${video.videoHeight}, readyState: ${video.readyState}`);
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        console.error(`[VIDEO] CRITICAL: Video has 0x0 dimensions for ${id}!`);
+      }
+    });
+
+    // For screen share, ensure it's visible
+    if (isScreenShare) {
+      video.style.width = '100%';
+      video.style.height = '100%';
+      video.style.objectFit = 'contain';
+      console.log(`[VIDEO] Screen share video styled for ${id}`);
+    }
+
     const label = document.createElement('div');
     label.className = 'video-label';
     label.textContent = isLocal ? `${name} (Вы)` : name;
