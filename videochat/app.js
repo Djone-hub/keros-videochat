@@ -2911,6 +2911,10 @@ socket.on('channels-updated', () => {
 socket.on('offer', async (userId, offer) => {
   // Offer received
   console.log('[OFFER] Received offer from:', userId, 'type:', offer.type);
+  // Log SDP m-lines count
+  const mLines = offer.sdp.match(/m=/g)?.length || 0;
+  console.log(`[OFFER] SDP has ${mLines} m-lines`);
+  console.log(`[OFFER] SDP preview: ${offer.sdp.substring(0, 300)}...`);
   
   // Check if this is a renegotiation (peer connection exists)
   if (peers.has(userId)) {
@@ -3208,6 +3212,9 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
         try {
           await new Promise(resolve => setTimeout(resolve, 100));
           const offer = await existingPc.createOffer();
+          const mLines = offer.sdp.match(/m=/g)?.length || 0;
+          console.log(`[SCREEN] Created offer with ${mLines} m-lines for ${requesterId}`);
+          console.log(`[SCREEN] Offer SDP: ${offer.sdp.substring(0, 400)}...`);
           await existingPc.setLocalDescription(offer);
           socket.emit('offer', requesterId, offer);
           console.log(`[SCREEN] Offer sent to ${requesterId}`);
@@ -3233,6 +3240,8 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
       }
       await new Promise(resolve => setTimeout(resolve, 200));
       const offer = await newPc.createOffer();
+      const mLines = offer.sdp.match(/m=/g)?.length || 0;
+      console.log(`[SCREEN] Created offer with ${mLines} m-lines (new peer) for ${requesterId}`);
       await newPc.setLocalDescription(offer);
       socket.emit('offer', requesterId, offer);
       console.log(`[SCREEN] New peer created with screen track for ${requesterId}`);
