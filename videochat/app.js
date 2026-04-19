@@ -1974,7 +1974,33 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
     videoGrid.appendChild(container);
   } else {
     // Container exists - update it
-    const video = container.querySelector('video');
+    let video = container.querySelector('video');
+    
+    // IMPORTANT: If no video element exists but we now have video track, create it
+    if (!video && hasVideoTrack) {
+      console.log(`[VIDEO] Creating video element in existing container for ${id}`);
+      video = document.createElement('video');
+      video.srcObject = stream;
+      video.autoplay = true;
+      video.playsInline = true;
+      video.muted = isLocal;
+      
+      // Insert video before label
+      const label = container.querySelector('.video-label');
+      if (label) {
+        container.insertBefore(video, label);
+      } else {
+        container.appendChild(video);
+      }
+      
+      // Add loadeddata listener
+      video.addEventListener('loadeddata', () => {
+        const streamTracks = stream.getVideoTracks();
+        const hasLiveVideo = streamTracks.length > 0 && streamTracks[0].enabled && streamTracks[0].readyState === 'live';
+        console.log(`[VIDEO] Video loaded for ${id}: ${video.videoWidth}x${video.videoHeight}, hasLiveVideo: ${hasLiveVideo}`);
+      });
+    }
+    
     if (video) {
       video.srcObject = stream;
       video.play().catch(e => {});
