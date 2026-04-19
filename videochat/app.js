@@ -2195,9 +2195,18 @@ async function createPeerConnection(userId, forceScreen = false) {
 
   pc.ontrack = (e) => {
     const stream = e.streams[0];
+    const receivedTrack = e.track;
     const tracks = stream.getTracks();
     const videoTrack = tracks.find(t => t.kind === 'video');
     const audioTrack = tracks.find(t => t.kind === 'audio');
+
+    // Log individual track event
+    console.log(`[TRACK] ontrack fired for ${userId}:`, {
+      receivedTrackKind: receivedTrack?.kind,
+      receivedTrackLabel: receivedTrack?.label,
+      streamTracks: tracks.map(t => t.kind),
+      streamId: stream?.id
+    });
 
     // Log detailed track info for debugging
     const trackInfo = tracks.map(t => ({
@@ -2207,7 +2216,7 @@ async function createPeerConnection(userId, forceScreen = false) {
       enabled: t.enabled,
       muted: t.muted
     }));
-    console.log(`[TRACK] Received track from ${userId}:`, JSON.stringify(trackInfo));
+    console.log(`[TRACK] All tracks from ${userId}:`, JSON.stringify(trackInfo));
 
     // Log video track settings
     if (videoTrack) {
