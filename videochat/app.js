@@ -1885,9 +1885,11 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
 
     // Log video dimensions when loaded (important for debugging screen share)
     video.addEventListener('loadeddata', () => {
-      console.log(`[VIDEO] Video loaded for ${id}: ${video.videoWidth}x${video.videoHeight}, readyState: ${video.readyState}`);
+      const streamTracks = stream.getVideoTracks();
+      const hasVideo = streamTracks.length > 0 && streamTracks[0].enabled && streamTracks[0].readyState === 'live';
+      console.log(`[VIDEO] Video loaded for ${id}: ${video.videoWidth}x${video.videoHeight}, readyState: ${video.readyState}, hasLiveVideo: ${hasVideo}`);
       if (video.videoWidth === 0 || video.videoHeight === 0) {
-        console.error(`[VIDEO] CRITICAL: Video has 0x0 dimensions for ${id}!`);
+        console.error(`[VIDEO] CRITICAL: Video has 0x0 dimensions for ${id}! Stream has ${streamTracks.length} video tracks, enabled: ${streamTracks[0]?.enabled}, readyState: ${streamTracks[0]?.readyState}`);
       }
     });
 
@@ -2324,6 +2326,24 @@ async function createPeerConnection(userId, forceScreen = false) {
           addLogEntry('Демонстрация', `${userName} остановил демонстрацию экрана`);
         }
       };
+
+      // IMPORTANT: Handle muted tracks - video might start muted and unmute later
+      if (videoTrack.muted) {
+        console.log(`[TRACK] Video track is muted for ${userId}, waiting for unmute event`);
+        videoTrack.onunmute = () => {
+          console.log(`[TRACK] Video track unmuted for ${userId}!`);
+          // Refresh the video element
+          const videoId = screenShareUsers.has(userId) ? `${userId}-screen` : userId;
+          const container = document.getElementById(`video-${videoId}`);
+          if (container) {
+            const video = container.querySelector('video');
+            if (video) {
+              video.play().catch(e => console.error(`[VIDEO] Error playing after unmute:`, e));
+              console.log(`[VIDEO] Replayed video after unmute for ${userId}`);
+            }
+          }
+        };
+      }
     }
 
     // Detect screen share - use screenShareUsers Map (set when user starts screen share)
