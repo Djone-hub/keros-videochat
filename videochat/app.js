@@ -2302,7 +2302,10 @@ async function createPeerConnection(userId, forceScreen = false) {
       };
     }
 
-    // Detect screen share by track label
+    // Detect screen share - use screenShareUsers Map (set when user starts screen share)
+    // Fallback to label/resolution detection for edge cases
+    const isScreenByUserFlag = screenShareUsers.has(userId);
+    
     const isScreenByLabel = videoTrack && (
       videoTrack.label.toLowerCase().includes('screen') ||
       videoTrack.label.toLowerCase().includes('display') ||
@@ -2315,6 +2318,8 @@ async function createPeerConnection(userId, forceScreen = false) {
     const height = settings?.height || 0;
     // Screen share typically has 16:9 or wider aspect ratio, or high resolution
     const isScreenByResolution = width >= 720 || (width > 0 && width/height > 1.3);
+    
+    console.log(`[TRACK] Screen detection inputs for ${userId}: userFlag=${isScreenByUserFlag}, label=${isScreenByLabel}, resolution=${isScreenByResolution}`);
 
     console.log(`[TRACK] Video settings for ${userId}:`, width, 'x', height, 'aspect:', width/height);
 
@@ -2324,9 +2329,25 @@ async function createPeerConnection(userId, forceScreen = false) {
         activeUsers.set(userId, { id: userId, name: userName });
       }
 
-      // Check if this is a screen track
-      const isScreenShare = isScreenByLabel || isScreenByResolution;
-      console.log(`[TRACK] Screen detection for ${userId}: label=${isScreenByLabel}, resolution=${isScreenByResolution}, FINAL=${isScreenShare}`);
+      // Check if this is a screen track - prioritize user flag (most reliable)
+      let isScreenShare = isScreenByUserFlag || isScreenByLabel || isScreenByResolution;
+      console.log(`[TRACK] Screen detection for ${userId}: userFlag=${isScreenByUserFlag}, label=${isScreenByLabel}, resolution=${isScreenByResolution}, FINAL=${isScreenShare}`);
+
+      // If not detected as screen but might be pending, check again with delay
+      if (!isScreenShare && videoTrack) {
+        setTimeout(() => {
+          const nowIsScreen = screenShareUsers.has(userId);
+          if (nowIsScreen && !document.getElementById(`video-${userId}-screen`)) {
+            console.log(`[TRACK] Late screen detection for ${userId}, moving video to screen container`);
+            // Remove regular container and recreate as screen
+            const regularContainer = document.getElementById(`video-${userId}`);
+            if (regularContainer) {
+              regularContainer.remove();
+              addVideoStream(`${userId}-screen`, stream, userName, false, true);
+            }
+          }
+        }, 500);
+      }
 
       // Use unique ID for screen share container (userId + '-screen')
       const videoId = isScreenShare ? `${userId}-screen` : userId;
@@ -2896,14 +2917,27 @@ socket.on('screen-share-stopped', (userId) => {
 
   console.log('[SCREEN] Screen share users after delete:', Array.from(screenShareUsers));
 
-  // Remove screen container only - main container will be updated via renegotiation
+  // Remove screen container - try both possible IDs
   setTimeout(() => {
+    // First try the screen-specific ID
     console.log('[SCREEN] Looking for screen container:', `video-${userId}-screen`);
-    const screenContainer = document.getElementById(`video-${userId}-screen`);
+    let screenContainer = document.getElementById(`video-${userId}-screen`);
     console.log('[SCREEN] Screen container found:', !!screenContainer);
+    
+    // If not found, try to find any video container for this user that might be screen
+    if (!screenContainer) {
+      const regularContainer = document.getElementById(`video-${userId}`);
+      if (regularContainer && regularContainer.classList.contains('screen-share')) {
+        console.log('[SCREEN] Found regular container with screen-share class');
+        screenContainer = regularContainer;
+      }
+    }
+    
     if (screenContainer) {
       screenContainer.remove();
       console.log('[SCREEN] Removed screen container for:', userId);
+    } else {
+      console.warn('[SCREEN] No screen container found to remove for:', userId);
     }
   }, 500);
 });
