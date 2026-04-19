@@ -2425,28 +2425,66 @@ async function createPeerConnection(userId, forceScreen = false) {
         console.log(`[TRACK] Screen share detected but no video track yet for ${userId}, waiting...`);
         // Set up a listener on the stream for when tracks are added
         let retryCount = 0;
-        const maxRetries = 50; // 5 seconds max (50 * 100ms)
+        const maxRetries = 100; // 10 seconds max (100 * 100ms)
+        let unmuteHandler = null;
 
         const checkForVideoTrack = () => {
           // Stop if screen share was stopped or max retries reached
           if (!screenShareUsers.has(userId)) {
             console.log(`[TRACK] Screen share stopped for ${userId}, stopping retry`);
+            if (unmuteHandler) {
+              const vt = stream.getVideoTracks()[0];
+              if (vt) vt.removeEventListener('unmute', unmuteHandler);
+            }
             return;
           }
           if (retryCount >= maxRetries) {
             console.warn(`[TRACK] Max retries reached for ${userId}, video track not available`);
+            if (unmuteHandler) {
+              const vt = stream.getVideoTracks()[0];
+              if (vt) vt.removeEventListener('unmute', unmuteHandler);
+            }
             return;
           }
 
           const newVideoTrack = stream.getVideoTracks()[0];
           if (newVideoTrack) {
-            console.log(`[TRACK] Video track now available for screen share ${userId}:`, newVideoTrack.label);
-            // Now add the video stream with the actual video track
-            addVideoStream(videoId, stream, userName, false, true);
-            updateActiveUsers();
+            // Check if track has valid dimensions or is unmuted
+            const settings = newVideoTrack.getSettings();
+            const hasValidDimensions = settings.width > 0 && settings.height > 0;
+            const isUnmuted = !newVideoTrack.muted;
+
+            console.log(`[TRACK] Video track found for ${userId}: muted=${newVideoTrack.muted}, dimensions=${settings.width}x${settings.height}`);
+
+            if (hasValidDimensions && isUnmuted) {
+              console.log(`[TRACK] Video track ready for screen share ${userId}: ${settings.width}x${settings.height}`);
+              if (unmuteHandler) newVideoTrack.removeEventListener('unmute', unmuteHandler);
+              addVideoStream(videoId, stream, userName, false, true);
+              updateActiveUsers();
+            } else {
+              // Track exists but not ready yet - set up unmute listener
+              if (!unmuteHandler) {
+                unmuteHandler = () => {
+                  console.log(`[TRACK] Video track unmuted for ${userId}, adding stream`);
+                  const settings = newVideoTrack.getSettings();
+                  if (settings.width > 0 && settings.height > 0) {
+                    addVideoStream(videoId, stream, userName, false, true);
+                    updateActiveUsers();
+                    newVideoTrack.removeEventListener('unmute', unmuteHandler);
+                  }
+                };
+                newVideoTrack.addEventListener('unmute', unmuteHandler);
+                console.log(`[TRACK] Set up unmute listener for ${userId}`);
+              }
+              retryCount++;
+              if (retryCount % 20 === 0) { // Log only every 20 retries to reduce spam
+                console.log(`[TRACK] Still waiting for video track ${userId}, retry ${retryCount}/${maxRetries}...`);
+              }
+              setTimeout(checkForVideoTrack, 100);
+            }
           } else {
             retryCount++;
-            if (retryCount % 10 === 0) { // Log only every 10 retries to reduce spam
+            if (retryCount % 20 === 0) {
               console.log(`[TRACK] Still no video track for ${userId}, retry ${retryCount}/${maxRetries}...`);
             }
             setTimeout(checkForVideoTrack, 100);
