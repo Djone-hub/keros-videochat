@@ -3200,9 +3200,19 @@ socket.on('active-screen-shares', (userIds) => {
   });
 });
 
+// Track pending renegotiation requests to prevent duplicates
+const pendingRenegotiations = new Set();
+
 // Handle request to renegotiate screen share (from new user)
 socket.on('request-screen-renegotiation', async (requesterId) => {
   console.log('[SCREEN] Received request-screen-renegotiation from:', requesterId);
+  
+  // Prevent duplicate renegotiation requests
+  if (pendingRenegotiations.has(requesterId)) {
+    console.log('[SCREEN] Renegotiation already in progress for:', requesterId, '- ignoring duplicate');
+    return;
+  }
+  pendingRenegotiations.add(requesterId);
   
   // Case 1: We are actively screen sharing - send offer WITH screen track
   if (isScreenSharing && screenStream) {
@@ -3281,6 +3291,12 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
   else {
     console.log('[SCREEN] Not screen sharing and no peer, ignoring renegotiation request from:', requesterId);
   }
+  
+  // Clean up pending renegotiation after a delay
+  setTimeout(() => {
+    pendingRenegotiations.delete(requesterId);
+    console.log('[SCREEN] Cleared pending renegotiation for:', requesterId);
+  }, 5000);
 });
 
 // Handle screen share renegotiate request (from screen sharer)
