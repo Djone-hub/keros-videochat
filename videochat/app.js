@@ -2923,8 +2923,18 @@ socket.on('offer', async (userId, offer) => {
     console.log('[OFFER] Existing peer connection found, senders:', existingSenders.map(s => ({ kind: s.track?.kind, label: s.track?.label })));
     console.log('[OFFER] Peer connection state:', existingPc.signalingState);
 
-    // Use existing peer connection for renegotiation
-    console.log('[OFFER] Using existing peer connection for renegotiation');
+    // Check if offer has video m-line but peer has no video track - need to recreate
+    const hasVideoMline = offer.sdp.includes('m=video');
+    const hasVideoTrack = existingSenders.some(s => s.track?.kind === 'video');
+    
+    if (hasVideoMline && !hasVideoTrack) {
+      console.log('[OFFER] Offer has video m-line but peer has no video track - recreating peer');
+      existingPc.close();
+      peers.delete(userId);
+      // Fall through to create new peer below
+    } else {
+      // Use existing peer connection for renegotiation
+      console.log('[OFFER] Using existing peer connection for renegotiation');
     try {
       await existingPc.setRemoteDescription(offer);
       console.log('[OFFER] Remote description set');
@@ -2940,6 +2950,7 @@ socket.on('offer', async (userId, offer) => {
       console.error('[OFFER] Peer connection state:', existingPc.signalingState);
       // Don't recreate peer connection - just log the error
       // Recreating breaks ICE connection and causes audio to be muted
+    }
     }
   } else {
     // Create new peer connection (initial connection)
