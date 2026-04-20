@@ -1435,6 +1435,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('offer', (targetId, offer) => {
+    const mLines = offer.sdp?.match(/m=/g)?.length || 0;
+    console.log(`[SERVER] Forwarding offer from ${socket.id} to ${targetId}, m-lines: ${mLines}`);
     socket.to(targetId).emit('offer', socket.id, offer);
   });
 
