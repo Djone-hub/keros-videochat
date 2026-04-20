@@ -2815,7 +2815,11 @@ socket.on('user-joined', (user) => {
         console.error(`[USER-JOINED] Failed to create peer connection for ${user.id}`);
         return;
       }
+      // CRITICAL: Wait for WebRTC to process added tracks before creating offer
+      await new Promise(resolve => setTimeout(resolve, 100));
       const offer = await pc.createOffer();
+      const mLines = offer.sdp.match(/m=/g)?.length || 0;
+      console.log(`[USER-JOINED] Created offer with ${mLines} m-lines for ${user.id}`);
       await pc.setLocalDescription(offer);
       socket.emit('offer', user.id, offer);
       console.log('[USER-JOINED] Offer sent to:', user.id);
