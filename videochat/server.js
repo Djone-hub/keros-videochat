@@ -1648,7 +1648,8 @@ io.on('connection', (socket) => {
   // Ping handler for latency measurement
   socket.on('ping-check', (callback) => {
     if (typeof callback === 'function') {
-      callback(Date.now());
+      // Socket.IO v3+ with .timeout() expects (err, response) format
+      callback(null, Date.now());
     }
   });
 
