@@ -495,18 +495,24 @@ let screenShareUsers = new Set(); // Track which remote users are screen sharing
 
 // Ping measurement function
 function measurePing() {
-  if (!socketConnected) return;
+  if (!socketConnected) {
+    console.log('[PING] Socket not connected, skipping');
+    return;
+  }
   
   const startTime = Date.now();
+  console.log('[PING] Sending ping-check...');
   
-  socket.timeout(5000).emit('ping-check', (err, serverTime) => {
+  socket.emit('ping-check', (err, serverTime) => {
     if (err) {
+      console.log('[PING] Error:', err);
       currentPing = 0;
       updatePingDisplay();
       return;
     }
     const endTime = Date.now();
     currentPing = endTime - startTime;
+    console.log(`[PING] Success: ${currentPing}ms (serverTime: ${serverTime})`);
     updatePingDisplay();
   });
 }
