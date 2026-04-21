@@ -2969,6 +2969,14 @@ socket.on('offer', async (userId, offer) => {
         socket.emit('answer', userId, answer);
         console.log('[OFFER] Recreated peer and sent answer to:', userId);
         
+        // CRITICAL: After recreating peer, request screen renegotiation if we expect video
+        if (hasVideoMline) {
+          console.log(`[OFFER] Requesting screen renegotiation after peer recreation for ${userId}`);
+          setTimeout(() => {
+            socket.emit('request-screen-renegotiation', userId);
+          }, 500);
+        }
+        
         pc.ontrack = (e) => {
           const stream = e.streams[0];
           const videoTrack = stream.getTracks().find(t => t.kind === 'video');
