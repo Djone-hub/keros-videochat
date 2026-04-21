@@ -1172,6 +1172,13 @@ io.on('connection', (socket) => {
   socket.on('user-registered', async ({ username, avatar, isOnline, password }) => {
     console.log(`[REGISTER] User: ${username}, online: ${isOnline}, hasPassword: ${!!password}, passwordLength: ${password?.length || 0}`);
 
+    // BLOCK: Only one KEROS allowed - if KEROS exists, nobody else can register as KEROS
+    if (username === 'KEROS' && registeredUsers.has('KEROS')) {
+      console.log(`[REGISTER] BLOCKED: Attempt to register as KEROS but KEROS already exists`);
+      socket.emit('registration-blocked', { reason: 'Username KEROS is reserved' });
+      return;
+    }
+
     // Add to global registry with password
     const existingUser = registeredUsers.get(username);
     if (existingUser) {
