@@ -3107,7 +3107,17 @@ function refreshChannelVideos() {
 }
 
 // Handle remote user screen share started
+const processedScreenShares = new Set();
+
 socket.on('screen-share-started', async (userId, callback) => {
+  // Prevent duplicate processing
+  if (processedScreenShares.has(userId)) {
+    console.log('[SCREEN] DUPLICATE screen-share-started ignored for userId:', userId);
+    if (typeof callback === 'function') callback({ received: true, duplicate: true });
+    return;
+  }
+  processedScreenShares.add(userId);
+  
   console.log('[SCREEN] RECEIVED screen-share-started for userId:', userId);
   const user = activeUsers.get(userId);
   const userName = user ? user.name : 'Участник';
@@ -3155,6 +3165,7 @@ socket.on('screen-share-stopped', (userId) => {
 
   // Remove from screen share tracking
   screenShareUsers.delete(userId);
+  processedScreenShares.delete(userId);  // Allow future screen shares from this user
 
   console.log('[SCREEN] Screen share users after delete:', Array.from(screenShareUsers));
 
