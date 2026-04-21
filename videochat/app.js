@@ -1914,6 +1914,15 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
       // IMPORTANT: Never mute remote videos - user controls via volume slider
       video.muted = false;
       console.log(`[VIDEO] Video element created for ${id}, volume: ${video.volume}, muted: ${video.muted}`);
+      
+      // CRITICAL: Ensure audio plays - force play after a short delay to handle autoplay restrictions
+      setTimeout(() => {
+        video.play().then(() => {
+          console.log(`[AUDIO] Video (with audio) playing for ${id}`);
+        }).catch(e => {
+          console.warn(`[AUDIO] Autoplay blocked for ${id}, will retry on interaction:`, e.message);
+        });
+      }, 100);
 
       // Apply selected audio output device
       if (selectedAudioOutput && typeof video.setSinkId === 'function') {
@@ -2287,12 +2296,28 @@ async function createPeerConnection(userId, forceScreen = false) {
         // Add unmute listener to detect when audio starts flowing
         audioTrack.addEventListener('unmute', () => {
           console.log(`[AUDIO] Audio track UNMUTED for ${userId} - data is now flowing!`);
-          // Try to play any pending audio elements
+          
+          // Try to play audio element (for audio-only streams)
           const audioEl = document.getElementById(`audio-${userId}`);
           if (audioEl) {
+            audioEl.muted = false;
+            audioEl.volume = isSoundOn ? 0.5 : 0;
             audioEl.play().then(() => {
-              console.log(`[AUDIO] Playing audio after unmute for ${userId}`);
-            }).catch(e => console.error(`[AUDIO] Error playing after unmute:`, e));
+              console.log(`[AUDIO] Playing audio element after unmute for ${userId}`);
+            }).catch(e => console.error(`[AUDIO] Error playing audio element after unmute:`, e));
+          }
+          
+          // ALSO: For video+audio streams, ensure video element plays with audio
+          const videoContainer = document.getElementById(`video-${userId}`);
+          if (videoContainer) {
+            const video = videoContainer.querySelector('video');
+            if (video) {
+              video.muted = false;
+              video.volume = isSoundOn ? 0.5 : 0;
+              video.play().then(() => {
+                console.log(`[AUDIO] Playing video (with audio) after unmute for ${userId}`);
+              }).catch(e => console.warn(`[AUDIO] Could not play video after unmute:`, e.message));
+            }
           }
         });
         
@@ -2375,8 +2400,12 @@ async function createPeerConnection(userId, forceScreen = false) {
           if (container) {
             const video = container.querySelector('video');
             if (video) {
-              video.play().catch(e => console.error(`[VIDEO] Error playing after unmute:`, e));
-              console.log(`[VIDEO] Replayed video after unmute for ${userId}`);
+              // CRITICAL: Ensure audio is not muted and play
+              video.muted = false;
+              video.volume = isSoundOn ? 0.5 : 0;
+              video.play().then(() => {
+                console.log(`[VIDEO] Replayed video with audio after unmute for ${userId}`);
+              }).catch(e => console.error(`[VIDEO] Error playing after unmute:`, e));
             }
           }
         };
@@ -2474,6 +2503,12 @@ async function createPeerConnection(userId, forceScreen = false) {
               if (unmuteHandler) newVideoTrack.removeEventListener('unmute', unmuteHandler);
               addVideoStream(videoId, stream, userName, false, true);
               updateActiveUsers();
+              
+              // CRITICAL: Also ensure audio is playing if there's an audio track in this stream
+              const audioTrack = stream.getAudioTracks()[0];
+              if (audioTrack) {
+                console.log(`[AUDIO] Screen share stream also has audio track for ${userId}`);
+              }
             } else {
               // Track exists but not ready yet - set up unmute listener
               if (!unmuteHandler) {
@@ -3288,25 +3323,87 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
     // Create new peer with screen track
     console.log(`[SCREEN] Creating fresh peer with screen track for ${requesterId}`);
     try {
-      const pc = await createPeerConnection(requesterId, true); // forceScreen=true
-      if (!pc) {
-        console.error(`[SCREEN] Failed to create peer for ${requesterId}`);
-        return;
+      // CRITICAL: Don't create peer yet - we need to manually add tracks in correct order
+      // createPeerConnection with forceScreen=true adds tracks automatically, which causes issues
+      const pc = new RTCPeerConnection({
+        ...iceServers
+      });
+      
+      // Add to peers map immediately so other code can find it
+      peers.set(requesterId, pc);
+      
+      // Add audio track FIRST (always audio before video for consistent m-line order)
+      const audioTrack = localStream?.getAudioTracks()[0];
+      if (audioTrack) {
+        pc.addTrack(audioTrack, localStream);
+        console.log(`[SCREEN] Added audio track for ${requesterId}`);
       }
       
-      // Add screen track
+      // Add screen track SECOND (after audio)
       const screenTrack = screenStream?.getVideoTracks()[0];
       if (screenTrack) {
         pc.addTrack(screenTrack, screenStream);
-        console.log(`[SCREEN] Added screen track to fresh peer for ${requesterId}`);
+        console.log(`[SCREEN] Added screen track for ${requesterId}`);
       }
+      
+      // Set up ontrack handler - use same handler as regular connections
+      pc.ontrack = (e) => {
+        const stream = e.streams[0];
+        const receivedTrack = e.track;
+        const tracks = stream.getTracks();
+        const videoTrack = tracks.find(t => t.kind === 'video');
+        const audioTrack = tracks.find(t => t.kind === 'audio');
+
+        console.log(`[SCREEN-PEER] ontrack fired for ${requesterId}:`, {
+          receivedTrackKind: receivedTrack?.kind,
+          streamTracks: tracks.map(t => t.kind)
+        });
+
+        // Handle audio track
+        if (audioTrack) {
+          console.log(`[SCREEN-PEER] Received audio from ${requesterId}: enabled=${audioTrack.enabled}, muted=${audioTrack.muted}`);
+          
+          audioTrack.addEventListener('unmute', () => {
+            console.log(`[SCREEN-PEER] Audio unmuted for ${requesterId}`);
+          });
+        }
+
+        // Handle video track (screen share)
+        if (videoTrack) {
+          console.log(`[SCREEN-PEER] Received video (screen) from ${requesterId}: ${videoTrack.getSettings().width}x${videoTrack.getSettings().height}`);
+          
+          socket.emit('get-user-name', requesterId, (name) => {
+            const userName = name || 'Участник';
+            addVideoStream(`${requesterId}-screen`, stream, userName, false, true);
+            updateActiveUsers();
+          });
+          
+          videoTrack.onended = () => {
+            const screenContainer = document.getElementById(`video-${requesterId}-screen`);
+            if (screenContainer) {
+              screenContainer.remove();
+              screenShareUsers.delete(requesterId);
+            }
+          };
+        }
+      };
+      
+      // Set up ICE candidate handler
+      pc.onicecandidate = (e) => {
+        if (e.candidate) {
+          socket.emit('ice-candidate', requesterId, {
+            candidate: e.candidate.candidate,
+            sdpMid: e.candidate.sdpMid,
+            sdpMLineIndex: e.candidate.sdpMLineIndex
+          });
+        }
+      };
       
       // Create and send offer
       await new Promise(resolve => setTimeout(resolve, 100));
       const offer = await pc.createOffer();
       const mLines = offer.sdp.match(/m=/g)?.length || 0;
-      console.log(`[SCREEN] Created offer with ${mLines} m-lines (fresh peer + screen) for ${requesterId}`);
-      console.log(`[SCREEN] Offer SDP: ${offer.sdp.substring(0, 400)}...`);
+      console.log(`[SCREEN] Created offer with ${mLines} m-lines (audio+screen) for ${requesterId}`);
       await pc.setLocalDescription(offer);
       socket.emit('offer', requesterId, offer);
       console.log(`[SCREEN] Offer sent with screen track to ${requesterId}`);
