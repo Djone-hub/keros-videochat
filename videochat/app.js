@@ -2212,35 +2212,26 @@ async function createPeerConnection(userId, forceScreen = false) {
 
   console.log(`[PEER] Adding local tracks to peer connection for ${userId}, localStream tracks:`, localStream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled, muted: t.muted})));
 
-  // Add all tracks from localStream (camera + audio)
-  localStream.getTracks().forEach(track => {
-    console.log(`[PEER] Adding track: ${track.kind}, label: ${track.label}, enabled: ${track.enabled}, muted: ${track.muted}`);
-    // Ensure audio track is not muted and enabled
-    if (track.kind === 'audio') {
-      if (track.muted) {
-        console.warn(`[PEER] WARNING: Local audio track is muted! Attempting to unmute`);
-        track.enabled = true;
-      }
-      if (!track.enabled) {
-        console.warn(`[PEER] WARNING: Local audio track is disabled! Enabling`);
-        track.enabled = true;
-      }
-    }
-    pc.addTrack(track, localStream);
-  });
+  // CRITICAL: Always create transceivers in FIXED ORDER: audio first, then video
+  // This ensures m-line order is always consistent across renegotiations
+  const audioTrack = localStream.getAudioTracks()[0];
+  const videoTrack = localStream.getVideoTracks()[0];
+  const screenTrack = (isScreenSharing && screenStream) || forceScreen ? screenStream?.getVideoTracks()[0] : null;
 
-  // If screen sharing is active OR forceScreen is true, ADD screen track as well
-  if ((isScreenSharing && screenStream) || forceScreen) {
-    console.log(`[PEER] Screen sharing active OR forceScreen=true, adding screen track for peer ${userId}`);
-    const screenTrack = screenStream ? screenStream.getVideoTracks()[0] : null;
-    if (screenTrack) {
-      console.log(`[PEER] Screen track properties: label=${screenTrack.label}, enabled=${screenTrack.enabled}, readyState=${screenTrack.readyState}`);
-      // Use addTrack for screen stream - simpler and more reliable
-      pc.addTrack(screenTrack, screenStream);
-      console.log(`[PEER] Screen track added via addTrack for peer ${userId}`);
-    } else if (forceScreen) {
-      console.warn(`[PEER] forceScreen=true but no screenStream available!`);
-    }
+  // 1. Audio transceiver (always first)
+  if (audioTrack) {
+    console.log(`[PEER] Adding audio track: ${audioTrack.label}`);
+    pc.addTrack(audioTrack, localStream);
+  }
+
+  // 2. Video transceiver - camera OR screen (always second)
+  // If screen sharing, use screen track; otherwise use camera track
+  const videoToAdd = screenTrack || videoTrack;
+  if (videoToAdd) {
+    console.log(`[PEER] Adding video track: ${videoToAdd.label}, isScreen: ${!!screenTrack}`);
+    pc.addTrack(videoToAdd, screenTrack ? screenStream : localStream);
+  } else if (forceScreen) {
+    console.warn(`[PEER] forceScreen=true but no video track available!`);
   }
   console.log(`[PEER] Total tracks added to peer ${userId}`);
   
@@ -3262,29 +3253,28 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
         return;
       }
       
-      // Peer exists but no screen track - need to recreate
-      console.log(`[SCREEN] Peer exists but no screen track, recreating for ${requesterId}`);
-      existingPc.close();
-      peers.delete(requesterId);
-    }
-    
-    // Create new peer with screen track
-    console.log(`[SCREEN] Creating new peer with screen track for ${requesterId}`);
-    try {
-      const newPc = await createPeerConnection(requesterId, true); // forceScreen=true
-      if (!newPc) {
-        console.error(`[SCREEN] Failed to create peer connection for ${requesterId}`);
-        return;
+      // Peer exists but no screen track - add screen track to existing peer
+      console.log(`[SCREEN] Peer exists but no screen track, adding screen track to existing peer for ${requesterId}`);
+      try {
+        const screenTrack = screenStream?.getVideoTracks()[0];
+        if (screenTrack) {
+          existingPc.addTrack(screenTrack, screenStream);
+          console.log(`[SCREEN] Added screen track to existing peer for ${requesterId}`);
+          
+          // Create and send offer
+          await new Promise(resolve => setTimeout(resolve, 100));
+          const offer = await existingPc.createOffer();
+          const mLines = offer.sdp.match(/m=/g)?.length || 0;
+          console.log(`[SCREEN] Created offer with ${mLines} m-lines (existing peer + screen) for ${requesterId}`);
+          await existingPc.setLocalDescription(offer);
+          socket.emit('offer', requesterId, offer);
+          console.log(`[SCREEN] Offer sent with screen track to ${requesterId}`);
+        } else {
+          console.error(`[SCREEN] No screen track available to add to peer ${requesterId}`);
+        }
+      } catch (e) {
+        console.error('[SCREEN] Error adding screen track:', e);
       }
-      await new Promise(resolve => setTimeout(resolve, 200));
-      const offer = await newPc.createOffer();
-      const mLines = offer.sdp.match(/m=/g)?.length || 0;
-      console.log(`[SCREEN] Created offer with ${mLines} m-lines (new peer) for ${requesterId}`);
-      await newPc.setLocalDescription(offer);
-      socket.emit('offer', requesterId, offer);
-      console.log(`[SCREEN] New peer created with screen track for ${requesterId}`);
-    } catch (e) {
-      console.error('[SCREEN] Error creating peer connection:', e);
     }
   }
   // Case 2: We are NOT screen sharing - send offer WITHOUT screen track
