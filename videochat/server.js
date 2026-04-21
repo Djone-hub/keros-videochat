@@ -506,6 +506,7 @@ app.post('/api/login', async (req, res) => {
 app.delete('/api/users/:username', async (req, res) => {
   const username = req.params.username;
   const requester = req.headers['x-username'];
+  console.log(`[DELETE API] Requester header: '${requester}'`);
 
   // Fetch fresh data from Supabase to verify requester role
   const { data: requesterData, error: requesterError } = await supabase
@@ -513,15 +514,18 @@ app.delete('/api/users/:username', async (req, res) => {
     .select('role')
     .eq('username', requester)
     .single();
+  console.log(`[DELETE API] Requester data from DB:`, requesterData, 'Error:', requesterError);
 
   if (requesterError || !requesterData) {
     return res.status(403).json({ success: false, message: 'Requester not found' });
   }
 
   const isAdmin = requesterData.role === 'admin' || requesterData.role === 'superadmin';
+  console.log(`[DELETE API] isAdmin check: ${isAdmin}, role: ${requesterData.role}`);
 
   // Only allow deletion if requester is admin
   if (!isAdmin) {
+    console.log(`[DELETE API] REJECTED: requester ${requester} is not admin (role: ${requesterData.role})`);
     return res.status(403).json({ success: false, message: 'Only admins can delete users' });
   }
 
@@ -568,6 +572,7 @@ app.put('/api/users/:username/role', async (req, res) => {
   const username = req.params.username;
   const { role } = req.body;
   const requester = req.headers['x-username'];
+  console.log(`[ROLE API] Requester header: '${requester}', target: ${username}, new role: ${role}`);
 
   // Fetch fresh data from Supabase to verify requester role
   const { data: requesterData, error: requesterError } = await supabase
@@ -575,14 +580,17 @@ app.put('/api/users/:username/role', async (req, res) => {
     .select('role')
     .eq('username', requester)
     .single();
+  console.log(`[ROLE API] Requester data from DB:`, requesterData, 'Error:', requesterError);
 
   if (requesterError || !requesterData) {
     return res.status(403).json({ success: false, message: 'Requester not found' });
   }
 
   const isAdmin = requesterData.role === 'admin' || requesterData.role === 'superadmin';
+  console.log(`[ROLE API] isAdmin check: ${isAdmin}, role: ${requesterData.role}`);
 
   if (!isAdmin) {
+    console.log(`[ROLE API] REJECTED: requester ${requester} is not admin (role: ${requesterData.role})`);
     return res.status(403).json({ success: false, message: 'Only admins can change user roles' });
   }
 
