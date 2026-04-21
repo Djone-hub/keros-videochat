@@ -527,24 +527,24 @@ app.post('/api/login', async (req, res) => {
 
   console.log(`[LOGIN] User found in registry: ${!!user}, hasPassword: ${!!user?.password}, passwordLength=${user?.password?.length || 0}, role=${user?.role}`);
 
-  // Auto-promote KEROS to superadmin on every login
-  if (user && username === 'KEROS' && user.role !== 'superadmin') {
-    console.log(`[LOGIN] Auto-promoting KEROS to superadmin`);
-    user.role = 'superadmin';
-    registeredUsers.set(username, user);
-
-    // Update in Supabase
-    supabase
-      .from('videochat_users')
-      .update({ role: 'superadmin' })
-      .eq('username', 'KEROS')
-      .then(({ error }) => {
-        if (error) console.error('[LOGIN] Error updating KEROS role:', error);
-        else console.log('[LOGIN] KEROS role updated to superadmin in Supabase');
-      });
-  }
-
   if (user && user.password === password) {
+    // Auto-promote KEROS to superadmin ONLY after successful password verification
+    if (username === 'KEROS' && user.role !== 'superadmin') {
+      console.log(`[LOGIN] Auto-promoting KEROS to superadmin (password verified)`);
+      user.role = 'superadmin';
+      registeredUsers.set(username, user);
+
+      // Update in Supabase
+      supabase
+        .from('videochat_users')
+        .update({ role: 'superadmin' })
+        .eq('username', 'KEROS')
+        .then(({ error }) => {
+          if (error) console.error('[LOGIN] Error updating KEROS role:', error);
+          else console.log('[LOGIN] KEROS role updated to superadmin in Supabase');
+        });
+    }
+
     res.json({ success: true, user: { username: user.username, name: user.name, avatar: user.avatar, role: user.role || 'user' } });
   } else {
     console.log(`[LOGIN] FAILED: ${username} - user not found or wrong password`);
