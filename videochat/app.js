@@ -649,6 +649,39 @@ function showPromptModal(message, defaultValue = '', onConfirm) {
 // ========== SOUND SYSTEM ==========
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
+// Mobile interaction handler - unlocks audio on first touch/click
+let audioUnlocked = false;
+function unlockAudioOnMobile() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  
+  console.log('[MOBILE] User interaction detected - unlocking audio...');
+  
+  // Resume audio context
+  if (audioContext.state === 'suspended') {
+    audioContext.resume().then(() => {
+      console.log('[MOBILE] Audio context resumed successfully');
+    });
+  }
+  
+  // Play all paused video elements (for autoplay blocked videos)
+  document.querySelectorAll('video').forEach(video => {
+    if (video.paused && video.readyState >= 2) {
+      video.play().then(() => {
+        console.log('[MOBILE] Video unlocked for:', video.id || 'unnamed');
+      }).catch(e => {
+        console.warn('[MOBILE] Could not play video:', e.message);
+      });
+    }
+  });
+  
+  console.log('[MOBILE] Audio/video unlock attempted');
+}
+
+// Add interaction listeners for mobile autoplay unlock
+document.addEventListener('touchstart', unlockAudioOnMobile, { once: true });
+document.addEventListener('click', unlockAudioOnMobile, { once: true });
+
 async function playSoftTone(frequency, duration, type = 'sine', volume = 0.1) {
   try {
     // Resume audio context if suspended (browser autoplay policy)
