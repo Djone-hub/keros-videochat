@@ -1916,9 +1916,19 @@ function addVideoStream(id, stream, name, isLocal = false, isScreenShare = false
 
       // Apply selected audio output device
       if (selectedAudioOutput && typeof video.setSinkId === 'function') {
-        video.setSinkId(selectedAudioOutput).catch(err => {
-          console.error('[DEVICES] Error setting output device:', err);
-        });
+        // Wait for video to be ready before setting sink
+        if (video.readyState >= 2) { // HAVE_CURRENT_DATA or higher
+          video.setSinkId(selectedAudioOutput).catch(err => {
+            console.warn('[DEVICES] Error setting output device (non-critical):', err.name);
+          });
+        } else {
+          // Delay sink setting until video is ready
+          video.addEventListener('loadeddata', () => {
+            video.setSinkId(selectedAudioOutput).catch(err => {
+              console.warn('[DEVICES] Error setting output device (non-critical):', err.name);
+            });
+          }, { once: true });
+        }
       }
     }
     
@@ -2930,16 +2940,17 @@ socket.on('offer', async (userId, offer) => {
     console.log('[OFFER] Existing peer connection found, senders:', existingSenders.map(s => ({ kind: s.track?.kind, label: s.track?.label })));
     console.log('[OFFER] Peer connection state:', existingPc.signalingState);
 
-    // Check if offer has video m-line but peer has no video track - need to recreate
+    // Check if offer has video m-line but peer has no video track
     const hasVideoMline = offer.sdp.includes('m=video');
     const hasVideoTrack = existingSenders.some(s => s.track?.kind === 'video');
     
     if (hasVideoMline && !hasVideoTrack) {
-      console.log('[OFFER] Offer has video m-line but peer has no video track - recreating peer');
-      existingPc.close();
-      peers.delete(userId);
-      // Fall through to create new peer below
-    } else {
+      console.log('[OFFER] Offer has video m-line but peer has no video sender - remote is sharing screen, we will receive video via ontrack');
+      // DON'T recreate peer - just process the offer. Video will arrive via ontrack.
+      // Recreating breaks ICE and causes connection failure.
+    }
+    
+    // Use existing peer for renegotiation (or first-time answer if we were waiting)
       // Use existing peer connection for renegotiation
       console.log('[OFFER] Using existing peer connection for renegotiation');
     try {
@@ -2957,7 +2968,6 @@ socket.on('offer', async (userId, offer) => {
       console.error('[OFFER] Peer connection state:', existingPc.signalingState);
       // Don't recreate peer connection - just log the error
       // Recreating breaks ICE connection and causes audio to be muted
-    }
     }
   } else {
     // Create new peer connection (initial connection)
