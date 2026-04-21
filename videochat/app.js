@@ -2812,9 +2812,10 @@ socket.on('user-joined', (user) => {
   
   if (myId < otherId && !peers.has(user.id)) {
     console.log('[USER-JOINED] Our ID is smaller, creating peer and sending offer to:', user.id);
-    // CRITICAL: If we're screen sharing, create peer with screen track for new user
-    const forceScreenForNewUser = isScreenSharing && screenStream;
-    console.log(`[USER-JOINED] isScreenSharing=${isScreenSharing}, screenStream=${!!screenStream}, forceScreen=${forceScreenForNewUser}`);
+    // CRITICAL: DO NOT add screen track immediately - wait for renegotiation request
+    // This prevents race conditions when new user joins during screen sharing
+    const forceScreenForNewUser = false; // isScreenSharing && screenStream;
+    console.log(`[USER-JOINED] isScreenSharing=${isScreenSharing}, screenStream=${!!screenStream}, forceScreen=${forceScreenForNewUser} (waiting for renegotiation)`);
     createPeerConnection(user.id, forceScreenForNewUser).then(async (pc) => {
       if (!pc) {
         console.error(`[USER-JOINED] Failed to create peer connection for ${user.id}`);
