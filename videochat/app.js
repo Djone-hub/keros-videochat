@@ -3335,7 +3335,36 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
       }
     }
   }
-  // Case 2: We are NOT screen sharing - send offer WITHOUT screen track
+  // Case 2: We are screen sharing but NO PEER exists - create new peer and send offer
+  else if (isScreenSharing && screenStream) {
+    console.log(`[SCREEN] No peer exists for ${requesterId}, creating new peer with screen track`);
+    try {
+      const pc = await createPeerConnection(requesterId, true); // forceScreen=true
+      if (!pc) {
+        console.error(`[SCREEN] Failed to create peer for ${requesterId}`);
+        return;
+      }
+      
+      // Add screen track to new peer
+      const screenTrack = screenStream?.getVideoTracks()[0];
+      if (screenTrack) {
+        pc.addTrack(screenTrack, screenStream);
+        console.log(`[SCREEN] Added screen track to new peer for ${requesterId}`);
+      }
+      
+      // Create and send offer
+      await new Promise(resolve => setTimeout(resolve, 100));
+      const offer = await pc.createOffer();
+      const mLines = offer.sdp.match(/m=/g)?.length || 0;
+      console.log(`[SCREEN] Created offer with ${mLines} m-lines (new peer + screen) for ${requesterId}`);
+      await pc.setLocalDescription(offer);
+      socket.emit('offer', requesterId, offer);
+      console.log(`[SCREEN] Offer sent with screen track to ${requesterId}`);
+    } catch (e) {
+      console.error('[SCREEN] Error creating new peer with screen track:', e);
+    }
+  }
+  // Case 3: We are NOT screen sharing but peer exists
   else if (peers.has(requesterId)) {
     console.log('[SCREEN] Not screen sharing but peer exists, sending offer without screen track to:', requesterId);
     try {
