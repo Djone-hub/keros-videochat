@@ -2462,6 +2462,15 @@ async function createPeerConnection(userId, forceScreen = false) {
       // Use unique ID for screen share container (userId + '-screen')
       const videoId = isScreenShare ? `${userId}-screen` : userId;
 
+      // CRITICAL: If this is screen share with video track, remove any existing audio-only container first
+      if (isScreenShare && videoTrack) {
+        const audioOnlyContainer = document.getElementById(`video-${userId}`);
+        if (audioOnlyContainer) {
+          console.log(`[TRACK] Removing audio-only container before creating screen container for ${userId}`);
+          audioOnlyContainer.remove();
+        }
+      }
+
       // IMPORTANT: For screen share, if no video tracks yet, wait for them
       if (isScreenShare && !videoTrack) {
         console.log(`[TRACK] Screen share detected but no video track yet for ${userId}, waiting...`);
@@ -2501,6 +2510,12 @@ async function createPeerConnection(userId, forceScreen = false) {
             if (hasValidDimensions && isUnmuted) {
               console.log(`[TRACK] Video track ready for screen share ${userId}: ${settings.width}x${settings.height}`);
               if (unmuteHandler) newVideoTrack.removeEventListener('unmute', unmuteHandler);
+              // Remove audio-only container before creating screen container
+              const audioOnlyContainer = document.getElementById(`video-${userId}`);
+              if (audioOnlyContainer) {
+                console.log(`[TRACK] Removing audio-only container for ${userId} before adding screen`);
+                audioOnlyContainer.remove();
+              }
               addVideoStream(videoId, stream, userName, false, true);
               updateActiveUsers();
               
@@ -2516,6 +2531,12 @@ async function createPeerConnection(userId, forceScreen = false) {
                   console.log(`[TRACK] Video track unmuted for ${userId}, adding stream`);
                   const settings = newVideoTrack.getSettings();
                   if (settings.width > 0 && settings.height > 0) {
+                    // Remove audio-only container before creating screen container
+                    const audioOnlyContainer = document.getElementById(`video-${userId}`);
+                    if (audioOnlyContainer) {
+                      console.log(`[TRACK] Removing audio-only container for ${userId} on unmute`);
+                      audioOnlyContainer.remove();
+                    }
                     addVideoStream(videoId, stream, userName, false, true);
                     updateActiveUsers();
                     newVideoTrack.removeEventListener('unmute', unmuteHandler);
@@ -3374,6 +3395,12 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
           
           socket.emit('get-user-name', requesterId, (name) => {
             const userName = name || 'Участник';
+            // Remove audio-only container before creating screen container
+            const audioOnlyContainer = document.getElementById(`video-${requesterId}`);
+            if (audioOnlyContainer) {
+              console.log(`[SCREEN-PEER] Removing audio-only container for ${requesterId}`);
+              audioOnlyContainer.remove();
+            }
             addVideoStream(`${requesterId}-screen`, stream, userName, false, true);
             updateActiveUsers();
           });
