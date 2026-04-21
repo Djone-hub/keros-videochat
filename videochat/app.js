@@ -3315,7 +3315,11 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
         (s.track.label?.includes('screen') || s.track.label?.includes('window') || s.track.label?.includes('display'))
       );
       
-      if (hasScreenTrack) {
+      // CRITICAL: Check if remote side recreated peer (bundle order mismatch)
+      // If so, we need to re-add screen track even if we think we have it
+      const remoteRecreatedPeer = existingPc.signalingState === 'have-remote-offer' && !hasScreenTrack;
+      
+      if (hasScreenTrack && !remoteRecreatedPeer) {
         // Peer already has screen track - just create and send offer
         console.log(`[SCREEN] Peer already exists with screen track for ${requesterId}, sending offer`);
         try {
@@ -3331,6 +3335,10 @@ socket.on('request-screen-renegotiation', async (requesterId) => {
           console.error('[SCREEN] Error creating offer:', e);
         }
         return;
+      }
+      
+      if (remoteRecreatedPeer) {
+        console.log(`[SCREEN] Remote peer ${requesterId} was recreated, will add screen track`);
       }
       
       // Peer exists but no screen track - add screen track to existing peer
