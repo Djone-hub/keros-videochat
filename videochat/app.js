@@ -2942,15 +2942,55 @@ socket.on('offer', async (userId, offer) => {
     const hasVideoMline = offer.sdp.includes('m=video');
     const hasVideoTrack = existingSenders.some(s => s.track?.kind === 'video');
     
-    if (hasVideoMline && !hasVideoTrack) {
-      console.log('[OFFER] Offer has video m-line but peer has no video sender - remote is sharing screen, we will receive video via ontrack');
-      // DON'T recreate peer - just process the offer. Video will arrive via ontrack.
-      // Recreating breaks ICE and causes connection failure.
+    // CRITICAL: Check for m-line order mismatch in BUNDLE
+    const bundleMatch = offer.sdp.match(/a=group:BUNDLE\s+([\d\s]+)/);
+    const currentBundle = bundleMatch ? bundleMatch[1].trim() : '';
+    const existingBundle = existingPc.bundleOrder || '';
+    
+    if (existingBundle && currentBundle && existingBundle !== currentBundle) {
+      console.log(`[OFFER] BUNDLE order mismatch! Existing: ${existingBundle}, New: ${currentBundle}. Recreating peer...`);
+      // Close existing and recreate
+      existingPc.close();
+      peers.delete(userId);
+      removeVideoStream(userId);
+      
+      // Create new peer
+      const pc = await createPeerConnection(userId);
+      if (!pc) {
+        console.error(`[OFFER] Failed to recreate peer for ${userId}`);
+        return;
+      }
+      
+      try {
+        await pc.setRemoteDescription(offer);
+        pc.bundleOrder = currentBundle; // Store bundle order
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('answer', userId, answer);
+        console.log('[OFFER] Recreated peer and sent answer to:', userId);
+        
+        pc.ontrack = (e) => {
+          const stream = e.streams[0];
+          const videoTrack = stream.getTracks().find(t => t.kind === 'video');
+          if (videoTrack) {
+            addVideoStream(userId, stream, userId, false, true);
+          }
+        };
+      } catch (err) {
+        console.error('[OFFER] Error with recreated peer:', err);
+      }
+      return;
     }
     
-    // Use existing peer for renegotiation (or first-time answer if we were waiting)
-      // Use existing peer connection for renegotiation
-      console.log('[OFFER] Using existing peer connection for renegotiation');
+    // Store bundle order for future comparison
+    existingPc.bundleOrder = currentBundle;
+    
+    if (hasVideoMline && !hasVideoTrack) {
+      console.log('[OFFER] Offer has video m-line but peer has no video sender - remote is sharing screen, we will receive video via ontrack');
+    }
+    
+    // Use existing peer for renegotiation
+    console.log('[OFFER] Using existing peer connection for renegotiation');
     try {
       await existingPc.setRemoteDescription(offer);
       console.log('[OFFER] Remote description set');
@@ -2964,8 +3004,6 @@ socket.on('offer', async (userId, offer) => {
     } catch (err) {
       console.error('[OFFER] Error in renegotiation:', err);
       console.error('[OFFER] Peer connection state:', existingPc.signalingState);
-      // Don't recreate peer connection - just log the error
-      // Recreating breaks ICE connection and causes audio to be muted
     }
   } else {
     // Create new peer connection (initial connection)
