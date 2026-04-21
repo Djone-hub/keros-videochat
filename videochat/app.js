@@ -1717,6 +1717,7 @@ function resetRoomStateAndUI() {
   peers.clear();
   activeUsers.clear();
   screenShareUsers.clear(); // Clear screen share tracking
+  processedScreenShares.clear(); // CRITICAL: Allow fresh screen share detection when rejoining
 
   // Reset state
   currentRoom = null;
