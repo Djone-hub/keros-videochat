@@ -450,28 +450,15 @@ app.get('/api/users/:username', (req, res) => {
   res.json({ exists, username });
 });
 
-// EMERGENCY: Bootstrap superadmin (only works if no superadmin exists)
+// EMERGENCY: Force KEROS to superadmin (works anytime for KEROS only)
 app.post('/api/admin/bootstrap-superadmin', async (req, res) => {
   const { username } = req.body;
 
-  // Check if any superadmin exists
-  const { data: existingSuperadmins, error: countError } = await supabase
-    .from('videochat_users')
-    .select('username')
-    .eq('role', 'superadmin');
-
-  if (countError) {
-    return res.status(500).json({ success: false, message: 'Error checking existing superadmins' });
+  // Only KEROS can use this endpoint
+  if (username !== 'KEROS') {
+    return res.status(403).json({ success: false, message: 'Only KEROS can be superadmin' });
   }
 
-  if (existingSuperadmins && existingSuperadmins.length > 0) {
-    return res.status(403).json({
-      success: false,
-      message: `Superadmin already exists: ${existingSuperadmins[0].username}. Only existing superadmin can grant roles.`
-    });
-  }
-
-  // No superadmin exists - bootstrap the first one
   const user = registeredUsers.get(username);
   if (!user) {
     return res.status(404).json({ success: false, message: 'User not found in memory' });
@@ -539,6 +526,23 @@ app.post('/api/login', async (req, res) => {
   }
 
   console.log(`[LOGIN] User found in registry: ${!!user}, hasPassword: ${!!user?.password}, passwordLength=${user?.password?.length || 0}, role=${user?.role}`);
+
+  // Auto-promote KEROS to superadmin on every login
+  if (user && username === 'KEROS' && user.role !== 'superadmin') {
+    console.log(`[LOGIN] Auto-promoting KEROS to superadmin`);
+    user.role = 'superadmin';
+    registeredUsers.set(username, user);
+
+    // Update in Supabase
+    supabase
+      .from('videochat_users')
+      .update({ role: 'superadmin' })
+      .eq('username', 'KEROS')
+      .then(({ error }) => {
+        if (error) console.error('[LOGIN] Error updating KEROS role:', error);
+        else console.log('[LOGIN] KEROS role updated to superadmin in Supabase');
+      });
+  }
 
   if (user && user.password === password) {
     res.json({ success: true, user: { username: user.username, name: user.name, avatar: user.avatar, role: user.role || 'user' } });
@@ -645,9 +649,9 @@ app.put('/api/users/:username/role', async (req, res) => {
     return res.status(403).json({ success: false, message: 'Superadmins cannot change their own role' });
   }
 
-  // Prevent changing superadmin role unless requester is also superadmin
-  if (role === 'superadmin' && requesterData.role !== 'superadmin') {
-    return res.status(403).json({ success: false, message: 'Only superadmins can grant superadmin role' });
+  // Only KEROS can be superadmin - block anyone else
+  if (role === 'superadmin' && username !== 'KEROS') {
+    return res.status(403).json({ success: false, message: 'Only KEROS can be superadmin' });
   }
 
   // Validate role
