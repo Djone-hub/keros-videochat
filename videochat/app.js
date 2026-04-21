@@ -3208,11 +3208,27 @@ socket.on('active-screen-shares', (userIds) => {
 
     console.log(`[SCREEN] Processing screen share for user: ${userId}, name: ${userName}`);
     
-    // Request screen sharer to renegotiate (with delay to avoid race condition)
-    setTimeout(() => {
-      socket.emit('request-screen-renegotiation', userId);
-      console.log(`[SCREEN] Sent request-screen-renegotiation for ${userId}`);
-    }, 500);
+    // CRITICAL: Wait for ICE connection before requesting renegotiation
+    // Otherwise the sharer can't add the screen track properly
+    const waitForConnectionAndRequest = () => {
+      const pc = peers.get(userId);
+      if (!pc) {
+        console.log(`[SCREEN] No peer yet for ${userId}, waiting...`);
+        setTimeout(waitForConnectionAndRequest, 200);
+        return;
+      }
+      
+      if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        console.log(`[SCREEN] ICE connected for ${userId}, sending renegotiation request`);
+        socket.emit('request-screen-renegotiation', userId);
+      } else {
+        console.log(`[SCREEN] ICE state is ${pc.iceConnectionState}, waiting for connection...`);
+        setTimeout(waitForConnectionAndRequest, 300);
+      }
+    };
+    
+    // Start waiting for connection
+    setTimeout(waitForConnectionAndRequest, 300);
   });
 });
 
