@@ -450,6 +450,52 @@ app.get('/api/users/:username', (req, res) => {
   res.json({ exists, username });
 });
 
+// EMERGENCY: Bootstrap superadmin (only works if no superadmin exists)
+app.post('/api/admin/bootstrap-superadmin', async (req, res) => {
+  const { username } = req.body;
+
+  // Check if any superadmin exists
+  const { data: existingSuperadmins, error: countError } = await supabase
+    .from('videochat_users')
+    .select('username')
+    .eq('role', 'superadmin');
+
+  if (countError) {
+    return res.status(500).json({ success: false, message: 'Error checking existing superadmins' });
+  }
+
+  if (existingSuperadmins && existingSuperadmins.length > 0) {
+    return res.status(403).json({
+      success: false,
+      message: `Superadmin already exists: ${existingSuperadmins[0].username}. Only existing superadmin can grant roles.`
+    });
+  }
+
+  // No superadmin exists - bootstrap the first one
+  const user = registeredUsers.get(username);
+  if (!user) {
+    return res.status(404).json({ success: false, message: 'User not found in memory' });
+  }
+
+  // Update in memory
+  user.role = 'superadmin';
+  registeredUsers.set(username, user);
+
+  // Update in Supabase
+  const { error } = await supabase
+    .from('videochat_users')
+    .update({ role: 'superadmin' })
+    .eq('username', username);
+
+  if (error) {
+    console.error('[BOOTSTRAP] Error updating role in Supabase:', error);
+    return res.status(500).json({ success: false, message: 'Error updating role in database' });
+  }
+
+  console.log(`[BOOTSTRAP] User ${username} promoted to superadmin`);
+  res.json({ success: true, message: `User ${username} is now superadmin` });
+});
+
 // REST API endpoint for user login
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
